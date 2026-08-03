@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Informes por Pipeline</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <img class="brand-logo" src="/assets/avanzar-logo-color.svg" alt="Avanzar">
+      <div>
+        <span>INFORMES</span>
+      </div>
+      <a class="icon-button" href="/" aria-label="Volver">←</a>
+    </div>
+
+    <nav class="menu" aria-label="Navegacion de informes">
+      <p>GENERAL</p>
+      <a href="/"><span>🏠</span>Dashboard</a>
+      <a class="active" href="/informes.html"><span>📊</span>Informes</a>
+
+      <p>PIPELINES</p>
+      <a href="/informes.html?pipeline=rch_comercial" data-pipeline-link="rch_comercial"><span>💼</span>RCH Comercial</a>
+      <a href="/informes.html?pipeline=rch_operativa" data-pipeline-link="rch_operativa"><span>🧩</span>RCH Operativa</a>
+      <a href="/informes.html?pipeline=pnnc_comercial" data-pipeline-link="pnnc_comercial"><span>📈</span>PNNC Comercial</a>
+      <a href="/informes.html?pipeline=pnnc_operativa" data-pipeline-link="pnnc_operativa"><span>⚙️</span>PNNC Operativa</a>
+
+      <p>DATOS</p>
+      <a href="#"><span>👤</span>Usuarios</a>
+      <a href="#"><span>🏷️</span>Campos personalizados</a>
+      <a href="#"><span>📝</span>Tareas y actividades</a>
+    </nav>
+  </aside>
+
+  <main class="app">
+    <header class="topbar">
+      <h1 id="pageTitle">Informes</h1>
+      <div class="topbar-actions">
+        <span class="connection-pill">Bitrix conectado</span>
+        <button class="sync-button" type="button">🔄 Sincronizar pipeline</button>
+        <button class="profile" type="button">
+          <span class="avatar">S</span>
+          <span><strong>Super</strong><small>Superadmin</small></span>
+          <span>v</span>
+        </button>
+      </div>
+    </header>
+
+    <section class="hero compact-hero">
+      <div>
+        <span class="section-kicker">Vista de informes</span>
+        <h2 id="pipelineTitle">Todas las pipelines</h2>
+        <p id="pipelineDescription">Selecciona una pipeline para ver los informes disponibles y las tablas que se van a construir desde Bitrix hacia PostgreSQL.</p>
+      </div>
+      <aside>
+        <span>Categoria Bitrix</span>
+        <strong id="pipelineCategory">4</strong>
+        <p id="pipelineArea">Todas las areas</p>
+        <em id="pipelineTag">Informes</em>
+      </aside>
+    </section>
+
+    <section class="tabs" aria-label="Tipos de informe">
+      <button class="selected" data-report="usuarios" type="button">👤 Usuarios</button>
+      <button data-report="pipelines" type="button">🧭 Pipelines</button>
+      <button data-report="negociaciones" type="button">🤝 Negociaciones</button>
+      <button data-report="campos" type="button">🏷️ Campos</button>
+      <button data-report="actividades" type="button">☎️ Actividades</button>
+      <button data-report="tareas" type="button">📝 Tareas</button>
+      <button data-report="comentarios" type="button">💬 Comentarios</button>
+    </section>
+
+    <section class="filters">
+      <div class="filter-title">Filtros del informe</div>
+      <label>Pipeline<input id="selectedPipelineInput" readonly></label>
+      <label>Informe<input id="selectedReportInput" readonly></label>
+      <label>Estado<input value="Todos" readonly></label>
+      <label>Fecha<input value="Sin filtro" readonly></label>
+      <button class="apply" type="button">Aplicar</button>
+      <button type="button">Exportar</button>
+      <button type="button">Guardar vista</button>
+      <div class="filter-actions">
+        <button class="download" type="button">Generar informe</button>
+        <small>La tabla se alimentara desde PostgreSQL.</small>
+      </div>
+    </section>
+
+    <section class="table-panel">
+      <div class="panel-title">
+        <div>
+          <h2 id="reportTitle">Usuarios y responsables</h2>
+          <p id="reportUse" class="panel-subtitle"></p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Pipeline</th>
+              <th>Campo / Columna</th>
+              <th>Metodo Bitrix</th>
+              <th>Tabla PostgreSQL</th>
+              <th>Scope</th>
+              <th>Estado</th>
+            </tr>
+          </thead>
+          <tbody id="reportRows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/informes.js"></script>
+</body>
+</html>

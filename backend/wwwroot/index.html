@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Avanzar Informes</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <img class="brand-logo" src="/assets/avanzar-logo-color.svg" alt="Avanzar">
+      <div>
+        <span>INFORMES</span>
+      </div>
+      <button class="icon-button" type="button" aria-label="Menu">☰</button>
+    </div>
+
+    <nav class="menu" aria-label="Navegacion principal">
+      <p>INICIO</p>
+      <a class="active" href="/"><span>🏠</span>Inicio</a>
+      <a href="/informes.html"><span>📊</span>Informes</a>
+      <a href="#"><span>🔄</span>Bitrix</a>
+      <a href="#"><span>👤</span>Usuarios</a>
+
+      <p>AREAS</p>
+      <a href="/informes.html?pipeline=rch_comercial" data-pipeline="rch_comercial"><span>💼</span>RCH Comercial</a>
+      <a href="/informes.html?pipeline=rch_operativa" data-pipeline="rch_operativa"><span>🧩</span>RCH Operativa</a>
+      <a href="/informes.html?pipeline=pnnc_comercial" data-pipeline="pnnc_comercial"><span>📈</span>PNNC Comercial</a>
+      <a href="/informes.html?pipeline=pnnc_operativa" data-pipeline="pnnc_operativa"><span>⚙️</span>PNNC Operativa</a>
+
+      <p>ADMINISTRACION</p>
+      <a href="#"><span>🕓</span>Historial</a>
+      <a href="#"><span>🔧</span>Configuracion</a>
+    </nav>
+  </aside>
+
+  <main class="app">
+    <header class="topbar">
+      <h1>Dashboard general</h1>
+      <div class="topbar-actions">
+        <span class="connection-pill">Bitrix conectado</span>
+        <label class="search">
+          <span>Buscar</span>
+          <input type="search" placeholder="Buscar negociacion, cliente o responsable...">
+        </label>
+        <button class="sync-button" type="button">🔄 Sincronizar</button>
+        <button class="profile" type="button">
+          <span class="avatar">S</span>
+          <span><strong>Super</strong><small>Superadmin</small></span>
+          <span>v</span>
+        </button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div>
+        <span class="section-kicker">PostgreSQL local + Bitrix CRM</span>
+        <h2 id="selectedTitle">Replica Bitrix</h2>
+        <p id="selectedDescription">Snapshot local en PostgreSQL para leer negociaciones, usuarios, campos personalizados, tareas y actividades sin consultar Bitrix en cada carga.</p>
+      </div>
+      <aside>
+        <span id="selectedAsideLabel">Pipelines iniciales</span>
+        <strong id="selectedAsideValue">4</strong>
+        <p id="selectedAsideNote">RCH y PNNC</p>
+        <em id="selectedAsideTag">Sync acotada</em>
+      </aside>
+    </section>
+
+    <section class="tabs" aria-label="Pipelines">
+      <button class="selected" data-pipeline="all" type="button">Todas</button>
+      <button data-pipeline="rch_comercial" type="button">💼 RCH Comercial</button>
+      <button data-pipeline="rch_operativa" type="button">🧩 RCH Operativa</button>
+      <button data-pipeline="pnnc_comercial" type="button">📈 PNNC Comercial</button>
+      <button data-pipeline="pnnc_operativa" type="button">⚙️ PNNC Operativa</button>
+    </section>
+
+    <section class="filters">
+      <div class="filter-title">Sincronizacion Bitrix</div>
+      <label>Pipeline<input id="pipelineFilter" value="Todas" readonly></label>
+      <label>Modo<input value="Completa"></label>
+      <label>Entidad<input value="Negociaciones"></label>
+      <label>Desde<input value="Sin filtro"></label>
+      <button type="button">Etapas <b>Todas</b></button>
+      <button class="apply" type="button">Aplicar</button>
+      <button type="button">Limpiar</button>
+      <div class="filter-actions">
+        <button class="download" type="button">Sync Global</button>
+        <button type="button">Incremental</button>
+        <small>PostgreSQL sera la fuente local de informes.</small>
+      </div>
+    </section>
+
+    <div class="notice"><strong>Modelo de datos:</strong> todo se traera por lotes desde Bitrix y se guardara localmente como payload crudo, snapshot generico y tablas normalizadas.</div>
+
+    <section id="cardGrid" class="cards" aria-label="Indicadores"></section>
+
+    <section class="table-panel">
+      <div class="panel-title">
+        <h2>Pipelines iniciales</h2>
+        <button class="icon-button" type="button" aria-label="Opciones">...</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Pipeline</th>
+              <th>Categoria</th>
+              <th>Area</th>
+              <th>Estado</th>
+              <th>Entidades</th>
+            </tr>
+          </thead>
+          <tbody id="pipelineRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="table-panel">
+      <div class="panel-title">
+        <div>
+          <h2>Informes posibles por entidad</h2>
+          <p class="panel-subtitle">Tablas base que podemos sacar de Bitrix y guardar en PostgreSQL.</p>
+        </div>
+      </div>
+      <div id="reportTabs" class="report-tabs" aria-label="Tipos de informe"></div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Pipeline</th>
+              <th>Campo / Columna</th>
+              <th>Metodo Bitrix</th>
+              <th>Tabla PostgreSQL</th>
+              <th>Scope</th>
+              <th>Uso</th>
+            </tr>
+          </thead>
+          <tbody id="reportRows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

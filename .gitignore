@@ -1,0 +1,8 @@
+.env
+bin/
+obj/
+.vs/
+.vscode/
+TestResults/
+coverage/
+.DS_Store

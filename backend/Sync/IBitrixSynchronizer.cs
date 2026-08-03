@@ -1,0 +1,6 @@
+namespace InformesAvanzar.Api.Sync;
+
+public interface IBitrixSynchronizer
+{
+    Task<IReadOnlyList<SyncResult>> RunGlobalAsync(SyncMode mode, CancellationToken cancellationToken);
+}
