@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sincronizacion</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <img class="brand-logo" src="/assets/avanzar-logo-color.svg" alt="Avanzar">
+      <div><span>BITRIX</span></div>
+      <a class="icon-button" href="/" aria-label="Volver">&#8592;</a>
+    </div>
+    <nav class="menu">
+      <p>GENERAL</p>
+      <a href="/"><span>&#127968;</span>Inicio</a>
+      <a href="/informes.html"><span>&#128202;</span>Informes</a>
+      <a class="active" href="/sincronizacion.html"><span>&#128260;</span>Sincronizacion</a>
+    </nav>
+  </aside>
+
+  <main class="app">
+    <header class="topbar">
+      <h1>Sincronizacion</h1>
+      <div class="topbar-actions">
+        <span class="connection-pill">PostgreSQL</span>
+        <button id="refreshButton" type="button">Actualizar vista</button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div>
+        <span class="section-kicker">Bitrix hacia PostgreSQL</span>
+        <h2>Sincronizacion masiva de resumen operativo</h2>
+        <p>Trae campos base de todas las pipelines activas. Los informes leen desde PostgreSQL; este proceso solo alimenta la base de datos.</p>
+      </div>
+      <aside>
+        <span>Estado</span>
+        <strong id="syncStatus">Listo</strong>
+        <p id="syncMessage">Sin sincronizaciones activas</p>
+        <em>Masivo</em>
+      </aside>
+    </section>
+
+    <section class="table-panel">
+      <div class="panel-title">
+        <div>
+          <h2>Sincronizacion masiva</h2>
+          <p class="panel-subtitle">Para 77.000 negociaciones usa sincronizacion masiva. Se ejecuta en segundo plano.</p>
+        </div>
+      </div>
+      <div class="sync-actions">
+        <button id="massiveButton" class="sync-button" type="button">Sincronizar masivo</button>
+      </div>
+    </section>
+
+    <section class="table-panel">
+      <div class="panel-title">
+        <div>
+          <h2>Sincronizar por etapa</h2>
+          <p class="panel-subtitle">Usa esta opcion cuando quieras traer solo una etapa puntual.</p>
+        </div>
+      </div>
+      <div class="sync-form">
+        <label>
+          Pipeline
+          <select id="pipelineSelect"></select>
+        </label>
+        <label>
+          Etapa
+          <select id="stageSelect"></select>
+        </label>
+        <button id="stageButton" class="sync-button" type="button">Sincronizar etapa</button>
+      </div>
+    </section>
+
+    <section class="table-panel">
+      <div class="panel-title">
+        <div>
+          <h2>Pipelines completas</h2>
+          <p class="panel-subtitle">Sincroniza una pipeline completa sin tener que elegir etapa.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Pipeline</th>
+              <th>Categoria</th>
+              <th>Etapas</th>
+              <th>Accion</th>
+            </tr>
+          </thead>
+          <tbody id="pipelineRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="table-panel">
+      <div class="panel-title">
+        <div>
+          <h2>Historial</h2>
+          <p class="panel-subtitle">Ultimas ejecuciones registradas.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Entidad</th>
+              <th>Estado</th>
+              <th>Leidos</th>
+              <th>Nuevos / actualizados</th>
+              <th>Inicio</th>
+              <th>Fin</th>
+            </tr>
+          </thead>
+          <tbody id="syncHistoryRows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/sincronizacion.js"></script>
+</body>
+</html>

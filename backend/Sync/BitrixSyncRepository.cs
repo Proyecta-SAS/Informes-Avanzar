@@ -8,6 +8,7 @@ public interface IBitrixSyncRepository
     Task<BitrixConnection> GetActiveConnectionAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<BitrixPipeline>> ListActivePipelinesAsync(CancellationToken cancellationToken);
     Task<Guid> StartRunAsync(Guid connectionId, string entityType, SyncMode mode, CancellationToken cancellationToken);
+    Task UpdateRunProgressAsync(Guid syncRunId, int recordsRead, int recordsWritten, CancellationToken cancellationToken);
     Task FinishRunAsync(Guid syncRunId, string status, int recordsRead, int recordsWritten, string? errorMessage, CancellationToken cancellationToken);
     Task<bool> TryAcquireGlobalLockAsync(string ownerId, TimeSpan ttl, CancellationToken cancellationToken);
     Task ReleaseGlobalLockAsync(string ownerId, CancellationToken cancellationToken);
@@ -69,20 +70,75 @@ public sealed class BitrixSyncRepository(NpgsqlDataSource dataSource) : IBitrixS
 
     public async Task<Guid> StartRunAsync(Guid connectionId, string entityType, SyncMode mode, CancellationToken cancellationToken)
     {
-        const string sql = """
+        const string guardSql = """
+            UPDATE bitrix.sync_runs
+            SET status = 'failed',
+                finished_at = now(),
+                error_message = 'Sync interrumpida o sin cierre automatico.'
+            WHERE status = 'running'
+              AND created_at < now() - interval '6 hours';
+            """;
+
+        const string activeRunSql = """
+            SELECT entity_type
+            FROM bitrix.sync_runs
+            WHERE status = 'running'
+            ORDER BY created_at DESC
+            LIMIT 1;
+            """;
+
+        const string insertSql = """
             INSERT INTO bitrix.sync_runs (connection_id, entity_type, mode, status, started_at)
             VALUES (@connectionId, @entityType, @mode, 'running', now())
             RETURNING id;
             """;
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(sql, connection);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+        await using (var guardCommand = new NpgsqlCommand(guardSql, connection, transaction))
+        {
+            await guardCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await using (var activeCommand = new NpgsqlCommand(activeRunSql, connection, transaction))
+        {
+            var activeEntity = (string?)await activeCommand.ExecuteScalarAsync(cancellationToken);
+            if (!string.IsNullOrWhiteSpace(activeEntity))
+            {
+                throw new InvalidOperationException($"Ya hay una sincronizacion activa: {activeEntity}.");
+            }
+        }
+
+        await using var command = new NpgsqlCommand(insertSql, connection, transaction);
         command.Parameters.AddWithValue("connectionId", connectionId);
         command.Parameters.AddWithValue("entityType", entityType);
         command.Parameters.AddWithValue("mode", ToDbMode(mode));
 
-        return (Guid)(await command.ExecuteScalarAsync(cancellationToken)
+        var syncRunId = (Guid)(await command.ExecuteScalarAsync(cancellationToken)
             ?? throw new InvalidOperationException("Could not create sync run."));
+
+        await transaction.CommitAsync(cancellationToken);
+        return syncRunId;
+    }
+
+    public async Task UpdateRunProgressAsync(Guid syncRunId, int recordsRead, int recordsWritten, CancellationToken cancellationToken)
+    {
+        const string sql = """
+            UPDATE bitrix.sync_runs
+            SET records_read = @recordsRead,
+                records_written = @recordsWritten
+            WHERE id = @syncRunId
+              AND status = 'running';
+            """;
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("syncRunId", syncRunId);
+        command.Parameters.AddWithValue("recordsRead", recordsRead);
+        command.Parameters.AddWithValue("recordsWritten", recordsWritten);
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task FinishRunAsync(Guid syncRunId, string status, int recordsRead, int recordsWritten, string? errorMessage, CancellationToken cancellationToken)

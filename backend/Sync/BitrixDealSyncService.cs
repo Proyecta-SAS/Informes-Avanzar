@@ -13,11 +13,31 @@ public sealed class BitrixDealSyncService(
     IBitrixSyncRepository repository,
     NpgsqlDataSource dataSource) : IBitrixDealSyncService
 {
-    public async Task<SyncResult> SyncPipelineDealsAsync(string pipelineSlug, CancellationToken cancellationToken)
+    private static readonly string[] DealSummaryFields =
+    [
+        "ID",
+        "TITLE",
+        "STAGE_ID",
+        "CATEGORY_ID",
+        "ASSIGNED_BY_ID",
+        "OPPORTUNITY",
+        "CURRENCY_ID",
+        "CLOSED",
+        "DATE_CREATE",
+        "DATE_MODIFY",
+        "CLOSEDATE"
+    ];
+
+    public async Task<SyncResult> SyncPipelineDealsAsync(
+        string pipelineSlug,
+        string? stageId,
+        CancellationToken cancellationToken)
     {
         var connectionInfo = await repository.GetActiveConnectionAsync(cancellationToken);
         var pipeline = await GetPipelineAsync(pipelineSlug, cancellationToken);
-        var entityType = $"deal:{pipeline.Slug}";
+        var entityType = string.IsNullOrWhiteSpace(stageId)
+            ? $"deal:{pipeline.Slug}"
+            : $"deal:{pipeline.Slug}:stage:{stageId}";
         var syncRunId = await repository.StartRunAsync(connectionInfo.Id, entityType, SyncMode.Full, cancellationToken);
 
         var recordsRead = 0;
@@ -38,7 +58,7 @@ public sealed class BitrixDealSyncService(
 
                 using var response = await bitrixClient.CallAsync(
                     BitrixMethod.DealList,
-                    BuildDealListParameters(pipeline.CategoryId, start.Value),
+                    BuildDealListParameters(pipeline.CategoryId, stageId, start.Value),
                     cancellationToken);
 
                 var root = response.RootElement;
@@ -58,13 +78,28 @@ public sealed class BitrixDealSyncService(
                     break;
                 }
 
-                foreach (var deal in result.EnumerateArray())
+                await using (var transaction = await dbConnection.BeginTransactionAsync(cancellationToken))
                 {
-                    recordsRead++;
-                    await UpsertDealAsync(dbConnection, connectionInfo.Id, pipeline.Id, syncRunId, deal, cancellationToken);
-                    recordsWritten++;
+                    foreach (var deal in result.EnumerateArray())
+                    {
+                        recordsRead++;
+                        if (await UpsertDealAsync(
+                            dbConnection,
+                            transaction,
+                            connectionInfo.Id,
+                            pipeline.Id,
+                            syncRunId,
+                            deal,
+                            cancellationToken))
+                        {
+                            recordsWritten++;
+                        }
+                    }
+
+                    await transaction.CommitAsync(cancellationToken);
                 }
 
+                await repository.UpdateRunProgressAsync(syncRunId, recordsRead, recordsWritten, cancellationToken);
                 start = TryGetNext(root);
             }
 
@@ -78,13 +113,23 @@ public sealed class BitrixDealSyncService(
         }
     }
 
-    private static IEnumerable<KeyValuePair<string, string>> BuildDealListParameters(int categoryId, int start)
+    private static IEnumerable<KeyValuePair<string, string>> BuildDealListParameters(
+        int categoryId,
+        string? stageId,
+        int start)
     {
         yield return new KeyValuePair<string, string>("filter[CATEGORY_ID]", categoryId.ToString());
+        if (!string.IsNullOrWhiteSpace(stageId))
+        {
+            yield return new KeyValuePair<string, string>("filter[STAGE_ID]", stageId);
+        }
+
         yield return new KeyValuePair<string, string>("order[ID]", "ASC");
         yield return new KeyValuePair<string, string>("start", start.ToString());
-        yield return new KeyValuePair<string, string>("select[]", "*");
-        yield return new KeyValuePair<string, string>("select[]", "UF_*");
+        foreach (var field in DealSummaryFields)
+        {
+            yield return new KeyValuePair<string, string>("select[]", field);
+        }
     }
 
     private async Task<PipelineRecord> GetPipelineAsync(string slug, CancellationToken cancellationToken)
@@ -113,8 +158,9 @@ public sealed class BitrixDealSyncService(
             reader.GetInt32(3));
     }
 
-    private async Task UpsertDealAsync(
+    private async Task<bool> UpsertDealAsync(
         NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
         Guid connectionId,
         Guid pipelineId,
         Guid syncRunId,
@@ -128,7 +174,10 @@ public sealed class BitrixDealSyncService(
         var customFields = ExtractCustomFields(deal);
         var coreData = ExtractCoreData(deal);
 
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        if (await DealPayloadIsUnchangedAsync(connection, transaction, connectionId, bitrixId, hash, cancellationToken))
+        {
+            return false;
+        }
 
         var rawPayloadId = await InsertRawPayloadAsync(
             connection,
@@ -163,7 +212,34 @@ public sealed class BitrixDealSyncService(
             customFields,
             cancellationToken);
 
-        await transaction.CommitAsync(cancellationToken);
+        return true;
+    }
+
+    private static async Task<bool> DealPayloadIsUnchangedAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        Guid connectionId,
+        string bitrixId,
+        string hash,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT rp.payload_hash
+            FROM bitrix.entity_snapshots es
+            JOIN bitrix.raw_payloads rp ON rp.id = es.raw_payload_id
+            WHERE es.connection_id = @connectionId
+              AND es.entity_type = 'deal'
+              AND es.bitrix_id = @bitrixId
+              AND es.is_deleted = false
+            LIMIT 1;
+            """;
+
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue("connectionId", connectionId);
+        command.Parameters.AddWithValue("bitrixId", bitrixId);
+
+        var currentHash = (string?)await command.ExecuteScalarAsync(cancellationToken);
+        return string.Equals(currentHash, hash, StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<Guid> InsertRawPayloadAsync(
@@ -342,7 +418,10 @@ public sealed class BitrixDealSyncService(
                 bitrix_created_at = EXCLUDED.bitrix_created_at,
                 bitrix_updated_at = EXCLUDED.bitrix_updated_at,
                 core_data = EXCLUDED.core_data,
-                custom_fields = EXCLUDED.custom_fields,
+                custom_fields = CASE
+                    WHEN EXCLUDED.custom_fields = '{}'::jsonb THEN bitrix.entity_snapshots.custom_fields
+                    ELSE EXCLUDED.custom_fields
+                END,
                 raw_payload_id = EXCLUDED.raw_payload_id,
                 is_deleted = false,
                 deleted_detected_at = null;

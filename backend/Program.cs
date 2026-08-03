@@ -30,6 +30,7 @@ builder.Services.AddScoped<IBitrixSynchronizer, BitrixSynchronizer>();
 builder.Services.AddScoped<IBitrixUserSyncService, BitrixUserSyncService>();
 builder.Services.AddScoped<IBitrixStageSyncService, BitrixStageSyncService>();
 builder.Services.AddScoped<IBitrixDealSyncService, BitrixDealSyncService>();
+builder.Services.AddScoped<IBitrixMassiveSyncService, BitrixMassiveSyncService>();
 
 var app = builder.Build();
 
@@ -78,6 +79,22 @@ app.MapGet("/api/data/deals", async (
     return await BitrixDataQueries.GetDealsAsync(pipeline ?? "all", dataSource, cancellationToken);
 });
 
+app.MapGet("/api/data/stage-distribution", async (
+    string? pipeline,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return await BitrixDataQueries.GetStageDistributionAsync(pipeline ?? "all", dataSource, cancellationToken);
+});
+
+app.MapGet("/api/data/responsible-distribution", async (
+    string? pipeline,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return await BitrixDataQueries.GetResponsibleDistributionAsync(pipeline ?? "all", dataSource, cancellationToken);
+});
+
 app.MapGet("/api/data/sync-summary", async (
     string? pipeline,
     NpgsqlDataSource dataSource,
@@ -86,11 +103,25 @@ app.MapGet("/api/data/sync-summary", async (
     return await BitrixDataQueries.GetSyncSummaryAsync(pipeline ?? "all", dataSource, cancellationToken);
 });
 
+app.MapGet("/api/data/sync-state", async (
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return await BitrixDataQueries.GetSyncStateAsync(dataSource, cancellationToken);
+});
+
 app.MapGet("/api/data/users", async (
     NpgsqlDataSource dataSource,
     CancellationToken cancellationToken) =>
 {
     return await BitrixDataQueries.GetUsersAsync(dataSource, cancellationToken);
+});
+
+app.MapGet("/api/data/sync-history", async (
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return await BitrixDataQueries.GetSyncHistoryAsync(dataSource, cancellationToken);
 });
 
 app.MapGet("/api/data/stages", async (
@@ -271,11 +302,29 @@ app.MapPost("/api/bitrix/sync/stages", async (
 
 app.MapPost("/api/bitrix/sync/deals/{pipelineSlug}", async (
     string pipelineSlug,
+    string? stageId,
     IBitrixDealSyncService dealSyncService,
     CancellationToken cancellationToken) =>
 {
-    var result = await dealSyncService.SyncPipelineDealsAsync(pipelineSlug, cancellationToken);
+    var result = await dealSyncService.SyncPipelineDealsAsync(pipelineSlug, stageId, cancellationToken);
     return Results.Ok(result);
+});
+
+app.MapPost("/api/bitrix/sync/massive", (
+    IServiceScopeFactory scopeFactory) =>
+{
+    _ = Task.Run(async () =>
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var massiveSyncService = scope.ServiceProvider.GetRequiredService<IBitrixMassiveSyncService>();
+        await massiveSyncService.SyncAllDealSummariesAsync(CancellationToken.None);
+    });
+
+    return Results.Accepted("/api/data/sync-state", new
+    {
+        status = "accepted",
+        message = "Sincronizacion masiva iniciada en segundo plano."
+    });
 });
 
 app.MapPost("/api/bitrix/sync/global", async (

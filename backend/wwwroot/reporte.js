@@ -221,34 +221,34 @@ const loadDeals = async () => {
     </tr>
   `).join("");
 
-  const byStage = new Map();
-  const byOwner = new Map();
+  await loadStageDistribution();
+  await loadResponsibleDistribution();
+};
 
-  deals.forEach((deal) => {
-    const stage = deal.stageName ?? deal.stageId ?? "Sin etapa";
-    const owner = deal.responsibleName ?? "Sin responsable";
-    byStage.set(stage, (byStage.get(stage) ?? 0) + 1);
-    byOwner.set(owner, (byOwner.get(owner) ?? 0) + 1);
-  });
+const loadStageDistribution = async () => {
+  const response = await fetch(`/api/data/stage-distribution?pipeline=${reportId}`);
+  const rows = await response.json();
+  const maxStage = Math.max(...rows.map((row) => row.dealsCount), 1);
 
-  const maxStage = Math.max(...byStage.values(), 1);
-  document.getElementById("stageBars").innerHTML = [...byStage.entries()]
-    .slice(0, 8)
-    .map(([stage, count]) => `
+  document.getElementById("stageBars").innerHTML = rows
+    .map((row) => `
       <div class="stage-row">
-        <span>${stage}</span>
-        <div><i style="width:${Math.max(8, (count / maxStage) * 100)}%"></i></div>
-        <b>${count}</b>
+        <span>${row.stageName}</span>
+        <div><i style="width:${Math.max(8, (row.dealsCount / maxStage) * 100)}%"></i></div>
+        <b>${row.dealsCount}</b>
       </div>
     `).join("");
+};
 
-  document.getElementById("ownerList").innerHTML = [...byOwner.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 8)
-    .map(([owner, count]) => `
+const loadResponsibleDistribution = async () => {
+  const response = await fetch(`/api/data/responsible-distribution?pipeline=${reportId}`);
+  const rows = await response.json();
+
+  document.getElementById("ownerList").innerHTML = rows
+    .map((row) => `
       <div class="owner-row">
-        <span>${owner}</span>
-        <b>${count}</b>
+        <span>${row.responsibleName}</span>
+        <b>${row.dealsCount}</b>
       </div>
     `).join("");
 };
@@ -283,5 +283,23 @@ const load = async () => {
   await loadSummary();
   await loadDeals();
 };
+
+const updateReportView = async () => {
+  setText("reportStatus", "Leyendo");
+  try {
+    if (reportId === "fuerza_comercial_diego") {
+      await Promise.all([loadDiegoRadicatedValues(), loadDiegoDashboardData()]);
+    } else {
+      await loadSummary();
+      await loadDeals();
+    }
+
+    setText("reportStatus", "OK");
+  } catch {
+    setText("reportStatus", "Error");
+  }
+};
+
+document.getElementById("refreshReportButton").addEventListener("click", updateReportView);
 
 load();

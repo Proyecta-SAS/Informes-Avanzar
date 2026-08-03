@@ -5,6 +5,43 @@ namespace InformesAvanzar.Api.Data;
 
 public static class BitrixDataQueries
 {
+    public static async Task<IResult> GetSyncStateAsync(
+        NpgsqlDataSource dataSource,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT entity_type, mode, status, records_read, records_written, started_at, created_at
+            FROM bitrix.sync_runs
+            WHERE status = 'running'
+            ORDER BY started_at DESC NULLS LAST, created_at DESC
+            LIMIT 1;
+            """;
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return Results.Ok(new { isSyncing = false, activeRun = (object?)null });
+        }
+
+        return Results.Ok(new
+        {
+            isSyncing = true,
+            activeRun = new
+            {
+                entityType = reader.GetString(0),
+                mode = reader.GetString(1),
+                status = reader.GetString(2),
+                recordsRead = reader.GetInt32(3),
+                recordsWritten = reader.GetInt32(4),
+                startedAt = reader.IsDBNull(5) ? (DateTime?)null : reader.GetDateTime(5),
+                createdAt = reader.GetDateTime(6)
+            }
+        });
+    }
+
     public static async Task<object> GetDiegoRadicatedValuesAsync(
         int year,
         NpgsqlDataSource dataSource,
@@ -354,6 +391,113 @@ public static class BitrixDataQueries
                 opportunity = reader.IsDBNull(6) ? (decimal?)null : reader.GetDecimal(6),
                 currencyId = reader.IsDBNull(7) ? null : reader.GetString(7),
                 updatedAt = reader.IsDBNull(8) ? (DateTime?)null : reader.GetDateTime(8)
+            });
+        }
+
+        return Results.Ok(rows);
+    }
+
+    public static async Task<IResult> GetSyncHistoryAsync(
+        NpgsqlDataSource dataSource,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT entity_type, status, records_read, records_written, created_at, finished_at
+            FROM bitrix.sync_runs
+            ORDER BY created_at DESC
+            LIMIT 30;
+            """;
+
+        var rows = new List<object>();
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            rows.Add(new
+            {
+                entityType = reader.GetString(0),
+                status = reader.GetString(1),
+                recordsRead = reader.GetInt32(2),
+                recordsWritten = reader.GetInt32(3),
+                createdAt = reader.GetDateTime(4),
+                finishedAt = reader.IsDBNull(5) ? (DateTime?)null : reader.GetDateTime(5)
+            });
+        }
+
+        return Results.Ok(rows);
+    }
+
+    public static async Task<IResult> GetStageDistributionAsync(
+        string pipeline,
+        NpgsqlDataSource dataSource,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT
+                d.stage_id,
+                COALESCE(s.name, d.stage_id, 'Sin etapa') AS stage_name,
+                count(d.id)::integer AS deals_count
+            FROM bitrix.deals d
+            JOIN bitrix.pipelines p ON p.id = d.pipeline_id
+            LEFT JOIN bitrix.pipeline_stages s ON s.pipeline_id = p.id AND s.bitrix_stage_id = d.stage_id
+            WHERE (@pipeline = 'all' OR p.slug = @pipeline)
+            GROUP BY d.stage_id, s.name
+            ORDER BY deals_count DESC, stage_name;
+            """;
+
+        var rows = new List<object>();
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("pipeline", pipeline);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            rows.Add(new
+            {
+                stageId = reader.IsDBNull(0) ? null : reader.GetString(0),
+                stageName = reader.GetString(1),
+                dealsCount = reader.GetInt32(2)
+            });
+        }
+
+        return Results.Ok(rows);
+    }
+
+    public static async Task<IResult> GetResponsibleDistributionAsync(
+        string pipeline,
+        NpgsqlDataSource dataSource,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT
+                d.assigned_by_bitrix_id,
+                COALESCE(u.full_name, 'Sin responsable') AS responsible_name,
+                count(d.id)::integer AS deals_count
+            FROM bitrix.deals d
+            JOIN bitrix.pipelines p ON p.id = d.pipeline_id
+            LEFT JOIN bitrix.users u ON u.connection_id = d.connection_id AND u.bitrix_id = d.assigned_by_bitrix_id
+            WHERE (@pipeline = 'all' OR p.slug = @pipeline)
+            GROUP BY d.assigned_by_bitrix_id, u.full_name
+            ORDER BY deals_count DESC, responsible_name
+            LIMIT 20;
+            """;
+
+        var rows = new List<object>();
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("pipeline", pipeline);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            rows.Add(new
+            {
+                responsibleId = reader.IsDBNull(0) ? null : reader.GetString(0),
+                responsibleName = reader.GetString(1),
+                dealsCount = reader.GetInt32(2)
             });
         }
 
