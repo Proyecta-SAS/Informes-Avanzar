@@ -1,120 +1,107 @@
-const pipelines = {
-  all: {
-    name: "Todas las pipelines",
-    category: "4",
-    area: "Todas las areas",
-    tag: "Global",
-    description: "Vista consolidada para comparar RCH Comercial, RCH Operativa, PNNC Comercial y PNNC Operativa."
+const dashboards = [
+  {
+    id: "rch_comercial",
+    icon: "💼",
+    title: "RCH Comercial",
+    area: "Comercial",
+    description: "Seguimiento comercial de negociaciones RCH, responsables, etapas y actividad reciente.",
+    status: "Sincronizado",
+    metrics: [
+      { label: "Deals", value: "546" },
+      { label: "Etapas", value: "31" },
+      { label: "Usuarios", value: "477" }
+    ]
   },
-  rch_comercial: {
-    name: "RCH Comercial",
-    category: "8",
-    area: "Area comercial",
-    tag: "RCH",
-    description: "Informes comerciales de RCH: negociaciones, etapas, usuarios responsables y campos personalizados."
+  {
+    id: "rch_operativa",
+    icon: "🧩",
+    title: "RCH Operativa",
+    area: "Operaciones",
+    description: "Vista operativa para control de pipeline, carga de gestion y seguimiento de casos RCH.",
+    status: "Sincronizado",
+    metrics: [
+      { label: "Deals", value: "607" },
+      { label: "Etapas", value: "31" },
+      { label: "Usuarios", value: "477" }
+    ]
   },
-  rch_operativa: {
-    name: "RCH Operativa",
-    category: "10",
-    area: "Area operativa",
-    tag: "RCH",
-    description: "Informes operativos de RCH: tareas, actividades, responsables y seguimiento de gestion."
+  {
+    id: "pnnc_comercial",
+    icon: "📈",
+    title: "PNNC Comercial",
+    area: "Comercial",
+    description: "Dashboard comercial PNNC preparado para publicar cuando se complete la sincronizacion.",
+    status: "Pendiente sync",
+    metrics: [
+      { label: "Deals", value: "0" },
+      { label: "Etapas", value: "40" },
+      { label: "Usuarios", value: "477" }
+    ]
   },
-  pnnc_comercial: {
-    name: "PNNC Comercial",
-    category: "26",
-    area: "Area comercial",
-    tag: "PNNC",
-    description: "Informes comerciales de PNNC: oportunidades, asesores, etapas y clientes."
-  },
-  pnnc_operativa: {
-    name: "PNNC Operativa",
-    category: "28",
-    area: "Area operativa",
-    tag: "PNNC",
-    description: "Informes operativos de PNNC: tareas, actividades, responsables y vencimientos."
+  {
+    id: "pnnc_operativa",
+    icon: "⚙️",
+    title: "PNNC Operativa",
+    area: "Operaciones",
+    description: "Dashboard operativo PNNC para tareas, etapas y estado de gestion.",
+    status: "Pendiente sync",
+    metrics: [
+      { label: "Deals", value: "0" },
+      { label: "Etapas", value: "40" },
+      { label: "Usuarios", value: "477" }
+    ]
   }
-};
+];
 
-let catalog = [];
-let selectedPipeline = new URLSearchParams(window.location.search).get("pipeline") ?? "all";
-let selectedReport = "usuarios";
-
-const setText = (id, value) => {
-  document.getElementById(id).textContent = value;
-};
-
-const getPipelineRows = () => {
-  if (selectedPipeline === "all") {
-    return Object.entries(pipelines)
-      .filter(([key]) => key !== "all")
-      .map(([key, value]) => ({ key, ...value }));
-  }
-
-  return [{ key: selectedPipeline, ...pipelines[selectedPipeline] }];
-};
-
-const renderContext = () => {
-  const pipeline = pipelines[selectedPipeline] ?? pipelines.all;
-  setText("pageTitle", pipeline.name);
-  setText("pipelineTitle", pipeline.name);
-  setText("pipelineDescription", pipeline.description);
-  setText("pipelineCategory", pipeline.category);
-  setText("pipelineArea", pipeline.area);
-  setText("pipelineTag", pipeline.tag);
-  document.getElementById("selectedPipelineInput").value = pipeline.name;
-
-  document.querySelectorAll("[data-pipeline-link]").forEach((link) => {
-    link.classList.toggle("active", link.dataset.pipelineLink === selectedPipeline);
-  });
-};
-
-const renderReport = () => {
-  const report = catalog.find((item) => item.key === selectedReport);
-  if (!report) return;
-
-  setText("reportTitle", report.title);
-  setText("reportUse", report.use);
-  document.getElementById("selectedReportInput").value = report.title;
-
-  document.querySelectorAll("[data-report]").forEach((button) => {
-    button.classList.toggle("selected", button.dataset.report === selectedReport);
-  });
-
-  document.getElementById("reportRows").innerHTML = getPipelineRows()
-    .flatMap((pipeline) => report.columns.map((column) => `
-      <tr>
-        <td><strong>${pipeline.name}</strong></td>
-        <td>${column}</td>
-        <td>${report.bitrixMethod}</td>
-        <td>${report.targetTable}</td>
-        <td>${report.requiresScope}</td>
-        <td><span class="status-badge">Pendiente sync</span></td>
-      </tr>
-    `))
+const renderDashboards = (items) => {
+  document.getElementById("visibleReports").textContent = items.length;
+  document.getElementById("dashboardGrid").innerHTML = items
+    .map((dashboard) => `
+      <a class="dashboard-card" href="/reporte.html?id=${dashboard.id}">
+        <div class="dashboard-preview">
+          <div class="preview-topline"></div>
+          <div class="preview-bars">
+            <span style="height: 42%"></span>
+            <span style="height: 70%"></span>
+            <span style="height: 54%"></span>
+            <span style="height: 88%"></span>
+          </div>
+          <div class="preview-table">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+        <div class="dashboard-body">
+          <span class="dashboard-icon">${dashboard.icon}</span>
+          <div>
+            <strong>${dashboard.title}</strong>
+            <p>${dashboard.description}</p>
+          </div>
+        </div>
+        <div class="dashboard-metrics">
+          ${dashboard.metrics.map((metric) => `
+            <span><b>${metric.value}</b>${metric.label}</span>
+          `).join("")}
+        </div>
+        <div class="dashboard-footer">
+          <small>${dashboard.area}</small>
+          <em>${dashboard.status}</em>
+        </div>
+      </a>
+    `)
     .join("");
 };
 
-const bindTabs = () => {
-  document.querySelectorAll("[data-report]").forEach((button) => {
-    button.addEventListener("click", () => {
-      selectedReport = button.dataset.report;
-      renderReport();
-    });
+const bindSearch = () => {
+  document.getElementById("dashboardSearch").addEventListener("input", (event) => {
+    const query = event.target.value.trim().toLowerCase();
+    const filtered = dashboards.filter((dashboard) =>
+      `${dashboard.title} ${dashboard.area} ${dashboard.description} ${dashboard.status}`
+        .toLowerCase()
+        .includes(query)
+    );
+    renderDashboards(filtered);
   });
 };
 
-const load = async () => {
-  const response = await fetch("/api/reports/catalog");
-  catalog = await response.json();
-
-  if (!pipelines[selectedPipeline]) {
-    selectedPipeline = "all";
-  }
-
-  renderContext();
-  bindTabs();
-  renderReport();
-};
-
-load();
+renderDashboards(dashboards);
+bindSearch();

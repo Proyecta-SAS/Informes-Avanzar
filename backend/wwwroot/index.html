@@ -24,10 +24,10 @@
       <a href="#"><span>👤</span>Usuarios</a>
 
       <p>AREAS</p>
-      <a href="/informes.html?pipeline=rch_comercial" data-pipeline="rch_comercial"><span>💼</span>RCH Comercial</a>
-      <a href="/informes.html?pipeline=rch_operativa" data-pipeline="rch_operativa"><span>🧩</span>RCH Operativa</a>
-      <a href="/informes.html?pipeline=pnnc_comercial" data-pipeline="pnnc_comercial"><span>📈</span>PNNC Comercial</a>
-      <a href="/informes.html?pipeline=pnnc_operativa" data-pipeline="pnnc_operativa"><span>⚙️</span>PNNC Operativa</a>
+      <a href="/informes.html?pipeline=rch_comercial"><span>💼</span>RCH Comercial</a>
+      <a href="/informes.html?pipeline=rch_operativa"><span>🧩</span>RCH Operativa</a>
+      <a href="/informes.html?pipeline=pnnc_comercial"><span>📈</span>PNNC Comercial</a>
+      <a href="/informes.html?pipeline=pnnc_operativa"><span>⚙️</span>PNNC Operativa</a>
 
       <p>ADMINISTRACION</p>
       <a href="#"><span>🕓</span>Historial</a>
@@ -37,12 +37,12 @@
 
   <main class="app">
     <header class="topbar">
-      <h1>Dashboard general</h1>
+      <h1>Inicio</h1>
       <div class="topbar-actions">
         <span class="connection-pill">Bitrix conectado</span>
         <label class="search">
           <span>Buscar</span>
-          <input type="search" placeholder="Buscar negociacion, cliente o responsable...">
+          <input id="reportSearch" type="search" placeholder="Buscar informe, pipeline o entidad...">
         </label>
         <button class="sync-button" type="button">🔄 Sincronizar</button>
         <button class="profile" type="button">
@@ -55,90 +55,49 @@
 
     <section class="hero">
       <div>
-        <span class="section-kicker">PostgreSQL local + Bitrix CRM</span>
-        <h2 id="selectedTitle">Replica Bitrix</h2>
-        <p id="selectedDescription">Snapshot local en PostgreSQL para leer negociaciones, usuarios, campos personalizados, tareas y actividades sin consultar Bitrix en cada carga.</p>
+        <span class="section-kicker">Informes disponibles</span>
+        <h2>Seleccione un informe</h2>
+        <p>Esta es la entrada principal. Cada usuario vera aqui los informes que tiene permitidos y podra abrirlos por pipeline o por entidad.</p>
       </div>
       <aside>
-        <span id="selectedAsideLabel">Pipelines iniciales</span>
-        <strong id="selectedAsideValue">4</strong>
-        <p id="selectedAsideNote">RCH y PNNC</p>
-        <em id="selectedAsideTag">Sync acotada</em>
+        <span>Informes base</span>
+        <strong id="homeReportCount">0</strong>
+        <p>RCH y PNNC</p>
+        <em>Acceso segun rol</em>
       </aside>
     </section>
 
-    <section class="tabs" aria-label="Pipelines">
-      <button class="selected" data-pipeline="all" type="button">Todas</button>
-      <button data-pipeline="rch_comercial" type="button">💼 RCH Comercial</button>
-      <button data-pipeline="rch_operativa" type="button">🧩 RCH Operativa</button>
-      <button data-pipeline="pnnc_comercial" type="button">📈 PNNC Comercial</button>
-      <button data-pipeline="pnnc_operativa" type="button">⚙️ PNNC Operativa</button>
-    </section>
-
-    <section class="filters">
-      <div class="filter-title">Sincronizacion Bitrix</div>
-      <label>Pipeline<input id="pipelineFilter" value="Todas" readonly></label>
-      <label>Modo<input value="Completa"></label>
-      <label>Entidad<input value="Negociaciones"></label>
-      <label>Desde<input value="Sin filtro"></label>
-      <button type="button">Etapas <b>Todas</b></button>
-      <button class="apply" type="button">Aplicar</button>
-      <button type="button">Limpiar</button>
-      <div class="filter-actions">
-        <button class="download" type="button">Sync Global</button>
-        <button type="button">Incremental</button>
-        <small>PostgreSQL sera la fuente local de informes.</small>
-      </div>
-    </section>
-
-    <div class="notice"><strong>Modelo de datos:</strong> todo se traera por lotes desde Bitrix y se guardara localmente como payload crudo, snapshot generico y tablas normalizadas.</div>
-
-    <section id="cardGrid" class="cards" aria-label="Indicadores"></section>
-
-    <section class="table-panel">
-      <div class="panel-title">
-        <h2>Pipelines iniciales</h2>
-        <button class="icon-button" type="button" aria-label="Opciones">...</button>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Pipeline</th>
-              <th>Categoria</th>
-              <th>Area</th>
-              <th>Estado</th>
-              <th>Entidades</th>
-            </tr>
-          </thead>
-          <tbody id="pipelineRows"></tbody>
-        </table>
-      </div>
+    <section class="cards compact-cards" aria-label="Estado general">
+      <article class="kpi">
+        <span class="card-label">Usuarios</span>
+        <strong id="homeUsers" class="kpi-value">477</strong>
+        <span class="kpi-note">Responsables sincronizados</span>
+      </article>
+      <article class="kpi">
+        <span class="card-label">Etapas</span>
+        <strong id="homeStages" class="kpi-value">142</strong>
+        <span class="kpi-note">Estados Bitrix guardados</span>
+      </article>
+      <article class="kpi">
+        <span class="card-label">RCH Comercial</span>
+        <strong id="homeRchComercial" class="kpi-value">546</strong>
+        <span class="kpi-note">Deals sincronizados</span>
+      </article>
+      <article class="kpi">
+        <span class="card-label">RCH Operativa</span>
+        <strong id="homeRchOperativa" class="kpi-value">607</strong>
+        <span class="kpi-note">Deals sincronizados</span>
+      </article>
     </section>
 
     <section class="table-panel">
       <div class="panel-title">
         <div>
-          <h2>Informes posibles por entidad</h2>
-          <p class="panel-subtitle">Tablas base que podemos sacar de Bitrix y guardar en PostgreSQL.</p>
+          <h2>Mis informes</h2>
+          <p class="panel-subtitle">Listado inicial de informes disponibles para abrir en localhost.</p>
         </div>
       </div>
-      <div id="reportTabs" class="report-tabs" aria-label="Tipos de informe"></div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Pipeline</th>
-              <th>Campo / Columna</th>
-              <th>Metodo Bitrix</th>
-              <th>Tabla PostgreSQL</th>
-              <th>Scope</th>
-              <th>Uso</th>
-            </tr>
-          </thead>
-          <tbody id="reportRows"></tbody>
-        </table>
-      </div>
+      <div id="homeReports" class="report-grid" aria-label="Listado de informes"></div>
     </section>
   </main>
 

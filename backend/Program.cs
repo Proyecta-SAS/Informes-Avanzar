@@ -70,6 +70,37 @@ app.MapGet("/api/dashboard/overview", () => Results.Ok(new
 
 app.MapGet("/api/bitrix/pipelines", (IBitrixPipelineCatalog catalog) => Results.Ok(catalog.ListDefaults()));
 
+app.MapGet("/api/data/deals", async (
+    string? pipeline,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return await BitrixDataQueries.GetDealsAsync(pipeline ?? "all", dataSource, cancellationToken);
+});
+
+app.MapGet("/api/data/sync-summary", async (
+    string? pipeline,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return await BitrixDataQueries.GetSyncSummaryAsync(pipeline ?? "all", dataSource, cancellationToken);
+});
+
+app.MapGet("/api/data/users", async (
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return await BitrixDataQueries.GetUsersAsync(dataSource, cancellationToken);
+});
+
+app.MapGet("/api/data/stages", async (
+    string? pipeline,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return await BitrixDataQueries.GetStagesAsync(pipeline ?? "all", dataSource, cancellationToken);
+});
+
 app.MapGet("/api/reports/catalog", () => Results.Ok(new[]
 {
     new

@@ -27,6 +27,7 @@ public sealed class BitrixDealSyncService(
         {
             int? start = 0;
             var visitedStarts = new HashSet<int>();
+            await using var dbConnection = await dataSource.OpenConnectionAsync(cancellationToken);
 
             while (start is not null)
             {
@@ -60,7 +61,7 @@ public sealed class BitrixDealSyncService(
                 foreach (var deal in result.EnumerateArray())
                 {
                     recordsRead++;
-                    await UpsertDealAsync(connectionInfo.Id, pipeline.Id, syncRunId, deal, cancellationToken);
+                    await UpsertDealAsync(dbConnection, connectionInfo.Id, pipeline.Id, syncRunId, deal, cancellationToken);
                     recordsWritten++;
                 }
 
@@ -113,6 +114,7 @@ public sealed class BitrixDealSyncService(
     }
 
     private async Task UpsertDealAsync(
+        NpgsqlConnection connection,
         Guid connectionId,
         Guid pipelineId,
         Guid syncRunId,
@@ -126,7 +128,6 @@ public sealed class BitrixDealSyncService(
         var customFields = ExtractCustomFields(deal);
         var coreData = ExtractCoreData(deal);
 
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         var rawPayloadId = await InsertRawPayloadAsync(

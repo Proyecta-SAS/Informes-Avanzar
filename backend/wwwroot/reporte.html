@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <img class="brand-logo" src="/assets/avanzar-logo-color.svg" alt="Avanzar">
+      <div><span>DASHBOARD</span></div>
+      <a class="icon-button" href="/informes.html" aria-label="Volver">←</a>
+    </div>
+    <nav class="menu">
+      <p>GENERAL</p>
+      <a href="/"><span>🏠</span>Inicio</a>
+      <a href="/informes.html"><span>📊</span>Informes</a>
+      <p>VISTAS</p>
+      <a class="active" href="#"><span>📌</span>Resumen</a>
+      <a href="#detalle"><span>📋</span>Detalle</a>
+    </nav>
+  </aside>
+
+  <main class="app">
+    <header class="topbar">
+      <h1 id="reportName">Dashboard</h1>
+      <div class="topbar-actions">
+        <span class="connection-pill">PostgreSQL</span>
+        <a class="sync-button button-link" href="/informes.html">Ver informes</a>
+      </div>
+    </header>
+
+    <section class="hero compact-hero">
+      <div>
+        <span class="section-kicker">Informe</span>
+        <h2 id="reportTitle">Dashboard</h2>
+        <p id="reportDescription">Indicadores principales y detalle de registros sincronizados desde Bitrix.</p>
+      </div>
+      <aside>
+        <span>Estado</span>
+        <strong id="reportStatus">OK</strong>
+        <p id="reportArea">Area</p>
+        <em>Power BI style</em>
+      </aside>
+    </section>
+
+    <section class="cards compact-cards">
+      <article class="kpi">
+        <span class="card-label">Deals</span>
+        <strong id="summaryDeals" class="kpi-value">0</strong>
+        <span class="kpi-note">Negociaciones</span>
+      </article>
+      <article class="kpi">
+        <span class="card-label">Etapas</span>
+        <strong id="summaryStages" class="kpi-value">0</strong>
+        <span class="kpi-note">Pipeline</span>
+      </article>
+      <article class="kpi">
+        <span class="card-label">Usuarios</span>
+        <strong id="summaryUsers" class="kpi-value">0</strong>
+        <span class="kpi-note">Responsables</span>
+      </article>
+      <article class="kpi success">
+        <span class="card-label">Ultima sync</span>
+        <strong id="summaryStatus" class="kpi-value">-</strong>
+        <span id="summaryLastRun" class="kpi-note">Sin datos</span>
+      </article>
+    </section>
+
+    <section class="dashboard-layout">
+      <div class="visual-panel">
+        <div class="panel-title"><h2>Distribucion por etapa</h2></div>
+        <div id="stageBars" class="stage-bars"></div>
+      </div>
+      <div class="visual-panel">
+        <div class="panel-title"><h2>Responsables</h2></div>
+        <div id="ownerList" class="owner-list"></div>
+      </div>
+    </section>
+
+    <section id="detalle" class="table-panel">
+      <div class="panel-title">
+        <div>
+          <h2>Detalle de deals</h2>
+          <p class="panel-subtitle">Primeros 100 registros sincronizados.</p>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Titulo</th>
+              <th>Etapa</th>
+              <th>Responsable</th>
+              <th>Valor</th>
+              <th>Moneda</th>
+            </tr>
+          </thead>
+          <tbody id="dealRows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/reporte.js"></script>
+</body>
+</html>
