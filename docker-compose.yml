@@ -1,12 +1,12 @@
 services:
   postgres:
-    image: postgres:18
+    image: postgres:17
     environment:
       POSTGRES_DB: informes_avanzar
       POSTGRES_USER: informes
       POSTGRES_PASSWORD: informes
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/migrations:/docker-entrypoint-initdb.d:ro
@@ -21,12 +21,12 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     env_file:
-      - .env.example
+      - ${ENV_FILE:-.env}
     environment:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Default: Host=postgres;Port=5432;Database=informes_avanzar;Username=informes;Password=informes
     ports:
-      - "8080:8080"
+      - "${APP_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy

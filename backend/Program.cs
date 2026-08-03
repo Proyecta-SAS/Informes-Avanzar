@@ -101,6 +101,30 @@ app.MapGet("/api/data/stages", async (
     return await BitrixDataQueries.GetStagesAsync(pipeline ?? "all", dataSource, cancellationToken);
 });
 
+app.MapGet("/api/reports/fuerza-comercial-diego/valores-radicados", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    var selectedYear = year is >= 2000 and <= 2100 ? year.Value : DateTime.UtcNow.Year;
+    return Results.Ok(await BitrixDataQueries.GetDiegoRadicatedValuesAsync(
+        selectedYear,
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/fuerza-comercial-diego/dashboard", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    var selectedYear = year is >= 2000 and <= 2100 ? year.Value : DateTime.UtcNow.Year;
+    return Results.Ok(await BitrixDataQueries.GetDiegoCommercialDashboardAsync(
+        selectedYear,
+        dataSource,
+        cancellationToken));
+});
+
 app.MapGet("/api/reports/catalog", () => Results.Ok(new[]
 {
     new

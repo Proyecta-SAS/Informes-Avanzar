@@ -20,7 +20,7 @@ const diegoSections = [
     title: "Radicación",
     description: "Seguimiento de valores, volumen y desempeño comercial durante 2026.",
     blocks: [
-      ["Valores radicados por asesor", "Evolución mensual del total alcanzado por cada asesor.", "chart"],
+      ["Valores radicados por asesor", "Evolución mensual del total alcanzado por cada asesor.", "radicated"],
       ["Total de negociaciones por asesor", "Negociaciones, estudios, radicados y tasa de cierre.", "table"],
       ["Valores radicados por coordinador", "Comparativo mensual consolidado por coordinación.", "chart"],
       ["Valores radicados por líder", "Comparativo mensual consolidado por liderazgo.", "chart"],
@@ -64,10 +64,111 @@ const diegoSections = [
 ];
 
 const blockPreview = (type) => {
+  if (type === "radicated") return `<div id="diegoValoresRadicados" class="radicated-values"><p>Cargando información…</p></div>`;
   if (type === "table") return `<div class="block-table"><i></i><i></i><i></i><i></i></div>`;
   if (type === "donut") return `<div class="block-donut"><i></i><span>Sin datos</span></div>`;
   if (type === "funnel") return `<div class="block-funnel"><i></i><i></i><i></i><i></i></div>`;
   return `<div class="block-bars"><i></i><i></i><i></i><i></i><i></i></div>`;
+};
+
+const currencyFormatter = new Intl.NumberFormat("es-CO", {
+  style: "currency",
+  currency: "COP",
+  maximumFractionDigits: 0
+});
+
+const loadDiegoRadicatedValues = async () => {
+  const container = document.getElementById("diegoValoresRadicados");
+  const year = document.getElementById("diegoYear").value;
+
+  try {
+    const response = await fetch(`/api/reports/fuerza-comercial-diego/valores-radicados?year=${encodeURIComponent(year)}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+
+    const valueKpi = document.querySelector(".diego-kpis article:nth-child(5) strong");
+    valueKpi.textContent = currencyFormatter.format(data.totalAchieved ?? 0);
+
+    if (!data.items?.length) {
+      container.innerHTML = `<div class="empty-block"><strong>Sin valores radicados para ${data.year}</strong><span>Sincronice los negocios de Bitrix para cargar este indicador.</span></div>`;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="radicated-total"><span>Total alcanzado</span><strong>${currencyFormatter.format(data.totalAchieved)}</strong></div>
+      <div class="radicated-table-wrap">
+        <table class="radicated-table">
+          <thead><tr><th>Mes</th><th>Asesor</th><th>Total alcanzado</th></tr></thead>
+          <tbody>${data.items.map((item) => `
+            <tr><td>${item.month}</td><td>${item.advisor}</td><td>${currencyFormatter.format(item.totalAchieved)}</td></tr>
+          `).join("")}</tbody>
+        </table>
+      </div>`;
+  } catch (error) {
+    container.innerHTML = `<div class="empty-block error"><strong>No fue posible cargar los valores radicados</strong><span>${error.message}</span></div>`;
+  }
+};
+
+const findDiegoBlock = (title) => [...document.querySelectorAll(".diego-block")]
+  .find((block) => block.querySelector("h3")?.textContent === title);
+
+const renderDataTable = (headers, rows) => `
+  <div class="radicated-table-wrap synced-table-wrap">
+    <table class="radicated-table synced-table">
+      <thead><tr>${headers.map((header) => `<th>${header}</th>`).join("")}</tr></thead>
+      <tbody>${rows.join("")}</tbody>
+    </table>
+  </div>`;
+
+const replaceBlockPreview = (title, content, count) => {
+  const block = findDiegoBlock(title);
+  if (!block) return;
+  block.querySelector(".diego-block-title em").textContent = `${count} registros`;
+  const preview = block.querySelector(".block-table, .block-bars, .block-funnel, .block-donut");
+  if (preview) preview.outerHTML = content;
+};
+
+const loadDiegoDashboardData = async () => {
+  const year = document.getElementById("diegoYear").value;
+  const response = await fetch(`/api/reports/fuerza-comercial-diego/dashboard?year=${encodeURIComponent(year)}`);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const data = await response.json();
+
+  const totalNegotiations = data.advisors.reduce((sum, item) => sum + item.negotiations, 0);
+  const totalCommercial = data.advisors.reduce((sum, item) => sum + item.commercialCases, 0);
+  const totalRadicated = data.advisors.reduce((sum, item) => sum + item.radicatedCases, 0);
+  document.querySelector(".diego-kpis article:nth-child(1) strong").textContent = formatNumber.format(totalNegotiations);
+  document.querySelector(".diego-kpis article:nth-child(2) strong").textContent = formatNumber.format(totalCommercial);
+  document.querySelector(".diego-kpis article:nth-child(3) strong").textContent = formatNumber.format(totalRadicated);
+  document.querySelector(".diego-kpis article:nth-child(4) strong").textContent = totalCommercial
+    ? `${((totalRadicated / totalCommercial) * 100).toFixed(1)}%`
+    : "0%";
+
+  replaceBlockPreview("Total de negociaciones por asesor", renderDataTable(
+    ["Asesor", "Negociaciones", "Comerciales", "Radicados", "Valor"],
+    data.advisors.map((item) => `<tr><td>${item.advisor}</td><td>${formatNumber.format(item.negotiations)}</td><td>${formatNumber.format(item.commercialCases)}</td><td>${formatNumber.format(item.radicatedCases)}</td><td>${currencyFormatter.format(item.totalValue)}</td></tr>`)
+  ), data.advisors.length);
+
+  const departmentRows = data.departments.map((item) => `<tr><td>${item.department}</td><td>${formatNumber.format(item.cases)}</td><td>${currencyFormatter.format(item.totalValue)}</td></tr>`);
+  const departmentTable = renderDataTable(["Departamento", "Casos", "Valor alcanzado"], departmentRows);
+  ["Valores radicados por coordinador", "Valores radicados por líder", "Detalle de coordinadores", "Detalle de radicaciones por líder"]
+    .forEach((title) => replaceBlockPreview(title, departmentTable, data.departments.length));
+
+  const pipelineBlocks = {
+    rch_comercial: ["Etapas Comercial RCH", "Embudo RCH"],
+    rch_operativa: ["Etapas Operativa RCH"],
+    pnnc_comercial: ["Etapas Comercial PNNC", "Embudo Insolvencia"],
+    pnnc_operativa: ["Etapas Operativa PNNC"]
+  };
+
+  Object.entries(pipelineBlocks).forEach(([pipeline, titles]) => {
+    const items = data.stages.filter((item) => item.pipeline === pipeline);
+    const content = renderDataTable(
+      ["Etapa", "Casos", "Valor"],
+      items.map((item) => `<tr><td>${item.stage}</td><td>${formatNumber.format(item.cases)}</td><td>${currencyFormatter.format(item.totalValue)}</td></tr>`)
+    );
+    titles.forEach((title) => replaceBlockPreview(title, content, items.length));
+  });
 };
 
 const renderDiegoDashboard = () => {
@@ -173,6 +274,10 @@ const load = async () => {
       <a href="#embudos"><span>▽</span>Embudos</a>
       <a href="#etapas"><span>≡</span>Etapas</a>`;
     renderDiegoDashboard();
+    document.getElementById("diegoYear").addEventListener("change", async () => {
+      await Promise.all([loadDiegoRadicatedValues(), loadDiegoDashboardData()]);
+    });
+    await Promise.all([loadDiegoRadicatedValues(), loadDiegoDashboardData()]);
     return;
   }
   await loadSummary();

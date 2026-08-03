@@ -55,9 +55,9 @@ const dashboards = [
     id: "fuerza_comercial_diego",
     icon: "🤝",
     title: "Fuerza Comercial Diego",
-    area: "Comercial",
-    description: "Seguimiento de negociaciones, responsables, etapas y actividad de la fuerza comercial de Diego.",
-    status: "Disponible",
+    area: "Informe comercial",
+    description: "Panel de fuerza comercial con valores radicados, negociaciones, cartera, embudos y etapas de RCH y PNNC.",
+    status: "Ver informe",
     metrics: [
       { label: "Deals", value: "0" },
       { label: "Etapas", value: "0" },
