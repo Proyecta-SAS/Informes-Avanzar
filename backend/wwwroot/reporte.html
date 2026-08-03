@@ -46,7 +46,7 @@
       </aside>
     </section>
 
-    <section class="cards compact-cards">
+    <section id="standardSummary" class="cards compact-cards">
       <article class="kpi">
         <span class="card-label">Deals</span>
         <strong id="summaryDeals" class="kpi-value">0</strong>
@@ -69,7 +69,7 @@
       </article>
     </section>
 
-    <section class="dashboard-layout">
+    <section id="standardVisuals" class="dashboard-layout">
       <div class="visual-panel">
         <div class="panel-title"><h2>Distribucion por etapa</h2></div>
         <div id="stageBars" class="stage-bars"></div>
@@ -78,6 +78,32 @@
         <div class="panel-title"><h2>Responsables</h2></div>
         <div id="ownerList" class="owner-list"></div>
       </div>
+    </section>
+
+    <section id="diegoDashboard" class="diego-dashboard" hidden>
+      <section class="diego-filters" aria-label="Filtros del informe">
+        <div>
+          <span class="filter-title">Filtros del informe</span>
+          <p>Refine los indicadores de fuerza comercial.</p>
+        </div>
+        <label>Año<select id="diegoYear"><option>2026</option><option>2025</option></select></label>
+        <label>Mes<select><option>Todos</option><option>Enero</option><option>Febrero</option><option>Marzo</option></select></label>
+        <label>Línea comercial<select><option>Todas</option><option>RCH</option><option>Insolvencia</option></select></label>
+        <label>Asesor<select><option>Todos</option></select></label>
+        <label>Líder<select><option>Todos</option></select></label>
+        <label>Coordinador<select><option>Todos</option></select></label>
+      </section>
+
+      <section class="diego-kpis" aria-label="Indicadores principales">
+        <article><span>Negociaciones</span><strong>—</strong><small>Total del periodo</small></article>
+        <article><span>Estudios</span><strong>—</strong><small>Casos estudiados</small></article>
+        <article><span>Radicados</span><strong>—</strong><small>Casos radicados</small></article>
+        <article class="accent"><span>Tasa de cierre</span><strong>—</strong><small>Radicados / estudios</small></article>
+        <article><span>Valor radicado</span><strong>—</strong><small>Total alcanzado</small></article>
+        <article><span>Cartera recaudada</span><strong>—</strong><small>Valor recuperado</small></article>
+      </section>
+
+      <div id="diegoSections"></div>
     </section>
 
     <section id="detalle" class="table-panel">

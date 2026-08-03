@@ -28,6 +28,13 @@ const reports = [
     href: "/reporte.html?id=pnnc_operativa"
   },
   {
+    title: "Fuerza Comercial Diego",
+    description: "Informe de seguimiento de la fuerza comercial de Diego.",
+    pipeline: "Fuerza Comercial Diego",
+    entity: "Deals",
+    href: "/reporte.html?id=fuerza_comercial_diego"
+  },
+  {
     title: "Usuarios y responsables",
     description: "Usuarios Bitrix sincronizados para asignacion de responsables y filtros por asesor.",
     pipeline: "Global",

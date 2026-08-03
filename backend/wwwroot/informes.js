@@ -50,6 +50,19 @@ const dashboards = [
       { label: "Etapas", value: "40" },
       { label: "Usuarios", value: "477" }
     ]
+  },
+  {
+    id: "fuerza_comercial_diego",
+    icon: "🤝",
+    title: "Fuerza Comercial Diego",
+    area: "Comercial",
+    description: "Seguimiento de negociaciones, responsables, etapas y actividad de la fuerza comercial de Diego.",
+    status: "Disponible",
+    metrics: [
+      { label: "Deals", value: "0" },
+      { label: "Etapas", value: "0" },
+      { label: "Usuarios", value: "0" }
+    ]
   }
 ];
 
