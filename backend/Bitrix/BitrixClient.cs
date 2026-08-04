@@ -33,10 +33,10 @@ public sealed class BitrixClient(HttpClient httpClient, IOptions<BitrixOptions> 
         {
             using var content = new FormUrlEncodedContent(requestParameters);
             using var response = await httpClient.PostAsync(requestUri, content, cancellationToken);
-            if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < 6)
+            if (response.StatusCode == HttpStatusCode.TooManyRequests)
             {
                 var retryAfter = response.Headers.RetryAfter?.Delta
-                    ?? TimeSpan.FromSeconds(Math.Min(30, Math.Pow(2, attempt)));
+                    ?? TimeSpan.FromSeconds(Math.Min(60, Math.Pow(2, Math.Min(attempt, 6))));
                 await Task.Delay(retryAfter, cancellationToken);
                 continue;
             }

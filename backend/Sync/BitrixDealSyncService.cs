@@ -13,23 +13,10 @@ public sealed class BitrixDealSyncService(
     IBitrixSyncRepository repository,
     NpgsqlDataSource dataSource) : IBitrixDealSyncService
 {
-    private static readonly string[] DealSummaryFields =
-    [
-        "ID",
-        "TITLE",
-        "STAGE_ID",
-        "CATEGORY_ID",
-        "ASSIGNED_BY_ID",
-        "OPPORTUNITY",
-        "CURRENCY_ID",
-        "CLOSED",
-        "DATE_CREATE",
-        "DATE_MODIFY",
-        "CLOSEDATE",
-        "UF_CRM_1676419915",
-        "UF_CRM_1737653376",
-        "UF_CRM_1737654190"
-    ];
+    // Bitrix requires UF_* explicitly; '*' alone only returns standard deal fields.
+    // The general commercial report depends on payment, hierarchy and period fields,
+    // so every synchronization must preserve the complete custom-field payload.
+    private static readonly string[] DealSummaryFields = ["*", "UF_*"];
 
     public async Task<SyncResult> SyncPipelineDealsAsync(
         string pipelineSlug,

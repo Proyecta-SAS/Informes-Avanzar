@@ -1,120 +1,59 @@
-const dashboards = [
+const reportAreas = [
   {
-    id: "rch_comercial",
-    icon: "💼",
-    title: "RCH Comercial",
-    area: "Comercial",
-    description: "Seguimiento comercial de negociaciones RCH, responsables, etapas y actividad reciente.",
-    status: "Sincronizado",
-    metrics: [
-      { label: "Deals", value: "546" },
-      { label: "Etapas", value: "31" },
-      { label: "Usuarios", value: "477" }
+    id: "comercial",
+    icon: "↗",
+    title: "Comercial",
+    tone: "violet",
+    description: "Seguimiento de oportunidades, radicación y desempeño de la fuerza comercial.",
+    reports: [
+      { id: "informe_general_comercial", title: "Informe General Comercial", badge: "Informe general", description: "Radicación, negociaciones, comisiones, cartera, embudos y etapas en una sola vista." },
+      { id: "rch_comercial", title: "RCH Comercial", badge: "Pipeline", description: "Negociaciones y avance de la pipeline comercial RCH." },
+      { id: "fuerza_comercial_diego", title: "Fuerza Comercial", badge: "Informe ejecutivo", description: "Radicación, cartera, comisiones, embudos y liderazgo." }
     ]
   },
   {
-    id: "rch_operativa",
-    icon: "🧩",
-    title: "RCH Operativa",
-    area: "Operaciones",
-    description: "Vista operativa para control de pipeline, carga de gestion y seguimiento de casos RCH.",
-    status: "Sincronizado",
-    metrics: [
-      { label: "Deals", value: "607" },
-      { label: "Etapas", value: "31" },
-      { label: "Usuarios", value: "477" }
+    id: "pnnc",
+    icon: "◇",
+    title: "PNNC",
+    tone: "blue",
+    description: "Vista comercial y operativa de insolvencia y negociación de cartera.",
+    reports: [
+      { id: "pnnc_comercial", title: "PNNC Comercial", badge: "Comercial", description: "Prospectos, seguimiento y conversión comercial PNNC." },
+      { id: "pnnc_operativa", title: "PNNC Operativa", badge: "Operativa", description: "Casos, documentación y etapas operativas PNNC." }
     ]
   },
   {
-    id: "pnnc_comercial",
-    icon: "📈",
-    title: "PNNC Comercial",
-    area: "Comercial",
-    description: "Dashboard comercial PNNC preparado para publicar cuando se complete la sincronizacion.",
-    status: "Pendiente sync",
-    metrics: [
-      { label: "Deals", value: "0" },
-      { label: "Etapas", value: "40" },
-      { label: "Usuarios", value: "477" }
-    ]
-  },
-  {
-    id: "pnnc_operativa",
-    icon: "⚙️",
-    title: "PNNC Operativa",
-    area: "Operaciones",
-    description: "Dashboard operativo PNNC para tareas, etapas y estado de gestion.",
-    status: "Pendiente sync",
-    metrics: [
-      { label: "Deals", value: "0" },
-      { label: "Etapas", value: "40" },
-      { label: "Usuarios", value: "477" }
-    ]
-  },
-  {
-    id: "fuerza_comercial_diego",
-    icon: "🤝",
-    title: "Fuerza Comercial Diego",
-    area: "Informe comercial",
-    description: "Panel de fuerza comercial con valores radicados, negociaciones, cartera, embudos y etapas de RCH y PNNC.",
-    status: "Ver informe",
-    metrics: [
-      { label: "Deals", value: "0" },
-      { label: "Etapas", value: "0" },
-      { label: "Usuarios", value: "0" }
+    id: "operaciones",
+    icon: "⚙",
+    title: "Operativa",
+    tone: "red",
+    description: "Control operativo, documentación y avance de los casos radicados.",
+    reports: [
+      { id: "rch_operativa", title: "RCH Operativa", badge: "Pipeline", description: "Gestión operativa de negociaciones y etapas RCH." }
     ]
   }
 ];
 
-const renderDashboards = (items) => {
-  document.getElementById("visibleReports").textContent = items.length;
-  document.getElementById("dashboardGrid").innerHTML = items
-    .map((dashboard) => `
-      <a class="dashboard-card" href="/reporte.html?id=${dashboard.id}">
-        <div class="dashboard-preview">
-          <div class="preview-topline"></div>
-          <div class="preview-bars">
-            <span style="height: 42%"></span>
-            <span style="height: 70%"></span>
-            <span style="height: 54%"></span>
-            <span style="height: 88%"></span>
-          </div>
-          <div class="preview-table">
-            <span></span><span></span><span></span>
-          </div>
-        </div>
-        <div class="dashboard-body">
-          <span class="dashboard-icon">${dashboard.icon}</span>
-          <div>
-            <strong>${dashboard.title}</strong>
-            <p>${dashboard.description}</p>
-          </div>
-        </div>
-        <div class="dashboard-metrics">
-          ${dashboard.metrics.map((metric) => `
-            <span><b>${metric.value}</b>${metric.label}</span>
-          `).join("")}
-        </div>
-        <div class="dashboard-footer">
-          <small>${dashboard.area}</small>
-          <em>${dashboard.status}</em>
-        </div>
-      </a>
-    `)
-    .join("");
+const renderReports = (query = "") => {
+  const normalized = query.trim().toLocaleLowerCase("es-CO");
+  let visibleReports = 0;
+  const content = reportAreas.map((area) => {
+    const areaMatches = area.title.toLocaleLowerCase("es-CO").includes(normalized);
+    const reports = area.reports.filter((report) => areaMatches
+      || `${report.title} ${report.badge} ${report.description}`.toLocaleLowerCase("es-CO").includes(normalized));
+    if (!reports.length) return "";
+    visibleReports += reports.length;
+    return `<article id="${area.id}" class="catalog-area-card ${area.tone}">
+      <header><span>${area.icon}</span><div><small>Área</small><h3>${area.title}</h3></div><em>${reports.length} ${reports.length === 1 ? "informe" : "informes"}</em></header>
+      <p>${area.description}</p>
+      <div class="catalog-report-links">${reports.map((report) => `<a href="/reporte.html?id=${report.id}"><div><span>${report.badge}</span><strong>${report.title}</strong><small>${report.description}</small></div><b>→</b></a>`).join("")}</div>
+    </article>`;
+  }).join("");
+
+  document.getElementById("visibleReports").textContent = visibleReports;
+  document.getElementById("dashboardGrid").innerHTML = content
+    || `<div class="catalog-empty"><strong>No encontramos informes</strong><span>Prueba con otro nombre o área.</span></div>`;
 };
 
-const bindSearch = () => {
-  document.getElementById("dashboardSearch").addEventListener("input", (event) => {
-    const query = event.target.value.trim().toLowerCase();
-    const filtered = dashboards.filter((dashboard) =>
-      `${dashboard.title} ${dashboard.area} ${dashboard.description} ${dashboard.status}`
-        .toLowerCase()
-        .includes(query)
-    );
-    renderDashboards(filtered);
-  });
-};
-
-renderDashboards(dashboards);
-bindSearch();
+document.getElementById("dashboardSearch").addEventListener("input", (event) => renderReports(event.target.value));
+renderReports();

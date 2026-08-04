@@ -95,8 +95,7 @@ public static class BitrixDataQueries
             FROM radicated
             WHERE month IS NOT NULL
             GROUP BY month, advisor
-            ORDER BY total_achieved DESC, month, advisor
-            LIMIT 1000;
+            ORDER BY total_achieved DESC, month, advisor;
             """;
 
         var items = new List<object>();
@@ -168,8 +167,7 @@ public static class BitrixDataQueries
                     )
                 )
             GROUP BY 1
-            ORDER BY advisor
-            LIMIT 1000;
+            ORDER BY advisor;
             """;
 
         const string stageSql = """
@@ -200,8 +198,7 @@ public static class BitrixDataQueries
                 AND u.bitrix_id = d.assigned_by_bitrix_id
             WHERE p.category_id IN (10, 28)
             GROUP BY 1
-            ORDER BY total_value DESC, department
-            LIMIT 1000;
+            ORDER BY total_value DESC, department;
             """;
 
         var advisors = new List<object>();
@@ -334,7 +331,58 @@ public static class BitrixDataQueries
             });
         }
 
-        return new { year, totalCollected = total, items };
+        await reader.DisposeAsync();
+        const string portfolioSql = """
+            WITH portfolio AS (
+                SELECT
+                    COALESCE(NULLIF(users.full_name, ''), deals.assigned_by_bitrix_id, 'Sin asesor') AS advisor,
+                    CASE
+                        WHEN pipelines.category_id IN (12, 302) THEN 'RCH'
+                        WHEN pipelines.category_id IN (68, 308) THEN 'Insolvencia'
+                    END AS commercial_line,
+                    UPPER(TRANSLATE(COALESCE(stages.name, deals.stage_id, ''),
+                        'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) AS stage_name,
+                    COALESCE(deals.opportunity, 0) AS amount
+                FROM bitrix.deals deals
+                JOIN bitrix.pipelines pipelines ON pipelines.id = deals.pipeline_id
+                LEFT JOIN bitrix.pipeline_stages stages
+                    ON stages.pipeline_id = pipelines.id
+                    AND stages.bitrix_stage_id = deals.stage_id
+                LEFT JOIN bitrix.users users
+                    ON users.connection_id = deals.connection_id
+                    AND users.bitrix_id = deals.assigned_by_bitrix_id
+                WHERE pipelines.category_id IN (12, 68, 302, 308)
+            )
+            SELECT
+                advisor,
+                commercial_line,
+                COALESCE(SUM(amount) FILTER (WHERE stage_name !~ '(NOVEDAD|OBJEC|MORA|BAJA|ELIMINAR|GANADO|EXITOS|FACTUR|PAZ Y SALVO|PAGAD)'), 0) AS receivable,
+                COALESCE(SUM(amount) FILTER (WHERE stage_name ~ '(NOVEDAD|OBJEC|MORA|BAJA|ELIMINAR)'), 0) AS with_novelty,
+                COALESCE(SUM(amount) FILTER (WHERE stage_name ~ '(GANADO|EXITOS|FACTUR|PAZ Y SALVO|PAGAD)'), 0) AS successful
+            FROM portfolio
+            GROUP BY advisor, commercial_line
+            HAVING SUM(amount) > 0
+            ORDER BY receivable DESC, advisor;
+            """;
+
+        var portfolio = new List<object>();
+        await using (var portfolioCommand = new NpgsqlCommand(portfolioSql, connection))
+        await using (var portfolioReader = await portfolioCommand.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await portfolioReader.ReadAsync(cancellationToken))
+            {
+                portfolio.Add(new
+                {
+                    advisor = portfolioReader.GetString(0),
+                    commercialLine = portfolioReader.GetString(1),
+                    receivable = portfolioReader.GetDecimal(2),
+                    withNovelty = portfolioReader.GetDecimal(3),
+                    successful = portfolioReader.GetDecimal(4)
+                });
+            }
+        }
+
+        return new { year, totalCollected = total, items, portfolio };
     }
 
     public static async Task<object> GetDiegoLeadershipAndCommissionsAsync(

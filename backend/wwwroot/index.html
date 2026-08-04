@@ -4,103 +4,59 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Avanzar Informes</title>
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/styles.css?v=20260804-home-light">
+  <link rel="stylesheet" href="/home-light.css?v=20260804-original-palette">
 </head>
-<body>
-  <aside class="sidebar">
+<body class="home-dashboard">
+  <aside class="sidebar home-sidebar">
     <div class="brand">
       <img class="brand-logo" src="/assets/avanzar-logo-color.svg" alt="Avanzar">
-      <div>
-        <span>INFORMES</span>
-      </div>
-      <button class="icon-button" type="button" aria-label="Menu">☰</button>
+      <div><span>INFORMES</span></div>
     </div>
-
-    <nav class="menu" aria-label="Navegacion principal">
-      <p>INICIO</p>
-      <a class="active" href="/"><span>🏠</span>Inicio</a>
-      <a href="/informes.html"><span>📊</span>Informes</a>
-      <a href="/sincronizacion.html"><span>🔄</span>Bitrix</a>
-      <a href="/usuarios.html"><span>👤</span>Usuarios y roles</a>
-
-      <p>AREAS</p>
-      <a href="/informes.html?pipeline=rch_comercial"><span>💼</span>RCH Comercial</a>
-      <a href="/informes.html?pipeline=rch_operativa"><span>🧩</span>RCH Operativa</a>
-      <a href="/informes.html?pipeline=pnnc_comercial"><span>📈</span>PNNC Comercial</a>
-      <a href="/informes.html?pipeline=pnnc_operativa"><span>⚙️</span>PNNC Operativa</a>
-
-      <p>ADMINISTRACION</p>
-      <a href="#"><span>🕓</span>Historial</a>
-      <a href="#"><span>🔧</span>Configuracion</a>
+    <nav class="menu" aria-label="Navegación principal">
+      <p>GENERAL</p>
+      <a class="active" href="/"><span>⌂</span>Inicio</a>
+      <a href="/informes.html"><span>▦</span>Informes</a>
+      <a href="/sincronizacion.html"><span>↻</span>Bitrix</a>
+      <a href="/usuarios.html"><span>♙</span>Usuarios y roles</a>
+      <p>ÁREAS</p>
+      <a href="#comercial"><span>↗</span>Comercial</a>
+      <a href="#pnnc"><span>◇</span>PNNC</a>
+      <a href="#operaciones"><span>⚙</span>Operativa</a>
     </nav>
+    <div class="home-sidebar-footer"><span class="home-status-dot"></span><div><strong>Bitrix conectado</strong><small>PostgreSQL local</small></div></div>
   </aside>
 
-  <main class="app">
-    <header class="topbar">
-      <h1>Inicio</h1>
-      <div class="topbar-actions">
-        <span class="connection-pill">Bitrix conectado</span>
-        <label class="search">
-          <span>Buscar</span>
-          <input id="reportSearch" type="search" placeholder="Buscar informe, pipeline o entidad...">
-        </label>
-        <button class="sync-button" type="button">🔄 Sincronizar</button>
-        <button class="profile" type="button">
-          <span class="avatar">S</span>
-          <span><strong>Super</strong><small>Superadmin</small></span>
-          <span>v</span>
-        </button>
+  <main class="app home-app">
+    <header class="home-topbar">
+      <div><span class="home-eyebrow">Centro de informes</span><h1>Panel principal</h1></div>
+      <div class="home-top-actions">
+        <label class="home-search"><span>⌕</span><input id="reportSearch" type="search" placeholder="Buscar informe o área..."></label>
+        <a class="home-admin-link" href="/usuarios.html">Administrar accesos</a>
+        <span class="home-avatar">A</span>
       </div>
     </header>
 
-    <section class="hero">
-      <div>
-        <span class="section-kicker">Informes disponibles</span>
-        <h2>Seleccione un informe</h2>
-        <p>Esta es la entrada principal. Cada usuario vera aqui los informes que tiene permitidos y podra abrirlos por pipeline o por entidad.</p>
-      </div>
-      <aside>
-        <span>Informes base</span>
-        <strong id="homeReportCount">0</strong>
-        <p>RCH y PNNC</p>
-        <em>Acceso segun rol</em>
-      </aside>
-    </section>
-
-    <section class="cards compact-cards" aria-label="Estado general">
-      <article class="kpi">
-        <span class="card-label">Usuarios</span>
-        <strong id="homeUsers" class="kpi-value">477</strong>
-        <span class="kpi-note">Responsables sincronizados</span>
-      </article>
-      <article class="kpi">
-        <span class="card-label">Etapas</span>
-        <strong id="homeStages" class="kpi-value">142</strong>
-        <span class="kpi-note">Estados Bitrix guardados</span>
-      </article>
-      <article class="kpi">
-        <span class="card-label">RCH Comercial</span>
-        <strong id="homeRchComercial" class="kpi-value">546</strong>
-        <span class="kpi-note">Deals sincronizados</span>
-      </article>
-      <article class="kpi">
-        <span class="card-label">RCH Operativa</span>
-        <strong id="homeRchOperativa" class="kpi-value">607</strong>
-        <span class="kpi-note">Deals sincronizados</span>
-      </article>
-    </section>
-
-    <section class="table-panel">
-      <div class="panel-title">
+    <div class="home-canvas">
+      <section class="home-welcome">
         <div>
-          <h2>Mis informes</h2>
-          <p class="panel-subtitle">Listado inicial de informes disponibles para abrir en localhost.</p>
+          <span class="home-eyebrow">Bienvenido al centro de control</span>
+          <h2>Información clara para avanzar.</h2>
+          <p>Consulta el desempeño de cada área, abre los informes operativos y mantén el seguimiento de Bitrix desde un solo lugar.</p>
+          <div class="home-welcome-actions"><a href="/informes.html">Ver todos los informes</a><a href="/sincronizacion.html">Estado de sincronización</a></div>
         </div>
-      </div>
-      <div id="homeReports" class="report-grid" aria-label="Listado de informes"></div>
-    </section>
-  </main>
+        <div class="home-pulse" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+      </section>
 
-  <script src="/app.js"></script>
+      <section class="home-areas-heading"><div><span class="home-eyebrow">Navegación por áreas</span><h2>Todos los espacios de informes</h2></div><span id="homeResultCount">5 accesos</span></section>
+      <section id="homeAreas" class="home-area-grid" aria-label="Áreas de informes"></section>
+
+      <section class="home-bottom-grid">
+        <article class="home-system-card"><div><span class="home-card-icon">↻</span><div><h3>Sincronización Bitrix</h3><p>Actualiza pipelines, etapas, usuarios y campos personalizados.</p></div></div><a href="/sincronizacion.html">Abrir sincronización →</a></article>
+        <article class="home-system-card"><div><span class="home-card-icon">♙</span><div><h3>Usuarios y permisos</h3><p>Administra roles y acceso individual a cada informe.</p></div></div><a href="/usuarios.html">Gestionar accesos →</a></article>
+      </section>
+    </div>
+  </main>
+  <script src="/app.js?v=20260804-area-operativa"></script>
 </body>
 </html>

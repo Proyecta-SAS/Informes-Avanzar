@@ -96,12 +96,13 @@
           <span class="filter-title">Filtros del informe</span>
           <p>Refine los indicadores de fuerza comercial.</p>
         </div>
-        <label>Año<select id="diegoYear"><option>2026</option><option>2025</option></select></label>
-        <label>Mes<select id="diegoMonth"><option value="all">Todos</option><option value="01">Enero</option><option value="02">Febrero</option><option value="03">Marzo</option><option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option><option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option><option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option></select></label>
+        <label id="diegoYearFilter">Año<select id="diegoYear"><option>2026</option><option>2025</option></select></label>
+        <label id="diegoMonthFilter">Mes<select id="diegoMonth"><option value="all">Todos</option><option value="01">Enero</option><option value="02">Febrero</option><option value="03">Marzo</option><option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option><option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option><option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option></select></label>
         <label>Línea comercial<select id="diegoLine"><option value="all">Todas</option><option value="rch">RCH</option><option value="insolvencia">Insolvencia</option></select></label>
         <label>Asesor<select id="diegoAdvisor"><option value="all">Todos</option></select></label>
         <label>Líder<select id="diegoLeader"><option value="all">Todos</option></select></label>
         <label>Coordinador<select id="diegoCoordinator"><option value="all">Todos</option></select></label>
+        <label id="pendingLeaderFilter" hidden>Pendiente líder comercial<select id="diegoPendingLeader"><option value="all">Todos</option><option value="pending">Pendiente</option><option value="resolved">Sin pendiente</option></select></label>
       </section>
 
       <section class="diego-kpis" aria-label="Indicadores principales">
@@ -141,6 +142,6 @@
     </section>
   </main>
 
-  <script src="/reporte.js?v=20260804-matrices-liderazgo"></script>
+  <script src="/reporte.js?v=20260804-fuerza-comercial"></script>
 </body>
 </html>
