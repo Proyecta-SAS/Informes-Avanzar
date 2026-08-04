@@ -1,12 +1,14 @@
 const formatNumber = new Intl.NumberFormat("es-CO");
-const pipelines = [
-  { slug: "rch_comercial", name: "RCH Comercial", categoryId: 8 },
-  { slug: "rch_operativa", name: "RCH Operativa", categoryId: 10 },
-  { slug: "pnnc_comercial", name: "PNNC Comercial", categoryId: 26 },
-  { slug: "pnnc_operativa", name: "PNNC Operativa", categoryId: 28 }
-];
 
+let pipelines = [];
 let stagesByPipeline = new Map();
+
+const escapeHtml = (value) => String(value ?? "")
+  .replaceAll("&", "&amp;")
+  .replaceAll("<", "&lt;")
+  .replaceAll(">", "&gt;")
+  .replaceAll('"', "&quot;")
+  .replaceAll("'", "&#039;");
 
 const setSyncButtonsDisabled = (disabled) => {
   document.querySelectorAll("#incrementalButton, #massiveButton, #stageButton, [data-pipeline-sync], [data-pipeline-incremental]").forEach((button) => {
@@ -27,6 +29,7 @@ const formatDate = (value) => {
 
 const loadState = async () => {
   const response = await fetch("/api/data/sync-state");
+  if (!response.ok) throw new Error(`No fue posible consultar el estado: HTTP ${response.status}`);
   const state = await response.json();
   setSyncButtonsDisabled(state.isSyncing);
 
@@ -45,11 +48,12 @@ const loadState = async () => {
 
 const loadHistory = async () => {
   const response = await fetch("/api/data/sync-history");
+  if (!response.ok) throw new Error(`No fue posible consultar el historial: HTTP ${response.status}`);
   const rows = await response.json();
   document.getElementById("syncHistoryRows").innerHTML = rows.map((row) => `
     <tr>
-      <td>${row.entityType}</td>
-      <td>${row.status}</td>
+      <td>${escapeHtml(row.entityType)}</td>
+      <td>${escapeHtml(row.status)}</td>
       <td>${formatNumber.format(row.recordsRead ?? 0)}</td>
       <td>${formatNumber.format(row.recordsWritten ?? 0)}</td>
       <td>${formatDate(row.createdAt)}</td>
@@ -58,48 +62,86 @@ const loadHistory = async () => {
   `).join("");
 };
 
-const loadStages = async () => {
-  const entries = await Promise.all(pipelines.map(async (pipeline) => {
-    const response = await fetch(`/api/data/stages?pipeline=${encodeURIComponent(pipeline.slug)}`);
-    const stages = await response.json();
-    return [pipeline.slug, stages];
-  }));
+const loadInventory = async () => {
+  const response = await fetch("/api/data/pipeline-inventory");
+  if (!response.ok) throw new Error(`No fue posible consultar el inventario: HTTP ${response.status}`);
+  const inventory = await response.json();
 
-  stagesByPipeline = new Map(entries);
+  pipelines = inventory.pipelines ?? [];
+  stagesByPipeline = new Map(pipelines.map((pipeline) => [pipeline.slug, pipeline.stages ?? []]));
+  document.getElementById("databaseDealsTotal").textContent = formatNumber.format(inventory.totalDeals ?? 0);
 };
 
 const renderStageSelector = () => {
   const pipelineSelect = document.getElementById("pipelineSelect");
   const stageSelect = document.getElementById("stageSelect");
-  const selectedPipeline = pipelineSelect.value || pipelines[0].slug;
-  const stages = stagesByPipeline.get(selectedPipeline) ?? [];
+  const previousPipeline = pipelineSelect.value;
+  const selectedPipeline = pipelines.some((pipeline) => pipeline.slug === previousPipeline)
+    ? previousPipeline
+    : pipelines[0]?.slug;
 
-  pipelineSelect.innerHTML = pipelines.map((pipeline) => `
-    <option value="${pipeline.slug}"${pipeline.slug === selectedPipeline ? " selected" : ""}>${pipeline.name}</option>
-  `).join("");
+  pipelineSelect.innerHTML = pipelines.length
+    ? pipelines.map((pipeline) => `
+        <option value="${escapeHtml(pipeline.slug)}"${pipeline.slug === selectedPipeline ? " selected" : ""}>${escapeHtml(pipeline.name)}</option>
+      `).join("")
+    : `<option value="">Sin pipelines activas</option>`;
 
+  const stages = (stagesByPipeline.get(selectedPipeline) ?? []).filter((stage) => stage.stageId);
   stageSelect.innerHTML = stages.length
-    ? stages.map((stage) => `<option value="${stage.stageId}">${stage.name} (${stage.stageId})</option>`).join("")
+    ? stages.map((stage) => `<option value="${escapeHtml(stage.stageId)}">${escapeHtml(stage.stageName)} (${escapeHtml(stage.stageId)})</option>`).join("")
     : `<option value="">Sin etapas guardadas</option>`;
 
   document.getElementById("stageButton").disabled = stages.length === 0;
 };
 
+const renderStageInventory = (pipeline) => {
+  const stages = pipeline.stages ?? [];
+  if (!stages.length) {
+    return `<p class="panel-subtitle">Esta pipeline no tiene etapas ni negociaciones guardadas.</p>`;
+  }
+
+  return `
+    <table class="stage-inventory-table">
+      <thead>
+        <tr><th>Etapa</th><th>ID Bitrix</th><th>Negociaciones en BD</th></tr>
+      </thead>
+      <tbody>
+        ${stages.map((stage) => `
+          <tr>
+            <td class="${stage.isUnmapped ? "stage-unmapped" : ""}">${escapeHtml(stage.stageName)}</td>
+            <td>${escapeHtml(stage.stageId ?? "-")}</td>
+            <td>${formatNumber.format(stage.dealsCount ?? 0)}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>`;
+};
+
 const renderPipelineRows = () => {
-  document.getElementById("pipelineRows").innerHTML = pipelines.map((pipeline) => {
-    const stages = stagesByPipeline.get(pipeline.slug) ?? [];
-    return `
-      <tr>
-        <td><strong>${pipeline.name}</strong></td>
-        <td>${pipeline.categoryId}</td>
-        <td>${formatNumber.format(stages.length)}</td>
-        <td>
-          <button data-pipeline-incremental="${pipeline.slug}" type="button">Solo cambios</button>
-          <button data-pipeline-sync="${pipeline.slug}" type="button">Completa</button>
-        </td>
-      </tr>
-    `;
-  }).join("");
+  document.getElementById("pipelineRows").innerHTML = pipelines.length
+    ? pipelines.map((pipeline) => {
+        const stages = pipeline.stages ?? [];
+        return `
+          <tr>
+            <td><strong>${escapeHtml(pipeline.name)}</strong><br><small>${escapeHtml(pipeline.slug)}</small></td>
+            <td>${pipeline.categoryId}</td>
+            <td><strong>${formatNumber.format(pipeline.dealsCount ?? 0)}</strong></td>
+            <td>${formatNumber.format(stages.length)}</td>
+            <td>
+              <button data-pipeline-incremental="${escapeHtml(pipeline.slug)}" type="button">Solo cambios</button>
+              <button data-pipeline-sync="${escapeHtml(pipeline.slug)}" type="button">Completa</button>
+            </td>
+          </tr>
+          <tr class="pipeline-stage-detail">
+            <td colspan="5">
+              <details>
+                <summary>Ver negociaciones por etapa (${formatNumber.format(stages.length)} etapas)</summary>
+                ${renderStageInventory(pipeline)}
+              </details>
+            </td>
+          </tr>`;
+      }).join("")
+    : `<tr><td colspan="5">No hay pipelines activas en PostgreSQL.</td></tr>`;
 
   document.querySelectorAll("[data-pipeline-sync]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -114,18 +156,33 @@ const renderPipelineRows = () => {
   });
 };
 
-const reload = async () => {
-  await loadStages();
+const reloadInventory = async () => {
+  await loadInventory();
   renderStageSelector();
   renderPipelineRows();
-  await loadState();
-  await loadHistory();
+};
+
+const reloadActivity = async () => {
+  await Promise.all([loadState(), loadHistory()]);
+};
+
+const reload = async () => {
+  try {
+    await Promise.all([reloadInventory(), reloadActivity()]);
+  } catch (error) {
+    setStatus("Error", error.message);
+  }
 };
 
 const runSync = async (url) => {
   setSyncButtonsDisabled(true);
-  setStatus("Iniciando", "Arrancando sincronizacion en segundo plano");
-  await fetch(url, { method: "POST" });
+  setStatus("Iniciando", "Arrancando sincronizacion");
+  const response = await fetch(url, { method: "POST" });
+  if (!response.ok) {
+    setStatus("Error", `La sincronizacion no pudo iniciar: HTTP ${response.status}`);
+    setSyncButtonsDisabled(false);
+    return;
+  }
   await reload();
 };
 
@@ -147,4 +204,5 @@ document.getElementById("pipelineSelect").addEventListener("change", renderStage
 document.getElementById("refreshButton").addEventListener("click", reload);
 
 reload();
-setInterval(reload, 5000);
+setInterval(() => reloadActivity().catch((error) => setStatus("Error", error.message)), 5000);
+setInterval(() => reloadInventory().catch((error) => setStatus("Error", error.message)), 60000);

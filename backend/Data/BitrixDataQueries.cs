@@ -709,6 +709,118 @@ public static class BitrixDataQueries
         return Results.Ok(rows);
     }
 
+    public static async Task<IResult> GetPipelineInventoryAsync(
+        NpgsqlDataSource dataSource,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            WITH pipeline_counts AS (
+                SELECT pipeline_id, count(*)::integer AS deals_count
+                FROM bitrix.deals
+                GROUP BY pipeline_id
+            ), inventory_stages AS (
+                SELECT
+                    stage.pipeline_id,
+                    stage.bitrix_stage_id AS stage_id,
+                    stage.name AS stage_name,
+                    stage.sort_order,
+                    stage.status_type,
+                    false AS is_unmapped
+                FROM bitrix.pipeline_stages stage
+
+                UNION ALL
+
+                SELECT
+                    deal.pipeline_id,
+                    deal.stage_id,
+                    CASE
+                        WHEN deal.stage_id IS NULL THEN 'Sin etapa'
+                        ELSE 'No catalogada: ' || deal.stage_id
+                    END AS stage_name,
+                    NULL::integer AS sort_order,
+                    NULL::text AS status_type,
+                    true AS is_unmapped
+                FROM bitrix.deals deal
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM bitrix.pipeline_stages stage
+                    WHERE stage.pipeline_id = deal.pipeline_id
+                      AND stage.bitrix_stage_id IS NOT DISTINCT FROM deal.stage_id
+                )
+                GROUP BY deal.pipeline_id, deal.stage_id
+            ), stage_counts AS (
+                SELECT pipeline_id, stage_id, count(*)::integer AS deals_count
+                FROM bitrix.deals
+                GROUP BY pipeline_id, stage_id
+            )
+            SELECT
+                pipeline.id,
+                pipeline.slug,
+                pipeline.name,
+                pipeline.category_id,
+                pipeline.domain,
+                COALESCE(pipeline_count.deals_count, 0) AS pipeline_deals_count,
+                inventory_stage.pipeline_id AS inventory_pipeline_id,
+                inventory_stage.stage_id,
+                inventory_stage.stage_name,
+                inventory_stage.sort_order,
+                inventory_stage.status_type,
+                COALESCE(stage_count.deals_count, 0) AS stage_deals_count,
+                COALESCE(inventory_stage.is_unmapped, false) AS is_unmapped
+            FROM bitrix.pipelines pipeline
+            LEFT JOIN pipeline_counts pipeline_count ON pipeline_count.pipeline_id = pipeline.id
+            LEFT JOIN inventory_stages inventory_stage ON inventory_stage.pipeline_id = pipeline.id
+            LEFT JOIN stage_counts stage_count
+                ON stage_count.pipeline_id = pipeline.id
+                AND stage_count.stage_id IS NOT DISTINCT FROM inventory_stage.stage_id
+            WHERE pipeline.is_active = true
+            ORDER BY
+                pipeline.sync_order,
+                pipeline.category_id,
+                inventory_stage.is_unmapped,
+                inventory_stage.sort_order NULLS LAST,
+                inventory_stage.stage_name;
+            """;
+
+        var pipelines = new Dictionary<Guid, PipelineInventoryItem>();
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var pipelineId = reader.GetGuid(0);
+            if (!pipelines.TryGetValue(pipelineId, out var pipeline))
+            {
+                pipeline = new PipelineInventoryItem(
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetInt32(3),
+                    reader.GetString(4),
+                    reader.GetInt32(5));
+                pipelines.Add(pipelineId, pipeline);
+            }
+
+            if (!reader.IsDBNull(6))
+            {
+                pipeline.Stages.Add(new StageInventoryItem(
+                    reader.IsDBNull(7) ? null : reader.GetString(7),
+                    reader.GetString(8),
+                    reader.IsDBNull(9) ? null : reader.GetInt32(9),
+                    reader.IsDBNull(10) ? null : reader.GetString(10),
+                    reader.GetInt32(11),
+                    reader.GetBoolean(12)));
+            }
+        }
+
+        var items = pipelines.Values.ToList();
+        return Results.Ok(new
+        {
+            totalDeals = items.Sum(item => item.DealsCount),
+            pipelines = items
+        });
+    }
+
     public static async Task<IResult> GetResponsibleDistributionAsync(
         string pipeline,
         NpgsqlDataSource dataSource,
@@ -809,5 +921,23 @@ public static class BitrixDataQueries
         }
 
         return Results.Ok(rows);
+    }
+
+    private sealed record StageInventoryItem(
+        string? StageId,
+        string StageName,
+        int? SortOrder,
+        string? StatusType,
+        int DealsCount,
+        bool IsUnmapped);
+
+    private sealed record PipelineInventoryItem(
+        string Slug,
+        string Name,
+        int CategoryId,
+        string Domain,
+        int DealsCount)
+    {
+        public List<StageInventoryItem> Stages { get; } = [];
     }
 }

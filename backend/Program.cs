@@ -88,6 +88,13 @@ app.MapGet("/api/data/stage-distribution", async (
     return await BitrixDataQueries.GetStageDistributionAsync(pipeline ?? "all", dataSource, cancellationToken);
 });
 
+app.MapGet("/api/data/pipeline-inventory", async (
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return await BitrixDataQueries.GetPipelineInventoryAsync(dataSource, cancellationToken);
+});
+
 app.MapGet("/api/data/responsible-distribution", async (
     string? pipeline,
     NpgsqlDataSource dataSource,
