@@ -8,8 +8,9 @@ public interface IBitrixSyncRepository
     Task<BitrixConnection> GetActiveConnectionAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<BitrixPipeline>> ListActivePipelinesAsync(CancellationToken cancellationToken);
     Task<Guid> StartRunAsync(Guid connectionId, string entityType, SyncMode mode, CancellationToken cancellationToken);
-    Task UpdateRunProgressAsync(Guid syncRunId, int recordsRead, int recordsWritten, CancellationToken cancellationToken);
-    Task FinishRunAsync(Guid syncRunId, string status, int recordsRead, int recordsWritten, string? errorMessage, CancellationToken cancellationToken);
+    Task<DateTimeOffset?> GetLastSuccessfulCursorAsync(Guid connectionId, string entityType, CancellationToken cancellationToken);
+    Task UpdateRunProgressAsync(Guid syncRunId, int recordsRead, int recordsWritten, CancellationToken cancellationToken, DateTimeOffset? cursor = null);
+    Task FinishRunAsync(Guid syncRunId, string status, int recordsRead, int recordsWritten, string? errorMessage, CancellationToken cancellationToken, DateTimeOffset? cursor = null);
     Task<bool> TryAcquireGlobalLockAsync(string ownerId, TimeSpan ttl, CancellationToken cancellationToken);
     Task ReleaseGlobalLockAsync(string ownerId, CancellationToken cancellationToken);
 }
@@ -122,12 +123,45 @@ public sealed class BitrixSyncRepository(NpgsqlDataSource dataSource) : IBitrixS
         return syncRunId;
     }
 
-    public async Task UpdateRunProgressAsync(Guid syncRunId, int recordsRead, int recordsWritten, CancellationToken cancellationToken)
+    public async Task<DateTimeOffset?> GetLastSuccessfulCursorAsync(
+        Guid connectionId,
+        string entityType,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT cursor_value
+            FROM bitrix.sync_runs
+            WHERE connection_id = @connectionId
+              AND entity_type = @entityType
+              AND status = 'succeeded'
+              AND cursor_value IS NOT NULL
+            ORDER BY finished_at DESC NULLS LAST, created_at DESC
+            LIMIT 1;
+            """;
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("connectionId", connectionId);
+        command.Parameters.AddWithValue("entityType", entityType);
+
+        var value = (string?)await command.ExecuteScalarAsync(cancellationToken);
+        return DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, out var cursor)
+            ? cursor.ToUniversalTime()
+            : null;
+    }
+
+    public async Task UpdateRunProgressAsync(
+        Guid syncRunId,
+        int recordsRead,
+        int recordsWritten,
+        CancellationToken cancellationToken,
+        DateTimeOffset? cursor = null)
     {
         const string sql = """
             UPDATE bitrix.sync_runs
             SET records_read = @recordsRead,
-                records_written = @recordsWritten
+                records_written = @recordsWritten,
+                cursor_value = COALESCE(@cursorValue, cursor_value)
             WHERE id = @syncRunId
               AND status = 'running';
             """;
@@ -137,11 +171,19 @@ public sealed class BitrixSyncRepository(NpgsqlDataSource dataSource) : IBitrixS
         command.Parameters.AddWithValue("syncRunId", syncRunId);
         command.Parameters.AddWithValue("recordsRead", recordsRead);
         command.Parameters.AddWithValue("recordsWritten", recordsWritten);
+        command.Parameters.AddWithValue("cursorValue", (object?)cursor?.ToString("O") ?? DBNull.Value);
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    public async Task FinishRunAsync(Guid syncRunId, string status, int recordsRead, int recordsWritten, string? errorMessage, CancellationToken cancellationToken)
+    public async Task FinishRunAsync(
+        Guid syncRunId,
+        string status,
+        int recordsRead,
+        int recordsWritten,
+        string? errorMessage,
+        CancellationToken cancellationToken,
+        DateTimeOffset? cursor = null)
     {
         const string sql = """
             UPDATE bitrix.sync_runs
@@ -149,7 +191,8 @@ public sealed class BitrixSyncRepository(NpgsqlDataSource dataSource) : IBitrixS
                 finished_at = now(),
                 records_read = @recordsRead,
                 records_written = @recordsWritten,
-                error_message = @errorMessage
+                error_message = @errorMessage,
+                cursor_value = COALESCE(@cursorValue, cursor_value)
             WHERE id = @syncRunId;
             """;
 
@@ -160,6 +203,7 @@ public sealed class BitrixSyncRepository(NpgsqlDataSource dataSource) : IBitrixS
         command.Parameters.AddWithValue("recordsRead", recordsRead);
         command.Parameters.AddWithValue("recordsWritten", recordsWritten);
         command.Parameters.AddWithValue("errorMessage", (object?)errorMessage ?? DBNull.Value);
+        command.Parameters.AddWithValue("cursorValue", (object?)cursor?.ToString("O") ?? DBNull.Value);
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

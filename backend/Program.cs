@@ -449,6 +449,19 @@ app.MapPost("/api/bitrix/sync/deals/{pipelineSlug}", async (
     return Results.Ok(result);
 });
 
+app.MapPost("/api/bitrix/sync/deals/{pipelineSlug}/incremental", async (
+    string pipelineSlug,
+    IBitrixDealSyncService dealSyncService,
+    CancellationToken cancellationToken) =>
+{
+    var result = await dealSyncService.SyncPipelineDealsAsync(
+        pipelineSlug,
+        null,
+        cancellationToken,
+        SyncMode.Incremental);
+    return Results.Ok(result);
+});
+
 app.MapPost("/api/bitrix/sync/massive", (
     IServiceScopeFactory scopeFactory) =>
 {

@@ -48,11 +48,12 @@
     <section class="table-panel">
       <div class="panel-title">
         <div>
-          <h2>Sincronizacion masiva</h2>
-          <p class="panel-subtitle">Para 77.000 negociaciones usa sincronizacion masiva. Se ejecuta en segundo plano.</p>
+          <h2>Sincronizacion de negocios</h2>
+          <p class="panel-subtitle">Usa la incremental diariamente. La masiva queda para la carga inicial o una reconciliacion ocasional.</p>
         </div>
       </div>
       <div class="sync-actions">
+        <button id="incrementalButton" class="sync-button" type="button">Sincronizar cambios</button>
         <button id="massiveButton" class="sync-button" type="button">Sincronizar masivo</button>
       </div>
     </section>
@@ -91,7 +92,7 @@
               <th>Pipeline</th>
               <th>Categoria</th>
               <th>Etapas</th>
-              <th>Accion</th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody id="pipelineRows"></tbody>
