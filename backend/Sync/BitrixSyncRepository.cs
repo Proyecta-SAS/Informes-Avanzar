@@ -77,7 +77,7 @@ public sealed class BitrixSyncRepository(NpgsqlDataSource dataSource) : IBitrixS
                 finished_at = now(),
                 error_message = 'Sync interrumpida o sin cierre automatico.'
             WHERE status = 'running'
-              AND created_at < now() - interval '6 hours';
+              AND created_at < now() - interval '2 hours';
             """;
 
         const string activeRunSql = """

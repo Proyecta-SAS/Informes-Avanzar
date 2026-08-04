@@ -11,7 +11,10 @@ public sealed class BitrixSynchronizer(
     public async Task<IReadOnlyList<SyncResult>> RunGlobalAsync(SyncMode mode, CancellationToken cancellationToken)
     {
         var ownerId = $"{Environment.MachineName}:{Guid.NewGuid():N}";
-        var locked = await repository.TryAcquireGlobalLockAsync(ownerId, TimeSpan.FromHours(2), cancellationToken);
+        var lockTtl = mode == SyncMode.Full
+            ? TimeSpan.FromHours(20)
+            : TimeSpan.FromHours(2);
+        var locked = await repository.TryAcquireGlobalLockAsync(ownerId, lockTtl, cancellationToken);
 
         if (!locked)
         {
