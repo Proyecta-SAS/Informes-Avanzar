@@ -1,5 +1,6 @@
 let adminKey = sessionStorage.getItem("adminAccessKey") ?? "";
 let accessData = null;
+let selectedCommercialRole = "viewer";
 
 const api = async (url, options = {}) => {
   const response = await fetch(url, {
@@ -46,11 +47,28 @@ const renderReportMatrix = () => {
     </div>`;
 };
 
+const renderCommercialAccess = () => {
+  const commercialReports = accessData.reports.filter((report) => ["informe_general_comercial", "fuerza_comercial_diego", "rch_comercial"].includes(report.code));
+  document.getElementById("commercialAccessMatrix").innerHTML = `
+    <div class="commercial-access-grid" style="--commercial-report-count:${commercialReports.length}">
+      <div class="commercial-grid-head user-column">Comercial</div>
+      <div class="commercial-grid-head role-column">Rol asignado</div>
+      ${commercialReports.map((report) => `<div class="commercial-grid-head"><strong>${report.name}</strong><small>Acceso individual</small></div>`).join("")}
+      ${accessData.users.map((user) => `
+        <div class="commercial-user-cell"><span>${user.fullName.charAt(0).toUpperCase()}</span><div><strong>${user.fullName}</strong><small>${user.email}</small></div></div>
+        <div class="commercial-role-cell"><select class="commercial-role-select" data-user-id="${user.id}">${roleOptions(user.roleIds[0] ?? "")}</select></div>
+        ${commercialReports.map((report) => `<div class="commercial-permission-cell">${toggle(Boolean(report.userAccess?.[user.id]), `data-commercial-report-id="${report.id}" data-commercial-user-id="${user.id}"`)}</div>`).join("")}
+      `).join("")}
+    </div>`;
+};
+
 const renderWorkspace = () => {
   document.getElementById("newUserRole").innerHTML = roleOptions();
   renderUsers();
   renderPermissionMatrix();
   renderReportMatrix();
+  renderCommercialAccess();
+  document.getElementById("roleAssignmentUser").innerHTML = `<option value="">Seleccionar usuario…</option>${accessData.users.map((user) => `<option value="${user.id}">${user.fullName} · ${user.email}</option>`).join("")}`;
 };
 
 const loadAccess = async () => {
@@ -116,6 +134,38 @@ document.getElementById("permissionMatrix").addEventListener("change", async (ev
 document.getElementById("reportAccessMatrix").addEventListener("change", async (event) => {
   if (!event.target.matches("[data-report-id]")) return;
   await api(`/api/admin/reports/${event.target.dataset.reportId}/roles/${event.target.dataset.reportRoleId}`, { method: "PUT", body: JSON.stringify({ enabled: event.target.checked, accessLevel: "viewer" }) });
+});
+document.getElementById("commercialAccessMatrix").addEventListener("change", async (event) => {
+  if (event.target.matches(".commercial-role-select")) {
+    await api(`/api/admin/users/${event.target.dataset.userId}/role`, { method: "PUT", body: JSON.stringify({ roleId: event.target.value || null }) });
+    await loadAccess();
+    return;
+  }
+  if (event.target.matches("[data-commercial-report-id]")) {
+    await api(`/api/admin/reports/${event.target.dataset.commercialReportId}/users/${event.target.dataset.commercialUserId}`, { method: "PUT", body: JSON.stringify({ enabled: event.target.checked, accessLevel: "viewer" }) });
+  }
+});
+document.getElementById("userRoleCards").addEventListener("click", (event) => {
+  const card = event.target.closest("[data-role-label]");
+  if (!card) return;
+  selectedCommercialRole = card.dataset.roleLabel;
+  document.querySelectorAll("#userRoleCards [data-role-label]").forEach((item) => item.classList.toggle("selected", item === card));
+  document.getElementById("selectedRoleName").textContent = card.querySelector("h3").textContent;
+});
+document.getElementById("roleAssignmentForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const userId = document.getElementById("roleAssignmentUser").value;
+  const state = document.getElementById("roleAssignmentState");
+  if (!userId) { state.textContent = "Selecciona un usuario."; return; }
+  const systemRoleCode = ["coordinator", "leader"].includes(selectedCommercialRole) ? "report_manager" : "report_viewer";
+  const systemRole = accessData.roles.find((role) => role.code === systemRoleCode);
+  const enabledReports = new Set([...event.target.querySelectorAll('input[type="checkbox"]:checked')].map((input) => input.value));
+  const commercialReports = accessData.reports.filter((report) => ["informe_general_comercial", "fuerza_comercial_diego", "rch_comercial"].includes(report.code));
+  state.textContent = "Aplicando configuración…";
+  await api(`/api/admin/users/${userId}/role`, { method: "PUT", body: JSON.stringify({ roleId: systemRole?.id ?? null }) });
+  await Promise.all(commercialReports.map((report) => api(`/api/admin/reports/${report.id}/users/${userId}`, { method: "PUT", body: JSON.stringify({ enabled: enabledReports.has(report.code), accessLevel: "viewer" }) })));
+  state.textContent = "Rol y permisos guardados correctamente.";
+  await loadAccess();
 });
 
 loadAccess().catch((exception) => {

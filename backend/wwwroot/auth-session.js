@@ -12,11 +12,12 @@ if (sessionMenu) {
     admin: '<svg viewBox="0 0 24 24"><path d="M12 3 4 7v5c0 5 3.4 8.7 8 10 4.6-1.3 8-5 8-10V7Z"/><path d="M9 12h6M12 9v6"/></svg>',
     sync: '<svg viewBox="0 0 24 24"><path d="M20 7h-5V2"/><path d="M20 7a8 8 0 0 0-14-2M4 17h5v5"/><path d="M4 17a8 8 0 0 0 14 2"/></svg>',
     users: '<svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+    structure: '<svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="5" rx="1"/><rect x="3" y="16" width="6" height="5" rx="1"/><rect x="15" y="16" width="6" height="5" rx="1"/><path d="M12 8v4M6 16v-4h12v4"/></svg>',
     report: '<svg viewBox="0 0 24 24"><path d="M5 12h14M5 6h14M5 18h8"/></svg>',
     logout: '<svg viewBox="0 0 24 24"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M14 3h5a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-5"/></svg>'
   };
   const icon = (name) => `<span class="nav-svg">${icons[name]}</span>`;
-  const navLink = (href, iconName, label, report = "") => `<a href="${href}" class="sidebar-sub-link ${isCurrent(href.split("?")[0], report) ? "active" : ""}">${icon(iconName)}<span>${label}</span></a>`;
+  const navLink = (href, iconName, label, report = "") => `<a href="${href}" target="_self" ${report ? `data-report-code="${report}"` : ""} class="sidebar-sub-link ${isCurrent(href.split("?")[0], report) ? "active" : ""}">${icon(iconName)}<span>${label}</span></a>`;
   sessionMenu.innerHTML = `
     <p>GENERAL</p>
     ${navLink("/", "home", "Inicio")}
@@ -28,6 +29,7 @@ if (sessionMenu) {
         ${navLink("/reporte.html?id=informe_general_comercial", "report", "Informe general", "informe_general_comercial")}
         ${navLink("/reporte.html?id=fuerza_comercial_diego", "report", "Fuerza Comercial", "fuerza_comercial_diego")}
         ${navLink("/reporte.html?id=rch_comercial", "report", "RCH Comercial", "rch_comercial")}
+        ${navLink("/reporte.html?id=pnnc_comercial", "report", "PNNC Comercial", "pnnc_comercial")}
       </div>
     </div>
     <div class="sidebar-group" data-nav-group="operativa">
@@ -37,7 +39,6 @@ if (sessionMenu) {
     <div class="sidebar-group" data-nav-group="pnnc">
       <button class="sidebar-group-toggle" type="button" aria-expanded="false"><span class="sidebar-group-icon pnnc">${icons.pnnc}</span><span>PNNC</span><b>⌄</b></button>
       <div class="sidebar-group-items">
-        ${navLink("/reporte.html?id=pnnc_comercial", "report", "PNNC Comercial", "pnnc_comercial")}
         ${navLink("/reporte.html?id=pnnc_operativa", "report", "PNNC Operativa", "pnnc_operativa")}
       </div>
     </div>
@@ -45,8 +46,9 @@ if (sessionMenu) {
     <div class="sidebar-group" data-nav-group="administracion">
       <button class="sidebar-group-toggle" type="button" aria-expanded="false"><span class="sidebar-group-icon admin">${icons.admin}</span><span>Gestión</span><b>⌄</b></button>
       <div class="sidebar-group-items">
-        ${navLink("/sincronizacion.html", "sync", "Sincronización Bitrix")}
-        ${navLink("/usuarios.html", "users", "Usuarios y roles")}
+        <span data-required-permission="bitrix.sync.view">${navLink("/sincronizacion.html", "sync", "Sincronización Bitrix")}</span>
+        <span data-required-permission="users.manage roles.manage reports.manage">${navLink("/usuarios.html", "users", "Usuarios y roles")}</span>
+        <span data-required-permission="users.manage roles.manage">${navLink("/estructura-comercial.html", "structure", "Estructura Comercial")}</span>
       </div>
     </div>`;
 
@@ -58,6 +60,12 @@ if (sessionMenu) {
     group.querySelector("button").setAttribute("aria-expanded", String(open));
   });
   sessionMenu.addEventListener("click", (event) => {
+    const reportLink = event.target.closest("a[data-report-code]");
+    if (reportLink) {
+      event.preventDefault();
+      window.location.assign(reportLink.href);
+      return;
+    }
     const toggle = event.target.closest(".sidebar-group-toggle");
     if (!toggle) return;
     const group = toggle.closest(".sidebar-group");
@@ -77,4 +85,19 @@ if (sessionMenu) {
     location.href = "/login.html";
   });
   sessionMenu.append(logoutButton);
+
+  fetch("/api/auth/me").then((response) => response.ok ? response.json() : Promise.reject()).then((session) => {
+    const allowed = new Set(session.accessibleReportCodes ?? []);
+    const permissions = new Set(session.permissions ?? []);
+    sessionMenu.querySelectorAll("[data-report-code]").forEach((link) => {
+      if (!allowed.has(link.dataset.reportCode)) link.remove();
+    });
+    sessionMenu.querySelectorAll("[data-required-permission]").forEach((item) => {
+      const required = item.dataset.requiredPermission.split(" ");
+      if (session.roleCode !== "admin" && !required.some((code) => permissions.has(code))) item.remove();
+    });
+    sessionMenu.querySelectorAll(".sidebar-group").forEach((group) => {
+      if (!group.querySelector(".sidebar-group-items a")) group.remove();
+    });
+  }).catch(() => {});
 }

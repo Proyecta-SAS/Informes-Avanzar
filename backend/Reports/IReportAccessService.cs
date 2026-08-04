@@ -6,4 +6,6 @@ public interface IReportAccessService
         Guid userId,
         Guid reportDefinitionId,
         CancellationToken cancellationToken);
+    Task<bool> UserCanAccessReportAsync(Guid userId, string reportCode, CancellationToken cancellationToken);
+    Task<string[]> GetAccessibleReportCodesAsync(Guid userId, CancellationToken cancellationToken);
 }

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Avanzar Informes</title>
-  <link rel="stylesheet" href="/styles.css?v=20260804-sidebar-icons">
+  <link rel="stylesheet" href="/styles.css?v=20260804-access-modal">
   <link rel="stylesheet" href="/home-light.css?v=20260804-original-palette">
 </head>
 <body class="home-dashboard">
@@ -32,7 +32,7 @@
       <div><span class="home-eyebrow">Centro de informes</span><h1>Panel principal</h1></div>
       <div class="home-top-actions">
         <label class="home-search"><span>⌕</span><input id="reportSearch" type="search" placeholder="Buscar informe o área..."></label>
-        <a class="home-admin-link" href="/usuarios.html">Administrar accesos</a>
+        <a class="home-admin-link" href="/usuarios.html" data-required-permission="users.manage roles.manage reports.manage">Administrar accesos</a>
         <span class="home-avatar">A</span>
       </div>
     </header>
@@ -43,7 +43,7 @@
           <span class="home-eyebrow">Bienvenido al centro de control</span>
           <h2>Información clara para avanzar.</h2>
           <p>Consulta el desempeño de cada área, abre los informes operativos y mantén el seguimiento de Bitrix desde un solo lugar.</p>
-          <div class="home-welcome-actions"><a href="/informes.html">Ver todos los informes</a><a href="/sincronizacion.html">Estado de sincronización</a></div>
+          <div class="home-welcome-actions"><a href="/informes.html">Ver mis informes</a><a href="/sincronizacion.html" data-required-permission="bitrix.sync.view">Estado de sincronización</a></div>
         </div>
         <div class="home-pulse" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
       </section>
@@ -52,12 +52,12 @@
       <section id="homeAreas" class="home-area-grid" aria-label="Áreas de informes"></section>
 
       <section class="home-bottom-grid">
-        <article class="home-system-card"><div><span class="home-card-icon">↻</span><div><h3>Sincronización Bitrix</h3><p>Actualiza pipelines, etapas, usuarios y campos personalizados.</p></div></div><a href="/sincronizacion.html">Abrir sincronización →</a></article>
-        <article class="home-system-card"><div><span class="home-card-icon">♙</span><div><h3>Usuarios y permisos</h3><p>Administra roles y acceso individual a cada informe.</p></div></div><a href="/usuarios.html">Gestionar accesos →</a></article>
+        <article class="home-system-card" data-required-permission="bitrix.sync.view"><div><span class="home-card-icon">↻</span><div><h3>Sincronización Bitrix</h3><p>Actualiza pipelines, etapas, usuarios y campos personalizados.</p></div></div><a href="/sincronizacion.html">Abrir sincronización →</a></article>
+        <article class="home-system-card" data-required-permission="users.manage roles.manage reports.manage"><div><span class="home-card-icon">♙</span><div><h3>Usuarios y permisos</h3><p>Administra roles y acceso individual a cada informe.</p></div></div><a href="/usuarios.html">Gestionar accesos →</a></article>
       </section>
     </div>
   </main>
-  <script src="/app.js?v=20260804-area-operativa"></script>
-  <script src="/auth-session.js?v=20260804-sidebar-icons"></script>
+  <script src="/app.js?v=20260804-pnnc-commercial-move"></script>
+  <script src="/auth-session.js?v=20260804-same-tab-general"></script>
 </body>
 </html>

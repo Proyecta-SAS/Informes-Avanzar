@@ -83,9 +83,10 @@ public static class AdminAccessQueries
         var reports = new List<object>();
         const string reportsSql = """
             SELECT rd.id, rd.code, rd.name,
-                   COALESCE(jsonb_object_agg(ra.role_id::text, ra.access_level) FILTER (WHERE ra.role_id IS NOT NULL), '{}'::jsonb)::text
+                   COALESCE(jsonb_object_agg(ra.role_id::text, ra.access_level) FILTER (WHERE ra.role_id IS NOT NULL), '{}'::jsonb)::text,
+                   COALESCE(jsonb_object_agg(ra.user_id::text, ra.access_level) FILTER (WHERE ra.user_id IS NOT NULL), '{}'::jsonb)::text
             FROM reporting.report_definitions rd
-            LEFT JOIN reporting.report_access ra ON ra.report_definition_id = rd.id AND ra.role_id IS NOT NULL
+            LEFT JOIN reporting.report_access ra ON ra.report_definition_id = rd.id
             WHERE rd.deleted_at IS NULL
             GROUP BY rd.id
             ORDER BY rd.name;
@@ -94,7 +95,11 @@ public static class AdminAccessQueries
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
             while (await reader.ReadAsync(cancellationToken))
-                reports.Add(new { id = reader.GetGuid(0), code = reader.GetString(1), name = reader.GetString(2), roleAccess = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(reader.GetString(3)) });
+                reports.Add(new {
+                    id = reader.GetGuid(0), code = reader.GetString(1), name = reader.GetString(2),
+                    roleAccess = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(reader.GetString(3)),
+                    userAccess = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(reader.GetString(4))
+                });
         }
 
         return new { users, roles, permissions, reports };
@@ -211,6 +216,19 @@ public static class AdminAccessQueries
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue("reportId", reportId);
         command.Parameters.AddWithValue("roleId", roleId);
+        command.Parameters.AddWithValue("accessLevel", accessLevel is "editor" or "owner" ? accessLevel : "viewer");
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public static async Task SetReportUserAccessAsync(Guid reportId, Guid userId, bool enabled, string accessLevel, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+    {
+        var sql = enabled
+            ? """INSERT INTO reporting.report_access (report_definition_id, user_id, access_level) VALUES (@reportId, @userId, @accessLevel) ON CONFLICT (report_definition_id, user_id) WHERE user_id IS NOT NULL DO UPDATE SET access_level = EXCLUDED.access_level;"""
+            : "DELETE FROM reporting.report_access WHERE report_definition_id = @reportId AND user_id = @userId;";
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("reportId", reportId);
+        command.Parameters.AddWithValue("userId", userId);
         command.Parameters.AddWithValue("accessLevel", accessLevel is "editor" or "owner" ? accessLevel : "viewer");
         await command.ExecuteNonQueryAsync(cancellationToken);
     }

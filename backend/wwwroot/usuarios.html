@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Usuarios y roles</title>
-  <link rel="stylesheet" href="/styles.css?v=20260804-sidebar-icons">
+  <link rel="stylesheet" href="/styles.css?v=20260804-access-modal">
 </head>
 <body>
   <aside class="sidebar">
@@ -51,6 +51,31 @@
         <div class="access-table-wrap"><table class="access-users-table"><thead><tr><th>Usuario</th><th>Correo</th><th>Estado</th><th>Rol asignado</th><th>Acciones</th></tr></thead><tbody id="accessUserRows"></tbody></table></div>
       </section>
 
+      <section class="access-section commercial-access-section">
+        <div class="access-section-title">
+          <div><span class="access-section-icon commercial-access-icon">↗</span><div><h2>Roles y permisos comerciales</h2><p>Administra el perfil y el acceso individual de cada comercial.</p></div></div>
+          <span class="connection-pill">Acceso comercial</span>
+        </div>
+        <div id="commercialAccessMatrix" class="commercial-access-matrix"></div>
+      </section>
+
+      <section class="access-section user-role-wizard">
+        <div class="organization-help-heading"><span class="section-kicker">Guía de acceso</span><h2>Roles y asignación de permisos</h2><p>Selecciona un usuario, define su función y configura exactamente qué paneles comerciales puede consultar.</p></div>
+        <div id="userRoleCards" class="organization-role-guide functional-role-guide">
+          <button type="button" data-role-label="coordinator"><span>01</span><div><h3>Coordinador</h3><p>Supervisa varios equipos y recibe acceso a informes consolidados.</p></div></button>
+          <button type="button" data-role-label="leader"><span>02</span><div><h3>Líder</h3><p>Gestiona un equipo específico y sus indicadores comerciales.</p></div></button>
+          <button type="button" data-role-label="advisor"><span>03</span><div><h3>Asesor</h3><p>Consulta indicadores relacionados con su gestión individual.</p></div></button>
+          <button type="button" data-role-label="viewer" class="selected"><span>04</span><div><h3>Consulta</h3><p>Perfil de solo lectura para visualizar información autorizada.</p></div></button>
+        </div>
+        <form id="roleAssignmentForm" class="role-assignment-form">
+          <label>1. Selecciona el usuario<select id="roleAssignmentUser" required></select></label>
+          <fieldset><legend>2. Marca los paneles visibles</legend><label><input type="checkbox" value="informe_general_comercial"> Informe General Comercial</label><label><input type="checkbox" value="fuerza_comercial_diego"> Fuerza Comercial</label><label><input type="checkbox" value="rch_comercial"> RCH Comercial</label></fieldset>
+          <div class="role-assignment-summary"><span>Rol seleccionado</span><strong id="selectedRoleName">Consulta</strong><small>Los permisos individuales complementan los accesos generales del rol.</small></div>
+          <button class="sync-button" type="submit">Aplicar rol y permisos</button>
+          <p id="roleAssignmentState" class="role-assignment-state"></p>
+        </form>
+      </section>
+
       <section id="editUserPanel" class="access-create-panel" hidden>
         <div><h3>Gestionar usuario</h3><p>Actualiza sus datos, estado, rol o contraseña.</p></div>
         <form id="editUserForm" class="access-create-form">
@@ -76,7 +101,7 @@
       </section>
     </div>
   </main>
-  <script src="/usuarios.js?v=20260804-direct-access"></script>
-  <script src="/auth-session.js?v=20260804-sidebar-icons"></script>
+  <script src="/usuarios.js?v=20260804-role-wizard"></script>
+  <script src="/auth-session.js?v=20260804-same-tab-general"></script>
 </body>
 </html>

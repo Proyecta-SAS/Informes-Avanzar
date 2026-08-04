@@ -178,9 +178,44 @@ public static class BitrixDataQueries
             ORDER BY total_value DESC, department;
             """;
 
+        const string possibleClosePnncSql = """
+            WITH classified AS (
+                SELECT
+                    CASE
+                        WHEN UPPER(TRANSLATE(COALESCE(s.name, d.stage_id, ''), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) LIKE '%REVISION DE LIDER%' THEN '01 Revisión líder'
+                        WHEN UPPER(TRANSLATE(COALESCE(s.name, d.stage_id, ''), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) LIKE '%RADICACION POR VALIDAR%' THEN '02 Radicación por validar'
+                        WHEN UPPER(TRANSLATE(COALESCE(s.name, d.stage_id, ''), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) ~ '(DOCUMENTACION PENDIENTE COMERCIAL|DOCUMENTOS PENDIENTES)' THEN '03 Documentación pendiente'
+                        WHEN UPPER(TRANSLATE(COALESCE(s.name, d.stage_id, ''), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) ~ '(DOCUMENTACION SUBSANADA COMERCIAL|DOCUMENTOS SUBSANADOS|DOCUMENTOS SUBSANDADOS COMERCIAL)' THEN '04 Documentación subsanada'
+                    END AS stage,
+                    d.opportunity
+                FROM bitrix.deals d
+                JOIN bitrix.pipelines p ON p.id = d.pipeline_id
+                LEFT JOIN bitrix.pipeline_stages s ON s.pipeline_id = p.id AND s.bitrix_stage_id = d.stage_id
+                JOIN LATERAL (
+                    SELECT payload
+                    FROM bitrix.raw_payloads
+                    WHERE entity_type = 'user' AND bitrix_id = d.assigned_by_bitrix_id
+                    ORDER BY received_at DESC
+                    LIMIT 1
+                ) raw_user ON true
+                WHERE p.category_id IN (26, 28)
+                  AND EXISTS (
+                      SELECT 1
+                      FROM jsonb_array_elements_text(raw_user.payload->'UF_DEPARTMENT') department_id
+                      WHERE department_id = ANY(@insolvencyDepartmentIds)
+                  )
+            )
+            SELECT stage, COALESCE(SUM(opportunity),0) AS amount, COUNT(*)::bigint AS cases
+            FROM classified
+            WHERE stage IS NOT NULL
+            GROUP BY stage
+            ORDER BY stage;
+            """;
+
         var advisors = new List<object>();
         var stages = new List<object>();
         var departments = new List<object>();
+        var possibleClosePnnc = new List<object>();
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
         await using (var command = new NpgsqlCommand(advisorSql, connection))
@@ -229,7 +264,15 @@ public static class BitrixDataQueries
             }
         }
 
-        return new { year, advisors, stages, departments };
+        await using (var command = new NpgsqlCommand(possibleClosePnncSql, connection))
+        {
+            command.Parameters.AddWithValue("insolvencyDepartmentIds", new[] { "1332", "1324", "1366", "1414", "1346", "1430", "1432", "1254", "1310", "1426", "1326", "1374", "1402", "1404", "1428", "1308", "1328", "1320", "1252", "1408", "1410", "1412" });
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                possibleClosePnnc.Add(new { stage = reader.GetString(0), amount = reader.GetDecimal(1), cases = reader.GetInt64(2) });
+        }
+
+        return new { year, advisors, stages, departments, possibleClosePnnc };
     }
 
     public static async Task<object> GetDiegoPortfolioCollectionsAsync(

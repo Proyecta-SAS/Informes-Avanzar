@@ -55,6 +55,64 @@ public static class PanelAuthentication
             : null;
     }
 
+    public static async Task<PanelUser?> GetCurrentUserAsync(Guid userId, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT u.id, u.email, u.full_name, COALESCE(r.code, '')
+            FROM auth.users u
+            LEFT JOIN auth.user_roles ur ON ur.user_id = u.id
+            LEFT JOIN auth.roles r ON r.id = ur.role_id
+            WHERE u.id = @userId AND u.status = 'active' AND u.deleted_at IS NULL
+            ORDER BY CASE WHEN r.code = 'admin' THEN 0 ELSE 1 END
+            LIMIT 1;
+            """;
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("userId", userId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken)
+            ? new PanelUser(reader.GetGuid(0), reader.GetString(1), reader.GetString(2), reader.GetString(3))
+            : null;
+    }
+
+    public static async Task<bool> HasAnyPermissionAsync(Guid userId, NpgsqlDataSource dataSource, CancellationToken cancellationToken, params string[] permissionCodes)
+    {
+        if (permissionCodes.Length == 0) return false;
+        const string sql = """
+            SELECT EXISTS (
+                SELECT 1
+                FROM auth.user_roles ur
+                JOIN auth.role_permissions rp ON rp.role_id = ur.role_id
+                JOIN auth.permissions p ON p.id = rp.permission_id
+                WHERE ur.user_id = @userId AND p.code = ANY(@permissionCodes)
+            );
+            """;
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("userId", userId);
+        command.Parameters.AddWithValue("permissionCodes", permissionCodes);
+        return await command.ExecuteScalarAsync(cancellationToken) is true;
+    }
+
+    public static async Task<string[]> GetPermissionCodesAsync(Guid userId, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+    {
+        const string sql = """
+            SELECT DISTINCT p.code
+            FROM auth.user_roles ur
+            JOIN auth.role_permissions rp ON rp.role_id = ur.role_id
+            JOIN auth.permissions p ON p.id = rp.permission_id
+            WHERE ur.user_id = @userId
+            ORDER BY p.code;
+            """;
+        var result = new List<string>();
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("userId", userId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken)) result.Add(reader.GetString(0));
+        return result.ToArray();
+    }
+
     public static string CreateToken(PanelUser user, string signingKey)
     {
         var payload = JsonSerializer.SerializeToUtf8Bytes(new { user.Id, user.Email, user.FullName, user.RoleCode, exp = DateTimeOffset.UtcNow.AddHours(12).ToUnixTimeSeconds() });

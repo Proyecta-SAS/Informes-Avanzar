@@ -71,10 +71,31 @@ const diegoSections = [
       ["Etapas Comercial RCH", "Casos y valor por etapa comercial RCH.", "bars"],
       ["Etapas Operativa RCH", "Radicación por validar y documentación pendiente o subsanada.", "bars"],
       ["Etapas Comercial PNNC", "Recopilación, anticipo y cuarentena.", "bars"],
-      ["Etapas Operativa PNNC", "Validación y estado de la documentación comercial.", "bars"]
+      ["Etapas Operativa PNNC", "Validación y estado de la documentación comercial.", "bars"],
+      ["Posible cierre PNC", "Monto y número de casos PNNC que avanzan hacia posible cierre.", "table"]
     ]
   }
 ];
+
+const generalBlockCodes = {
+  "Valores radicados por asesor": "radicated_values",
+  "Total de negociaciones por asesor": "advisor_negotiations",
+  "Valores radicados por coordinador": "coordinator_values",
+  "Valores radicados por líder": "leader_values",
+  "Detalle de coordinadores": "coordinator_detail",
+  "Detalle de radicaciones por líder": "leader_detail",
+  "Comisiones por asesor": "advisor_commissions",
+  "Estado de cartera 2025": "portfolio_state",
+  "Cartera recaudada": "portfolio_collected",
+  "Embudo Insolvencia": "funnel_insolvency",
+  "Embudo RCH": "funnel_rch",
+  "Etapas Comercial RCH": "stages_rch_commercial",
+  "Etapas Operativa RCH": "stages_rch_operativa",
+  "Etapas Comercial PNNC": "stages_pnnc_commercial",
+  "Etapas Operativa PNNC": "stages_pnnc_operativa",
+  "Posible cierre PNC": "possible_close_pnnc"
+};
+let generalBlockAccess = { configured: false, codes: new Set() };
 
 const blockPreview = (type) => {
   if (type === "radicated") return `<div id="diegoValoresRadicados" class="radicated-values"><p>Cargando información…</p></div>`;
@@ -366,6 +387,12 @@ const loadDiegoDashboardData = async () => {
       replaceBlockPreview(title, renderPipelineTable(items, mode), items.length);
     });
   });
+
+  const possibleCloseRows = data.possibleClosePnnc ?? [];
+  const possibleCloseAmount = possibleCloseRows.reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+  const possibleCloseCases = possibleCloseRows.reduce((sum, item) => sum + Number(item.cases ?? 0), 0);
+  const possibleCloseTable = `<div class="radicated-table-wrap possible-close-wrap"><table class="radicated-table synced-table possible-close-table"><thead><tr><th>Etapa</th><th>Monto</th><th>Casos</th></tr></thead><tbody>${possibleCloseRows.map((item) => `<tr><td>${item.stage}</td><td>${formatNumber.format(item.amount)}</td><td>${formatNumber.format(item.cases)}</td></tr>`).join("")}</tbody><tfoot><tr><th>Total (Sum)</th><td>${formatNumber.format(possibleCloseAmount)}</td><td>${formatNumber.format(possibleCloseCases)}</td></tr></tfoot></table></div>`;
+  replaceBlockPreview("Posible cierre PNC", possibleCloseRows.length ? possibleCloseTable : `<div class="empty-block"><strong>Sin casos de posible cierre PNNC</strong><span>No hay negocios en las etapas configuradas.</span></div>`, possibleCloseRows.length);
 };
 
 const loadDiegoPortfolioCollections = async () => {
@@ -518,7 +545,13 @@ const setupDiegoFilters = () => {
 };
 
 const renderDiegoDashboard = () => {
-  document.getElementById("diegoSections").innerHTML = diegoSections.map((section) => `
+  const sections = diegoSections.map((section) => {
+    const reportBlocks = section.blocks.filter(([title]) => reportId === "informe_general_comercial" || title !== "Posible cierre PNC");
+    return { ...section, blocks: reportId === "informe_general_comercial" && generalBlockAccess.configured
+      ? reportBlocks.filter(([title]) => generalBlockAccess.codes.has(generalBlockCodes[title]))
+      : reportBlocks };
+  }).filter((section) => section.blocks.length);
+  document.getElementById("diegoSections").innerHTML = sections.map((section) => `
     <section id="${section.id}" class="diego-section">
       <header>
         <span>${section.icon}</span>
@@ -526,7 +559,7 @@ const renderDiegoDashboard = () => {
       </header>
       <div class="diego-block-grid">
         ${section.blocks.map(([title, description, type]) => `
-          <article data-block-title="${title}" class="diego-block diego-block-${type}${["Total de negociaciones por asesor", "Cartera recaudada"].includes(title) ? " diego-block-wide-table" : ""}">
+          <article data-block-title="${title}" data-block-code="${generalBlockCodes[title]}" class="diego-block diego-block-${type}${["Total de negociaciones por asesor", "Cartera recaudada"].includes(title) ? " diego-block-wide-table" : ""}">
             <div class="diego-block-title"><div><h3>${title}</h3><p>${description}</p></div><em>Sin datos</em></div>
             ${blockPreview(type)}
           </article>
@@ -607,6 +640,10 @@ const load = async () => {
   setText("reportArea", current.area);
   if (["fuerza_comercial_diego", "informe_general_comercial"].includes(reportId)) {
     const isGeneralCommercial = reportId === "informe_general_comercial";
+    if (isGeneralCommercial) {
+      const session = await fetch("/api/auth/me").then((response) => response.json());
+      generalBlockAccess = { configured: Boolean(session.generalCommercialBlocksConfigured), codes: new Set(session.generalCommercialBlockCodes ?? []) };
+    }
     document.body.classList.toggle("general-commercial-report", isGeneralCommercial);
     document.querySelector(".compact-hero").hidden = true;
     document.getElementById("standardSummary").hidden = true;
@@ -614,22 +651,14 @@ const load = async () => {
     document.getElementById("detalle").hidden = true;
     document.getElementById("diegoDashboard").hidden = false;
     if (isGeneralCommercial) {
+      document.title = "Informe General Comercial | Avanzar";
+      document.querySelector(".diego-overview-kicker").textContent = "Panel general · Información consolidada desde Bitrix";
       document.querySelector(".diego-overview h2").textContent = "Informe general del área comercial";
       document.querySelector(".diego-overview p").textContent = "Consulta radicación, negociaciones, comisiones, cartera, embudos y etapas sincronizadas desde Bitrix.";
       document.getElementById("diegoYearFilter").hidden = true;
       document.getElementById("diegoMonthFilter").hidden = true;
       document.getElementById("pendingLeaderFilter").hidden = false;
     }
-    document.querySelector(".menu").innerHTML = `
-      <p>GENERAL</p>
-      <a href="/"><span>🏠</span>Inicio</a>
-      <a href="/informes.html"><span>📊</span>Informes</a>
-      <p>BLOQUES</p>
-      <a class="active" href="#radicacion"><span>◎</span>Radicación</a>
-      <a href="#comisiones"><span>$</span>Cobro comisiones</a>
-      <a href="#carteras"><span>$</span>Estado de carteras</a>
-      <a href="#embudos"><span>▽</span>Embudos</a>
-      <a href="#etapas"><span>≡</span>Etapas</a>`;
     renderDiegoDashboard();
     document.getElementById("diegoYear").addEventListener("change", async () => {
       await Promise.all([loadDiegoRadicatedValues(), loadDiegoDashboardData(), loadDiegoPortfolioCollections(), loadDiegoLeadershipAndCommissions()]);

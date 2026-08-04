@@ -6,6 +6,7 @@ using InformesAvanzar.Api.Data;
 using InformesAvanzar.Api.Reports;
 using InformesAvanzar.Api.Sync;
 using Npgsql;
+using System.Security.Cryptography;
 
 EnvFileLoader.LoadNearest(".env");
 
@@ -42,6 +43,11 @@ app.Use(async (context, next) =>
     var path = context.Request.Path.Value ?? "/";
     var isPublic = path is "/login.html" or "/login.js" or "/health" or "/health/db" || path.StartsWith("/assets/") || path == "/styles.css" || path == "/api/auth/login";
     var panelUser = PanelAuthentication.ValidateToken(context.Request.Cookies[PanelAuthentication.CookieName], panelSigningKey);
+    if (panelUser is not null)
+    {
+        var dataSource = context.RequestServices.GetRequiredService<NpgsqlDataSource>();
+        panelUser = await PanelAuthentication.GetCurrentUserAsync(panelUser.Id, dataSource, context.RequestAborted);
+    }
     if (panelUser is not null) context.Items["PanelUser"] = panelUser;
     if (!isPublic && panelUser is null)
     {
@@ -50,6 +56,40 @@ app.Use(async (context, next) =>
         return;
     }
     if (path == "/login.html" && panelUser is not null) { context.Response.Redirect("/"); return; }
+
+    if (path == "/reporte.html" && panelUser is not null && panelUser.RoleCode != "admin")
+    {
+        var reportCode = context.Request.Query["id"].ToString();
+        var reportAccess = context.RequestServices.GetRequiredService<IReportAccessService>();
+        if (string.IsNullOrWhiteSpace(reportCode) || !await reportAccess.UserCanAccessReportAsync(panelUser.Id, reportCode, context.RequestAborted))
+        {
+            context.Response.Redirect("/informes.html?access=denied");
+            return;
+        }
+    }
+
+    if (panelUser is not null && panelUser.RoleCode != "admin")
+    {
+        string[] requiredPermissions = path switch
+        {
+            "/usuarios.html" => ["users.manage", "roles.manage", "reports.manage"],
+            "/estructura-comercial.html" => ["users.manage", "roles.manage"],
+            "/sincronizacion.html" => ["bitrix.sync.view"],
+            _ when path.StartsWith("/api/organization/commercial/") && context.Request.Method != "GET" => ["users.manage", "roles.manage", "reports.manage"],
+            _ when path.StartsWith("/api/bitrix/sync/") && context.Request.Method != "GET" => ["bitrix.sync.run"],
+            _ => []
+        };
+        if (requiredPermissions.Length > 0)
+        {
+            var dataSource = context.RequestServices.GetRequiredService<NpgsqlDataSource>();
+            if (!await PanelAuthentication.HasAnyPermissionAsync(panelUser.Id, dataSource, context.RequestAborted, requiredPermissions))
+            {
+                if (path.StartsWith("/api/")) context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                else context.Response.Redirect("/informes.html?access=denied");
+                return;
+            }
+        }
+    }
     await next();
 });
 
@@ -73,7 +113,20 @@ app.MapPost("/api/auth/logout", (HttpContext context) =>
     return Results.NoContent();
 });
 
-app.MapGet("/api/auth/me", (HttpContext context) => Results.Ok(context.Items["PanelUser"]));
+app.MapGet("/api/auth/me", async (HttpContext context, IReportAccessService reportAccess, NpgsqlDataSource dataSource, CancellationToken cancellationToken) =>
+{
+    var user = (PanelUser)context.Items["PanelUser"]!;
+    var reportCodes = user.RoleCode == "admin"
+        ? new[] { "informe_general_comercial", "fuerza_comercial_diego", "rch_comercial", "rch_operativa", "pnnc_comercial", "pnnc_operativa" }
+        : await reportAccess.GetAccessibleReportCodesAsync(user.Id, cancellationToken);
+    var permissions = await PanelAuthentication.GetPermissionCodesAsync(user.Id, dataSource, cancellationToken);
+    var blockAccess = user.RoleCode == "admin"
+        ? (Configured: false, Blocks: Array.Empty<string>())
+        : await OrganizationQueries.GetUserBlockAccessAsync(user.Id, "informe_general_comercial", dataSource, cancellationToken);
+    return Results.Ok(new { user.Id, user.Email, user.FullName, user.RoleCode, accessibleReportCodes = reportCodes, permissions, generalCommercialBlocksConfigured = blockAccess.Configured, generalCommercialBlockCodes = blockAccess.Blocks });
+});
+app.MapGet("/api/organization/commercial", async (IBitrixClient bitrixClient, NpgsqlDataSource dataSource, CancellationToken cancellationToken) => Results.Ok(await OrganizationQueries.GetCommercialStructureAsync(bitrixClient, dataSource, cancellationToken)));
+app.MapPut("/api/organization/commercial/{departmentId}/settings", async (string departmentId, JsonElement body, NpgsqlDataSource dataSource, CancellationToken cancellationToken) => { var role=body.TryGetProperty("roleLabel",out var roleProperty)?roleProperty.GetString()??"viewer":"viewer";var email=body.TryGetProperty("email",out var emailProperty)?emailProperty.GetString():null;var reports=body.TryGetProperty("visibleReports",out var reportsProperty)&&reportsProperty.ValueKind==JsonValueKind.Array?reportsProperty.EnumerateArray().Select(item=>item.GetString()).Where(item=>!string.IsNullOrWhiteSpace(item)).Cast<string>().ToArray():Array.Empty<string>();var blocks=body.TryGetProperty("visibleBlocks",out var blocksProperty)&&blocksProperty.ValueKind==JsonValueKind.Array?blocksProperty.EnumerateArray().Select(item=>item.GetString()).Where(item=>!string.IsNullOrWhiteSpace(item)).Cast<string>().ToArray():Array.Empty<string>();await OrganizationQueries.SetSettingsAsync(departmentId,email,role,reports,blocks,dataSource,cancellationToken);return Results.NoContent(); });
 
 app.MapGet("/health", (IHostEnvironment environment) => Results.Ok(new
 {
@@ -180,7 +233,19 @@ app.MapGet("/api/data/stages", async (
 var adminApi = app.MapGroup("/api/admin");
 adminApi.AddEndpointFilter(async (context, next) =>
 {
-    if (context.HttpContext.Items["PanelUser"] is PanelUser { RoleCode: "admin" }) return await next(context);
+    if (context.HttpContext.Items["PanelUser"] is PanelUser panelUser)
+    {
+        if (panelUser.RoleCode == "admin") return await next(context);
+        var path = context.HttpContext.Request.Path.Value ?? "";
+        var required = path.Contains("/users/") || path.EndsWith("/users") || path.Contains("/organization/")
+            ? new[] { "users.manage" }
+            : path.Contains("/roles/")
+                ? new[] { "roles.manage" }
+                : new[] { "reports.manage", "roles.manage" };
+        var dataSource = context.HttpContext.RequestServices.GetRequiredService<NpgsqlDataSource>();
+        if (await PanelAuthentication.HasAnyPermissionAsync(panelUser.Id, dataSource, context.HttpContext.RequestAborted, required)) return await next(context);
+        return Results.Forbid();
+    }
     var configuredKey = app.Configuration["ADMIN_API_KEY"];
     if (string.IsNullOrWhiteSpace(configuredKey))
         return Results.Problem("Configure ADMIN_API_KEY para habilitar la administración de accesos.", statusCode: StatusCodes.Status503ServiceUnavailable);
@@ -192,6 +257,45 @@ adminApi.AddEndpointFilter(async (context, next) =>
 
 adminApi.MapGet("/access-management", async (NpgsqlDataSource dataSource, CancellationToken cancellationToken) =>
     Results.Ok(await AdminAccessQueries.GetAccessManagementAsync(dataSource, cancellationToken)));
+
+adminApi.MapPost("/organization/{departmentId}/create-user", async (string departmentId, JsonElement body, NpgsqlDataSource dataSource, CancellationToken cancellationToken) =>
+{
+    var fullName = body.TryGetProperty("fullName", out var nameProperty) ? nameProperty.GetString() : null;
+    var email = body.TryGetProperty("email", out var emailProperty) ? emailProperty.GetString() : null;
+    var roleLabel = body.TryGetProperty("roleLabel", out var roleProperty) ? roleProperty.GetString() ?? "viewer" : "viewer";
+    if (string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(email)) return Results.BadRequest(new { message = "El responsable debe tener nombre y correo en Bitrix." });
+    await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+    await using (var existsCommand = new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM auth.users WHERE lower(email)=lower(@email) AND deleted_at IS NULL);", connection))
+    {
+        existsCommand.Parameters.AddWithValue("email", email.Trim());
+        if ((bool)(await existsCommand.ExecuteScalarAsync(cancellationToken) ?? false)) return Results.Conflict(new { message = "Este correo ya está registrado en Usuarios y roles." });
+    }
+    var roleCode = roleLabel is "coordinator" or "leader" ? "report_manager" : "report_viewer";
+    Guid? roleId;
+    await using (var roleCommand = new NpgsqlCommand("SELECT id FROM auth.roles WHERE code=@code;", connection))
+    {
+        roleCommand.Parameters.AddWithValue("code", roleCode);
+        roleId = await roleCommand.ExecuteScalarAsync(cancellationToken) as Guid?;
+    }
+    var rolePrefix = roleLabel switch { "coordinator" => "Coord", "leader" => "Lider", "advisor" => "Asesor", _ => "Consulta" };
+    var password = $"Avz-{rolePrefix}-{Convert.ToHexString(RandomNumberGenerator.GetBytes(7))}!";
+    var userId = await AdminAccessQueries.CreateUserAsync(fullName, email, password, roleId, dataSource, cancellationToken);
+    string[] savedReports = Array.Empty<string>();
+    string[] savedBlocks = Array.Empty<string>();
+    await using (var settingsCommand = new NpgsqlCommand("SELECT visible_reports,visible_blocks FROM reporting.organization_access WHERE department_id=@departmentId;", connection))
+    {
+        settingsCommand.Parameters.AddWithValue("departmentId", departmentId);
+        await using var reader = await settingsCommand.ExecuteReaderAsync(cancellationToken);
+        if (await reader.ReadAsync(cancellationToken))
+        {
+            savedReports = reader.GetFieldValue<string[]>(0);
+            savedBlocks = reader.GetFieldValue<string[]>(1);
+        }
+    }
+    if (savedReports.Length > 0 || savedBlocks.Length > 0)
+        await OrganizationQueries.SetSettingsAsync(departmentId, email, roleLabel, savedReports, savedBlocks, dataSource, cancellationToken);
+    return Results.Created($"/api/admin/users/{userId}", new { id = userId, temporaryPassword = password, roleCode, departmentId });
+});
 
 adminApi.MapPost("/users", async (JsonElement body, NpgsqlDataSource dataSource, CancellationToken cancellationToken) =>
 {
@@ -253,6 +357,14 @@ adminApi.MapPut("/reports/{reportId:guid}/roles/{roleId:guid}", async (Guid repo
     var enabled = body.TryGetProperty("enabled", out var enabledProperty) && enabledProperty.GetBoolean();
     var accessLevel = body.TryGetProperty("accessLevel", out var levelProperty) ? levelProperty.GetString() ?? "viewer" : "viewer";
     await AdminAccessQueries.SetReportRoleAccessAsync(reportId, roleId, enabled, accessLevel, dataSource, cancellationToken);
+    return Results.NoContent();
+});
+
+adminApi.MapPut("/reports/{reportId:guid}/users/{userId:guid}", async (Guid reportId, Guid userId, JsonElement body, NpgsqlDataSource dataSource, CancellationToken cancellationToken) =>
+{
+    var enabled = body.TryGetProperty("enabled", out var enabledProperty) && enabledProperty.GetBoolean();
+    var accessLevel = body.TryGetProperty("accessLevel", out var levelProperty) ? levelProperty.GetString() ?? "viewer" : "viewer";
+    await AdminAccessQueries.SetReportUserAccessAsync(reportId, userId, enabled, accessLevel, dataSource, cancellationToken);
     return Results.NoContent();
 });
 
@@ -595,6 +707,7 @@ app.MapGet(
 var startupDataSource = app.Services.GetRequiredService<NpgsqlDataSource>();
 await AdminAccessQueries.EnsureUserManagementSchemaAsync(startupDataSource, CancellationToken.None);
 await AdminAccessQueries.EnsureReportCatalogAsync(startupDataSource, CancellationToken.None);
+await OrganizationQueries.EnsureSchemaAsync(startupDataSource, CancellationToken.None);
 await PanelAuthentication.EnsureSuperAdminAsync(
     app.Configuration["SUPERADMIN_EMAIL"] ?? "superadmin@avanzarsoluciones.com",
     app.Configuration["SUPERADMIN_PASSWORD"] ?? "AvanzarAdmin2026!",
