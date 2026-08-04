@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Net;
 using Microsoft.Extensions.Options;
 
 namespace InformesAvanzar.Api.Bitrix;
@@ -27,11 +28,22 @@ public sealed class BitrixClient(HttpClient httpClient, IOptions<BitrixOptions> 
 
         var baseUrl = _options.WebhookUrl.TrimEnd('/');
         var requestUri = $"{baseUrl}/{method}.json";
-        using var content = new FormUrlEncodedContent(parameters);
-        using var response = await httpClient.PostAsync(requestUri, content, cancellationToken);
+        var requestParameters = parameters.ToArray();
+        for (var attempt = 0; ; attempt++)
+        {
+            using var content = new FormUrlEncodedContent(requestParameters);
+            using var response = await httpClient.PostAsync(requestUri, content, cancellationToken);
+            if (response.StatusCode == HttpStatusCode.TooManyRequests && attempt < 6)
+            {
+                var retryAfter = response.Headers.RetryAfter?.Delta
+                    ?? TimeSpan.FromSeconds(Math.Min(30, Math.Pow(2, attempt)));
+                await Task.Delay(retryAfter, cancellationToken);
+                continue;
+            }
 
-        response.EnsureSuccessStatusCode();
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        return await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            response.EnsureSuccessStatusCode();
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            return await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        }
     }
 }

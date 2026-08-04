@@ -128,13 +128,43 @@ const loadDiegoRadicatedValues = async () => {
 const findDiegoBlock = (title) => [...document.querySelectorAll(".diego-block")]
   .find((block) => block.querySelector("h3")?.textContent === title);
 
-const renderDataTable = (headers, rows) => `
+const renderDataTable = (headers, rows, className = "") => `
   <div class="radicated-table-wrap synced-table-wrap">
-    <table class="radicated-table synced-table">
+    <table class="radicated-table synced-table ${className}">
       <thead><tr>${headers.map((header) => `<th>${header}</th>`).join("")}</tr></thead>
       <tbody>${rows.join("")}</tbody>
     </table>
   </div>`;
+
+const renderMonthlyMatrix = (groupLabel, items, groupField) => {
+  const months = [...new Set(items.map((item) => item.month))]
+    .sort((left, right) => Number.parseInt(left, 10) - Number.parseInt(right, 10));
+  const groupedValues = new Map();
+  items.forEach((item) => {
+    const group = item[groupField] || `Sin ${groupLabel.toLocaleLowerCase("es-CO")}`;
+    if (!groupedValues.has(group)) groupedValues.set(group, new Map());
+    const monthlyValues = groupedValues.get(group);
+    monthlyValues.set(item.month, (monthlyValues.get(item.month) ?? 0) + item.totalAchieved);
+  });
+  const groups = [...groupedValues.keys()]
+    .sort((left, right) => left.localeCompare(right, "es", { sensitivity: "base" }));
+
+  return `
+    <div class="radicated-table-wrap leadership-matrix-wrap">
+      <table class="radicated-table monthly-matrix leadership-matrix">
+        <thead>
+          <tr><th rowspan="2">${groupLabel}</th><th colspan="${months.length}">Total alcanzado</th></tr>
+          <tr>${months.map((month) => `<th data-month="${month.slice(0, 2)}">${month}</th>`).join("")}</tr>
+        </thead>
+        <tbody>${groups.map((group) => `
+          <tr><td>${group}</td>${months.map((month) => {
+            const value = groupedValues.get(group).get(month);
+            return `<td data-month="${month.slice(0, 2)}">${value ? formatNumber.format(value) : ""}</td>`;
+          }).join("")}</tr>
+        `).join("")}</tbody>
+      </table>
+    </div>`;
+};
 
 const replaceBlockPreview = (title, content, count) => {
   const block = findDiegoBlock(title);
@@ -161,8 +191,15 @@ const loadDiegoDashboardData = async () => {
     : "0%";
 
   replaceBlockPreview("Total de negociaciones por asesor", renderDataTable(
-    ["Asesor", "Negociaciones", "Comerciales", "Radicados", "Valor"],
-    data.advisors.map((item) => `<tr><td>${item.advisor}</td><td>${formatNumber.format(item.negotiations)}</td><td>${formatNumber.format(item.commercialCases)}</td><td>${formatNumber.format(item.radicatedCases)}</td><td>${currencyFormatter.format(item.totalValue)}</td></tr>`)
+    ["Asesor", "Total de negociaciones", "Estudios", "Estudios sobre total", "Radicados", "Tasa de cierre"],
+    [...data.advisors]
+      .sort((left, right) => left.advisor.localeCompare(right.advisor, "es", { sensitivity: "base" }))
+      .map((item) => {
+        const studiesRate = item.negotiations ? `${((item.commercialCases / item.negotiations) * 100).toFixed(1)}%` : "0.0%";
+        const closingRate = item.commercialCases ? `${((item.radicatedCases / item.commercialCases) * 100).toFixed(1)}%` : "N/A";
+        return `<tr><td>${item.advisor}</td><td>${formatNumber.format(item.negotiations)}</td><td>${formatNumber.format(item.commercialCases)}</td><td>${studiesRate}</td><td>${formatNumber.format(item.radicatedCases)}</td><td>${closingRate}</td></tr>`;
+      }),
+    "advisor-negotiations-table"
   ), data.advisors.length);
 
   const departmentRows = data.departments.map((item) => `<tr><td>${item.department}</td><td>${formatNumber.format(item.cases)}</td><td>${currencyFormatter.format(item.totalValue)}</td></tr>`);
@@ -206,12 +243,12 @@ const loadDiegoLeadershipAndCommissions = async () => {
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
 
-  const leaderRows = data.leadership.map((item) => `<tr><td>${item.month}</td><td>${item.leader}</td><td>${currencyFormatter.format(item.totalAchieved)}</td></tr>`);
-  const coordinatorRows = data.leadership.map((item) => `<tr><td>${item.month}</td><td>${item.coordinator}</td><td>${currencyFormatter.format(item.totalAchieved)}</td></tr>`);
   const commissionRows = data.commissions.map((item) => `<tr><td>${item.month}</td><td>${item.advisor}</td><td>${currencyFormatter.format(item.total)}</td></tr>`);
 
-  replaceBlockPreview("Valores radicados por líder", renderDataTable(["Mes", "Líder", "Total alcanzado"], leaderRows), leaderRows.length);
-  replaceBlockPreview("Valores radicados por coordinador", renderDataTable(["Mes", "Coordinador", "Total alcanzado"], coordinatorRows), coordinatorRows.length);
+  const leaderCount = new Set(data.leadership.map((item) => item.leader).filter(Boolean)).size;
+  const coordinatorCount = new Set(data.leadership.map((item) => item.coordinator).filter(Boolean)).size;
+  replaceBlockPreview("Valores radicados por líder", renderMonthlyMatrix("Líder", data.leadership, "leader"), leaderCount);
+  replaceBlockPreview("Valores radicados por coordinador", renderMonthlyMatrix("Coordinador", data.leadership, "coordinator"), coordinatorCount);
   replaceBlockPreview("Comisiones por asesor", commissionRows.length
     ? renderDataTable(["Mes", "Asesor", "Comisión"], commissionRows)
     : `<div class="empty-block"><strong>Sin comisiones para ${data.year}</strong><span>La pipeline Cuentas de Cobro no contiene registros pagados para este periodo.</span></div>`, commissionRows.length);
@@ -270,7 +307,7 @@ const applyDiegoFilters = () => {
 
     const table = block.querySelector("table");
     if (!table) return;
-    if (table.classList.contains("radicated-matrix")) {
+    if (table.classList.contains("radicated-matrix") || table.classList.contains("monthly-matrix")) {
       table.querySelectorAll("[data-month]").forEach((cell) => {
         cell.hidden = selectedMonth !== "all" && cell.dataset.month !== selectedMonth;
       });
@@ -319,7 +356,7 @@ const renderDiegoDashboard = () => {
       </header>
       <div class="diego-block-grid">
         ${section.blocks.map(([title, description, type]) => `
-          <article class="diego-block diego-block-${type}">
+          <article class="diego-block diego-block-${type}${title === "Total de negociaciones por asesor" ? " diego-block-wide-table" : ""}">
             <div class="diego-block-title"><div><h3>${title}</h3><p>${description}</p></div><em>Sin datos</em></div>
             ${blockPreview(type)}
           </article>

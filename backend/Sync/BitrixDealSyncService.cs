@@ -25,7 +25,10 @@ public sealed class BitrixDealSyncService(
         "CLOSED",
         "DATE_CREATE",
         "DATE_MODIFY",
-        "CLOSEDATE"
+        "CLOSEDATE",
+        "UF_CRM_1676419915",
+        "UF_CRM_1737653376",
+        "UF_CRM_1737654190"
     ];
 
     public async Task<SyncResult> SyncPipelineDealsAsync(
@@ -119,16 +122,12 @@ public sealed class BitrixDealSyncService(
         int start)
     {
         yield return new KeyValuePair<string, string>("filter[CATEGORY_ID]", categoryId.ToString());
-<<<<<<< Updated upstream
         if (!string.IsNullOrWhiteSpace(stageId))
         {
             yield return new KeyValuePair<string, string>("filter[STAGE_ID]", stageId);
         }
 
         yield return new KeyValuePair<string, string>("order[ID]", "ASC");
-=======
-        yield return new KeyValuePair<string, string>("order[ID]", "DESC");
->>>>>>> Stashed changes
         yield return new KeyValuePair<string, string>("start", start.ToString());
         foreach (var field in DealSummaryFields)
         {
@@ -173,7 +172,7 @@ public sealed class BitrixDealSyncService(
     {
         var bitrixId = GetString(deal, "ID")
             ?? throw new InvalidOperationException("Bitrix deal without ID.");
-        var payload = JsonSerializer.Serialize(deal);
+        var payload = SanitizeJsonForPostgres(JsonSerializer.Serialize(deal));
         var hash = Sha256(payload);
         var customFields = ExtractCustomFields(deal);
         var coreData = ExtractCoreData(deal);
@@ -454,7 +453,7 @@ public sealed class BitrixDealSyncService(
             .Where(property => property.Name.StartsWith("UF_CRM", StringComparison.OrdinalIgnoreCase))
             .ToDictionary(property => property.Name, property => property.Value.Clone());
 
-        return JsonSerializer.Serialize(custom);
+        return SanitizeJsonForPostgres(JsonSerializer.Serialize(custom));
     }
 
     private static string ExtractCoreData(JsonElement deal)
@@ -463,15 +462,19 @@ public sealed class BitrixDealSyncService(
             .Where(property => !property.Name.StartsWith("UF_CRM", StringComparison.OrdinalIgnoreCase))
             .ToDictionary(property => property.Name, property => property.Value.Clone());
 
-        return JsonSerializer.Serialize(core);
+        return SanitizeJsonForPostgres(JsonSerializer.Serialize(core));
     }
 
     private static string? GetString(JsonElement element, string propertyName)
     {
         return element.TryGetProperty(propertyName, out var property) && property.ValueKind != JsonValueKind.Null
-            ? property.ToString()
+            ? property.ToString().Replace("\0", string.Empty, StringComparison.Ordinal)
             : null;
     }
+
+    private static string SanitizeJsonForPostgres(string json) =>
+        json.Replace("\\u0000", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("\0", string.Empty, StringComparison.Ordinal);
 
     private static decimal? GetDecimal(JsonElement element, string propertyName)
     {

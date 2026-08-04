@@ -75,3 +75,13 @@ Adicionalmente:
 - `bitrix.custom_fields` registra el catalogo de campos personalizados detectados.
 - `bitrix.entity_custom_values` guarda valores consultables por campo.
 - `bitrix.entity_snapshots.custom_fields` conserva todos los personalizados como JSONB.
+
+### Campos requeridos por Fuerza Comercial Diego
+
+La sincronizacion resumida de negocios debe solicitar y conservar estos campos para que los paneles mensuales no queden incompletos:
+
+- `UF_CRM_1676419915`: mes de radicacion.
+- `UF_CRM_1737653376`: ano de las pipelines operativas.
+- `UF_CRM_1737654190`: ano de las pipelines comerciales.
+
+Los valores JSON recibidos de Bitrix se sanean de caracteres nulos antes de guardarlos en PostgreSQL, porque `jsonb` no admite `\u0000`. Las respuestas `429 Too Many Requests` se reintentan con espera progresiva para no dejar incompleta una pipeline extensa.

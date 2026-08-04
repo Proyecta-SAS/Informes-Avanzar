@@ -133,6 +133,54 @@ app.MapGet("/api/data/stages", async (
     return await BitrixDataQueries.GetStagesAsync(pipeline ?? "all", dataSource, cancellationToken);
 });
 
+var adminApi = app.MapGroup("/api/admin");
+adminApi.AddEndpointFilter(async (context, next) =>
+{
+    var configuredKey = app.Configuration["ADMIN_API_KEY"];
+    if (string.IsNullOrWhiteSpace(configuredKey))
+        return Results.Problem("Configure ADMIN_API_KEY para habilitar la administración de accesos.", statusCode: StatusCodes.Status503ServiceUnavailable);
+    var suppliedKey = context.HttpContext.Request.Headers["X-Admin-Key"].ToString();
+    return string.Equals(configuredKey, suppliedKey, StringComparison.Ordinal)
+        ? await next(context)
+        : Results.Unauthorized();
+});
+
+adminApi.MapGet("/access-management", async (NpgsqlDataSource dataSource, CancellationToken cancellationToken) =>
+    Results.Ok(await AdminAccessQueries.GetAccessManagementAsync(dataSource, cancellationToken)));
+
+adminApi.MapPost("/users", async (JsonElement body, NpgsqlDataSource dataSource, CancellationToken cancellationToken) =>
+{
+    var fullName = body.TryGetProperty("fullName", out var nameProperty) ? nameProperty.GetString() : null;
+    var email = body.TryGetProperty("email", out var emailProperty) ? emailProperty.GetString() : null;
+    if (string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(email))
+        return Results.BadRequest(new { message = "Nombre y correo son obligatorios." });
+    Guid? roleId = body.TryGetProperty("roleId", out var roleProperty) && Guid.TryParse(roleProperty.GetString(), out var parsedRole) ? parsedRole : null;
+    var userId = await AdminAccessQueries.CreateUserAsync(fullName, email, roleId, dataSource, cancellationToken);
+    return Results.Created($"/api/admin/users/{userId}", new { id = userId });
+});
+
+adminApi.MapPut("/users/{userId:guid}/role", async (Guid userId, JsonElement body, NpgsqlDataSource dataSource, CancellationToken cancellationToken) =>
+{
+    Guid? roleId = body.TryGetProperty("roleId", out var roleProperty) && Guid.TryParse(roleProperty.GetString(), out var parsedRole) ? parsedRole : null;
+    await AdminAccessQueries.SetUserRoleAsync(userId, roleId, dataSource, cancellationToken);
+    return Results.NoContent();
+});
+
+adminApi.MapPut("/roles/{roleId:guid}/permissions/{permissionId:guid}", async (Guid roleId, Guid permissionId, JsonElement body, NpgsqlDataSource dataSource, CancellationToken cancellationToken) =>
+{
+    var enabled = body.TryGetProperty("enabled", out var enabledProperty) && enabledProperty.GetBoolean();
+    await AdminAccessQueries.SetRolePermissionAsync(roleId, permissionId, enabled, dataSource, cancellationToken);
+    return Results.NoContent();
+});
+
+adminApi.MapPut("/reports/{reportId:guid}/roles/{roleId:guid}", async (Guid reportId, Guid roleId, JsonElement body, NpgsqlDataSource dataSource, CancellationToken cancellationToken) =>
+{
+    var enabled = body.TryGetProperty("enabled", out var enabledProperty) && enabledProperty.GetBoolean();
+    var accessLevel = body.TryGetProperty("accessLevel", out var levelProperty) ? levelProperty.GetString() ?? "viewer" : "viewer";
+    await AdminAccessQueries.SetReportRoleAccessAsync(reportId, roleId, enabled, accessLevel, dataSource, cancellationToken);
+    return Results.NoContent();
+});
+
 app.MapGet("/api/reports/fuerza-comercial-diego/valores-radicados", async (
     int? year,
     NpgsqlDataSource dataSource,

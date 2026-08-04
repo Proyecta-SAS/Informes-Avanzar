@@ -39,7 +39,7 @@ const reports = [
     description: "Usuarios Bitrix sincronizados para asignacion de responsables y filtros por asesor.",
     pipeline: "Global",
     entity: "Usuarios",
-    href: "/informes.html"
+    href: "/usuarios.html"
   },
   {
     title: "Etapas de pipelines",

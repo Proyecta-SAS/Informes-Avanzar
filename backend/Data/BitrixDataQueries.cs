@@ -168,7 +168,7 @@ public static class BitrixDataQueries
                     )
                 )
             GROUP BY 1
-            ORDER BY negotiations DESC, advisor
+            ORDER BY advisor
             LIMIT 1000;
             """;
 

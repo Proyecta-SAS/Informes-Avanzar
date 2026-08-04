@@ -78,6 +78,7 @@ La tabla `bitrix.raw_payloads` conserva la respuesta completa, mientras que las 
 ## Seguridad
 
 - Todas las credenciales deben estar en Secret Manager.
+- La administracion local de usuarios, roles y accesos requiere `ADMIN_API_KEY`; esta barrera temporal debe reemplazarse por autenticacion de identidad antes de publicar el sistema.
 - Ningun token de Bitrix debe persistirse en codigo ni archivos versionados.
 - La API debe validar usuario autenticado y permisos en cada endpoint.
 - Las tablas de auditoria deben registrar accesos a informes y acciones administrativas.
