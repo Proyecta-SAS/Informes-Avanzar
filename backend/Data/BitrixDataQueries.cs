@@ -76,7 +76,6 @@ public static class BitrixDataQueries
                 LEFT JOIN bitrix.users u
                     ON u.connection_id = d.connection_id
                     AND u.bitrix_id = d.assigned_by_bitrix_id
-                    AND u.active = true
                 WHERE
                     (
                         p.category_id IN (10, 28)
@@ -143,29 +142,7 @@ public static class BitrixDataQueries
             LEFT JOIN bitrix.users u
                 ON u.connection_id = d.connection_id
                 AND u.bitrix_id = d.assigned_by_bitrix_id
-            WHERE
-                (
-                    p.category_id IN (8, 26)
-                    AND (
-                        snapshot.custom_fields ->> 'UF_CRM_1737654190' = @yearText
-                        OR snapshot.custom_fields ->> 'UF_CRM_1737654190' = CASE @yearText
-                            WHEN '2025' THEN '37058'
-                            WHEN '2026' THEN '37060'
-                            WHEN '2027' THEN '37062'
-                        END
-                    )
-                )
-                OR (
-                    p.category_id IN (10, 28)
-                    AND (
-                        snapshot.custom_fields ->> 'UF_CRM_1737653376' = @yearText
-                        OR snapshot.custom_fields ->> 'UF_CRM_1737653376' = CASE @yearText
-                            WHEN '2024' THEN '37206'
-                            WHEN '2025' THEN '37036'
-                            WHEN '2026' THEN '39138'
-                        END
-                    )
-                )
+            WHERE p.category_id IN (8, 10, 26, 28)
             GROUP BY 1
             ORDER BY advisor;
             """;
@@ -208,7 +185,6 @@ public static class BitrixDataQueries
 
         await using (var command = new NpgsqlCommand(advisorSql, connection))
         {
-            command.Parameters.AddWithValue("yearText", year.ToString(CultureInfo.InvariantCulture));
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {

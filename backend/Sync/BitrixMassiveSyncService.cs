@@ -19,7 +19,20 @@ public sealed class BitrixMassiveSyncService(
             var pipelines = await repository.ListActivePipelinesAsync(cancellationToken);
             var results = new List<SyncResult>();
 
-            foreach (var pipeline in pipelines.OrderBy(pipeline => pipeline.SyncOrder))
+            var reportPriority = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["rch_operativa"] = 10,
+                ["pnnc_operativa"] = 20,
+                ["rch_comercial"] = 30,
+                ["pnnc_comercial"] = 40,
+                ["rch_cartera"] = 50,
+                ["pnnc_cartera"] = 60,
+                ["cuentas_cobro"] = 70
+            };
+
+            foreach (var pipeline in pipelines
+                .OrderBy(pipeline => reportPriority.GetValueOrDefault(pipeline.Slug, pipeline.SyncOrder + 1000))
+                .ThenBy(pipeline => pipeline.SyncOrder))
             {
                 results.Add(await dealSyncService.SyncPipelineDealsAsync(pipeline.Slug, null, cancellationToken));
             }

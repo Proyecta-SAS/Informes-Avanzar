@@ -16,7 +16,16 @@ public sealed class BitrixDealSyncService(
     // Bitrix requires UF_* explicitly; '*' alone only returns standard deal fields.
     // The general commercial report depends on payment, hierarchy and period fields,
     // so every synchronization must preserve the complete custom-field payload.
-    private static readonly string[] DealSummaryFields = ["*", "UF_*"];
+    private static readonly string[] DealSummaryFields =
+    [
+        "*",
+        "UF_*",
+        // Bitrix can omit category-specific fields from UF_*; keep report-critical
+        // fields explicit so period and month filters remain complete.
+        "UF_CRM_1676419915",
+        "UF_CRM_1737653376",
+        "UF_CRM_1737654190"
+    ];
 
     public async Task<SyncResult> SyncPipelineDealsAsync(
         string pipelineSlug,
