@@ -259,6 +259,225 @@ public static class BitrixDataQueries
         return new { year, advisors, stages, departments };
     }
 
+    public static async Task<object> GetDiegoPortfolioCollectionsAsync(
+        int year,
+        NpgsqlDataSource dataSource,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            WITH payment_fields(date_key, value_key) AS (
+                VALUES
+                    ('UF_CRM_1616543199911', 'UF_CRM_1616543235645'),
+                    ('UF_CRM_1616543363164', 'UF_CRM_1616543387444'),
+                    ('UF_CRM_1616543459676', 'UF_CRM_1616543489629'),
+                    ('UF_CRM_1616543556711', 'UF_CRM_1616543576996'),
+                    ('UF_CRM_1616543676428', 'UF_CRM_1616543703340'),
+                    ('UF_CRM_1616543806805', 'UF_CRM_1616543829877'),
+                    ('UF_CRM_1616543903340', 'UF_CRM_1616543924037'),
+                    ('UF_CRM_1709396834305', 'UF_CRM_1709151333092'),
+                    ('UF_CRM_1616544028572', 'UF_CRM_1616544047801'),
+                    ('UF_CRM_1616544121180', 'UF_CRM_1616544143695'),
+                    ('UF_CRM_1676486990987', 'UF_CRM_1676487293788'),
+                    ('UF_CRM_1676487033939', 'UF_CRM_1676487304887')
+            ), payments AS (
+                SELECT
+                    CASE EXTRACT(MONTH FROM (snapshot.custom_fields ->> fields.date_key)::date)::int
+                        WHEN 1 THEN '01 ENE' WHEN 2 THEN '02 FEB' WHEN 3 THEN '03 MAR'
+                        WHEN 4 THEN '04 ABR' WHEN 5 THEN '05 MAY' WHEN 6 THEN '06 JUN'
+                        WHEN 7 THEN '07 JUL' WHEN 8 THEN '08 AGO' WHEN 9 THEN '09 SEP'
+                        WHEN 10 THEN '10 OCT' WHEN 11 THEN '11 NOV' WHEN 12 THEN '12 DIC'
+                    END AS month,
+                    CASE
+                        WHEN p.category_id IN (12, 302) THEN 'LÍNEA RCH'
+                        WHEN p.category_id IN (68, 308) THEN 'LÍNEA INSOLVENCIA'
+                    END AS commercial_line,
+                    CASE
+                        WHEN snapshot.custom_fields ->> fields.value_key LIKE '%,%'
+                        THEN REPLACE(REPLACE(REPLACE(snapshot.custom_fields ->> fields.value_key, '$', ''), '.', ''), ',', '.')::numeric
+                        ELSE NULLIF(REGEXP_REPLACE(snapshot.custom_fields ->> fields.value_key, '[^0-9.-]', '', 'g'), '')::numeric
+                    END AS amount
+                FROM bitrix.deals d
+                JOIN bitrix.pipelines p ON p.id = d.pipeline_id
+                JOIN bitrix.entity_snapshots snapshot
+                    ON snapshot.connection_id = d.connection_id
+                    AND snapshot.entity_type = 'deal'
+                    AND snapshot.bitrix_id = d.bitrix_id
+                    AND snapshot.is_deleted = false
+                CROSS JOIN payment_fields fields
+                WHERE p.category_id IN (12, 68, 302, 308)
+                    AND NULLIF(snapshot.custom_fields ->> fields.date_key, '') IS NOT NULL
+                    AND NULLIF(snapshot.custom_fields ->> fields.value_key, '') IS NOT NULL
+                    AND EXTRACT(YEAR FROM (snapshot.custom_fields ->> fields.date_key)::date) = @year
+            )
+            SELECT month, commercial_line, COALESCE(SUM(amount), 0) AS collected
+            FROM payments
+            WHERE month IS NOT NULL AND amount IS NOT NULL
+            GROUP BY month, commercial_line
+            ORDER BY month, commercial_line;
+            """;
+
+        var items = new List<object>();
+        decimal total = 0;
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("year", year);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var collected = reader.GetDecimal(2);
+            total += collected;
+            items.Add(new
+            {
+                month = reader.GetString(0),
+                commercialLine = reader.GetString(1),
+                collected
+            });
+        }
+
+        return new { year, totalCollected = total, items };
+    }
+
+    public static async Task<object> GetDiegoLeadershipAndCommissionsAsync(
+        int year,
+        NpgsqlDataSource dataSource,
+        CancellationToken cancellationToken)
+    {
+        const string leadershipSql = """
+            WITH RECURSIVE user_departments AS (
+                SELECT DISTINCT
+                    u.connection_id,
+                    u.bitrix_id,
+                    u.full_name,
+                    (jsonb_array_elements_text(payload.payload -> 'UF_DEPARTMENT'))::bigint AS department_id
+                FROM bitrix.users u
+                JOIN bitrix.raw_payloads payload ON payload.id = u.raw_payload_id
+                WHERE u.active = true AND jsonb_typeof(payload.payload -> 'UF_DEPARTMENT') = 'array'
+            ), hierarchy AS (
+                SELECT
+                    ud.connection_id, ud.bitrix_id, ud.full_name,
+                    department.id, department.name, department.parent_id, 1 AS depth
+                FROM user_departments ud
+                JOIN bitrix.departments department ON department.id = ud.department_id
+                UNION ALL
+                SELECT
+                    hierarchy.connection_id, hierarchy.bitrix_id, hierarchy.full_name,
+                    parent.id, parent.name, parent.parent_id, hierarchy.depth + 1
+                FROM hierarchy
+                JOIN bitrix.departments parent ON parent.id = hierarchy.parent_id
+                WHERE hierarchy.depth < 8
+            ), people AS (
+                SELECT
+                    connection_id,
+                    bitrix_id,
+                    full_name,
+                    MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. COOR%') AS coordinator,
+                    MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. LIDER%') AS leader
+                FROM hierarchy
+                GROUP BY connection_id, bitrix_id, full_name
+            ), radicated AS (
+                SELECT
+                    d.connection_id,
+                    d.assigned_by_bitrix_id,
+                    CASE
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '22560' THEN '01 ENE'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '22562' THEN '02 FEB'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39144' THEN '03 MAR'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39146' THEN '04 ABR'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39148' THEN '05 MAY'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39150' THEN '06 JUN'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39152' THEN '07 JUL'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39154' THEN '08 AGO'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39156' THEN '09 SEP'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39158' THEN '10 OCT'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39160' THEN '11 NOV'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39162' THEN '12 DIC'
+                    END AS month,
+                    COALESCE(d.opportunity, 0) AS amount
+                FROM bitrix.deals d
+                JOIN bitrix.pipelines pipeline ON pipeline.id = d.pipeline_id
+                JOIN bitrix.entity_snapshots snapshot
+                    ON snapshot.connection_id = d.connection_id
+                    AND snapshot.entity_type = 'deal'
+                    AND snapshot.bitrix_id = d.bitrix_id
+                    AND snapshot.is_deleted = false
+                WHERE pipeline.category_id IN (10, 28)
+                    AND (
+                        snapshot.custom_fields ->> 'UF_CRM_1737653376' = @yearText
+                        OR snapshot.custom_fields ->> 'UF_CRM_1737653376' = CASE @yearText
+                            WHEN '2024' THEN '37206' WHEN '2025' THEN '37036' WHEN '2026' THEN '39138'
+                        END
+                    )
+            )
+            SELECT
+                radicated.month,
+                COALESCE(people.leader, 'Sin líder') AS leader,
+                COALESCE(people.coordinator, 'Sin coordinador') AS coordinator,
+                COALESCE(SUM(radicated.amount), 0) AS total_achieved
+            FROM radicated
+            LEFT JOIN people
+                ON people.connection_id = radicated.connection_id
+                AND people.bitrix_id = radicated.assigned_by_bitrix_id
+            WHERE radicated.month IS NOT NULL
+            GROUP BY radicated.month, people.leader, people.coordinator
+            ORDER BY total_achieved DESC;
+            """;
+
+        const string commissionsSql = """
+            SELECT
+                TO_CHAR(COALESCE(d.bitrix_created_at, d.created_at), 'MM MON') AS month,
+                COALESCE(NULLIF(u.full_name, ''), d.assigned_by_bitrix_id, 'Sin asesor') AS advisor,
+                COALESCE(SUM(d.opportunity), 0) AS total
+            FROM bitrix.deals d
+            JOIN bitrix.pipelines pipeline ON pipeline.id = d.pipeline_id
+            LEFT JOIN bitrix.pipeline_stages stage
+                ON stage.pipeline_id = pipeline.id AND stage.bitrix_stage_id = d.stage_id
+            LEFT JOIN bitrix.users u
+                ON u.connection_id = d.connection_id AND u.bitrix_id = d.assigned_by_bitrix_id
+            WHERE pipeline.category_id = 72
+                AND UPPER(COALESCE(stage.name, '')) IN ('CUENTA PAGADA CUENTAS DE COBRO', 'VERIFICADO X PAGAR')
+                AND EXTRACT(YEAR FROM COALESCE(d.bitrix_created_at, d.created_at)) = @year
+            GROUP BY 1, 2
+            ORDER BY total DESC;
+            """;
+
+        var leadership = new List<object>();
+        var commissions = new List<object>();
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        await using (var command = new NpgsqlCommand(leadershipSql, connection))
+        {
+            command.Parameters.AddWithValue("yearText", year.ToString(CultureInfo.InvariantCulture));
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                leadership.Add(new
+                {
+                    month = reader.GetString(0),
+                    leader = reader.GetString(1),
+                    coordinator = reader.GetString(2),
+                    totalAchieved = reader.GetDecimal(3)
+                });
+            }
+        }
+
+        await using (var command = new NpgsqlCommand(commissionsSql, connection))
+        {
+            command.Parameters.AddWithValue("year", year);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                commissions.Add(new
+                {
+                    month = reader.GetString(0),
+                    advisor = reader.GetString(1),
+                    total = reader.GetDecimal(2)
+                });
+            }
+        }
+
+        return new { year, leadership, commissions };
+    }
+
     public static async Task<IResult> GetSyncSummaryAsync(
         string pipeline,
         NpgsqlDataSource dataSource,

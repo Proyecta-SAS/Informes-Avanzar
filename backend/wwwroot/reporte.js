@@ -94,13 +94,29 @@ const loadDiegoRadicatedValues = async () => {
       return;
     }
 
+    const months = [...new Set(data.items.map((item) => item.month))]
+      .sort((left, right) => Number.parseInt(left, 10) - Number.parseInt(right, 10));
+    const advisorValues = new Map();
+    data.items.forEach((item) => {
+      if (!advisorValues.has(item.advisor)) advisorValues.set(item.advisor, new Map());
+      const monthlyValues = advisorValues.get(item.advisor);
+      monthlyValues.set(item.month, (monthlyValues.get(item.month) ?? 0) + item.totalAchieved);
+    });
+    const advisors = [...advisorValues.keys()].sort((left, right) => left.localeCompare(right, "es"));
+
     container.innerHTML = `
       <div class="radicated-total"><span>Total alcanzado</span><strong>${currencyFormatter.format(data.totalAchieved)}</strong></div>
-      <div class="radicated-table-wrap">
-        <table class="radicated-table">
-          <thead><tr><th>Mes</th><th>Asesor</th><th>Total alcanzado</th></tr></thead>
-          <tbody>${data.items.map((item) => `
-            <tr><td>${item.month}</td><td>${item.advisor}</td><td>${currencyFormatter.format(item.totalAchieved)}</td></tr>
+      <div class="radicated-table-wrap radicated-matrix-wrap">
+        <table class="radicated-table radicated-matrix">
+          <thead>
+            <tr><th rowspan="2">Asesor</th><th colspan="${months.length}">Total alcanzado</th></tr>
+            <tr>${months.map((month) => `<th data-month="${month.slice(0, 2)}">${month}</th>`).join("")}</tr>
+          </thead>
+          <tbody>${advisors.map((advisor) => `
+            <tr><td>${advisor}</td>${months.map((month) => {
+              const value = advisorValues.get(advisor).get(month);
+              return `<td data-month="${month.slice(0, 2)}">${value ? formatNumber.format(value) : ""}</td>`;
+            }).join("")}</tr>
           `).join("")}</tbody>
         </table>
       </div>`;
@@ -169,6 +185,129 @@ const loadDiegoDashboardData = async () => {
     );
     titles.forEach((title) => replaceBlockPreview(title, content, items.length));
   });
+};
+
+const loadDiegoPortfolioCollections = async () => {
+  const year = document.getElementById("diegoYear").value;
+  const response = await fetch(`/api/reports/fuerza-comercial-diego/cartera-recaudada?year=${encodeURIComponent(year)}`);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const data = await response.json();
+  document.querySelector(".diego-kpis article:nth-child(6) strong").textContent = currencyFormatter.format(data.totalCollected ?? 0);
+  const rows = data.items.map((item) => `<tr><td>${item.month}</td><td>${item.commercialLine}</td><td>${currencyFormatter.format(item.collected)}</td></tr>`);
+  const content = rows.length
+    ? renderDataTable(["Mes", "Línea comercial", "Recaudo"], rows)
+    : `<div class="empty-block"><strong>Sin recaudos para ${data.year}</strong><span>Las pipelines de cartera aún se están sincronizando.</span></div>`;
+  replaceBlockPreview("Cartera recaudada", content, data.items.length);
+};
+
+const loadDiegoLeadershipAndCommissions = async () => {
+  const year = document.getElementById("diegoYear").value;
+  const response = await fetch(`/api/reports/fuerza-comercial-diego/liderazgo-comisiones?year=${encodeURIComponent(year)}`);
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const data = await response.json();
+
+  const leaderRows = data.leadership.map((item) => `<tr><td>${item.month}</td><td>${item.leader}</td><td>${currencyFormatter.format(item.totalAchieved)}</td></tr>`);
+  const coordinatorRows = data.leadership.map((item) => `<tr><td>${item.month}</td><td>${item.coordinator}</td><td>${currencyFormatter.format(item.totalAchieved)}</td></tr>`);
+  const commissionRows = data.commissions.map((item) => `<tr><td>${item.month}</td><td>${item.advisor}</td><td>${currencyFormatter.format(item.total)}</td></tr>`);
+
+  replaceBlockPreview("Valores radicados por líder", renderDataTable(["Mes", "Líder", "Total alcanzado"], leaderRows), leaderRows.length);
+  replaceBlockPreview("Valores radicados por coordinador", renderDataTable(["Mes", "Coordinador", "Total alcanzado"], coordinatorRows), coordinatorRows.length);
+  replaceBlockPreview("Comisiones por asesor", commissionRows.length
+    ? renderDataTable(["Mes", "Asesor", "Comisión"], commissionRows)
+    : `<div class="empty-block"><strong>Sin comisiones para ${data.year}</strong><span>La pipeline Cuentas de Cobro no contiene registros pagados para este periodo.</span></div>`, commissionRows.length);
+};
+
+const normalizeFilterText = (value) => value.trim().toLocaleLowerCase("es-CO");
+
+const collectColumnValues = (headerName) => {
+  const values = new Set();
+  document.querySelectorAll(".diego-block table").forEach((table) => {
+    const headers = [...table.querySelectorAll("thead th")].map((header) => header.textContent.trim());
+    const index = headers.indexOf(headerName);
+    if (index < 0) return;
+    table.querySelectorAll("tbody tr").forEach((row) => {
+      const value = row.children[index]?.textContent.trim();
+      if (value && !value.startsWith("Sin ")) values.add(value);
+    });
+  });
+  return [...values].sort((left, right) => left.localeCompare(right, "es"));
+};
+
+const fillFilterOptions = (id, values) => {
+  const select = document.getElementById(id);
+  const previous = select.value;
+  select.replaceChildren();
+  const allOption = document.createElement("option");
+  allOption.value = "all";
+  allOption.textContent = "Todos";
+  select.append(allOption);
+  values.forEach((value) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = value;
+    select.append(option);
+  });
+  if ([...select.options].some((option) => option.value === previous)) select.value = previous;
+};
+
+const applyDiegoFilters = () => {
+  const filters = {
+    Mes: document.getElementById("diegoMonth").value,
+    "Línea comercial": document.getElementById("diegoLine").value,
+    Asesor: document.getElementById("diegoAdvisor").value,
+    Líder: document.getElementById("diegoLeader").value,
+    Coordinador: document.getElementById("diegoCoordinator").value
+  };
+  const selectedLine = document.getElementById("diegoLine").value;
+  const selectedMonth = document.getElementById("diegoMonth").value;
+
+  document.querySelectorAll(".diego-block").forEach((block) => {
+    const title = normalizeFilterText(block.querySelector("h3")?.textContent ?? "");
+    const belongsToRch = title.includes("rch");
+    const belongsToInsolvency = title.includes("pnnc") || title.includes("insolvencia");
+    block.hidden = (selectedLine === "rch" && belongsToInsolvency)
+      || (selectedLine === "insolvencia" && belongsToRch);
+
+    const table = block.querySelector("table");
+    if (!table) return;
+    if (table.classList.contains("radicated-matrix")) {
+      table.querySelectorAll("[data-month]").forEach((cell) => {
+        cell.hidden = selectedMonth !== "all" && cell.dataset.month !== selectedMonth;
+      });
+    }
+    const headers = [...table.querySelectorAll("thead th")].map((header) => header.textContent.trim());
+    let visibleRows = 0;
+
+    table.querySelectorAll("tbody tr").forEach((row) => {
+      const matches = Object.entries(filters).every(([headerName, selected]) => {
+        if (selected === "all") return true;
+        const index = headers.indexOf(headerName);
+        if (index < 0) return true;
+        const cellValue = row.children[index]?.textContent.trim() ?? "";
+        if (headerName === "Mes") return cellValue.startsWith(selected);
+        if (headerName === "Línea comercial") return normalizeFilterText(cellValue).includes(selected);
+        return normalizeFilterText(cellValue) === normalizeFilterText(selected);
+      });
+      row.hidden = !matches;
+      if (matches) visibleRows += 1;
+    });
+
+    const badge = block.querySelector(".diego-block-title em");
+    if (badge) badge.textContent = `${visibleRows} registros`;
+  });
+};
+
+const setupDiegoFilters = () => {
+  fillFilterOptions("diegoAdvisor", collectColumnValues("Asesor"));
+  fillFilterOptions("diegoLeader", collectColumnValues("Líder"));
+  fillFilterOptions("diegoCoordinator", collectColumnValues("Coordinador"));
+  ["diegoMonth", "diegoLine", "diegoAdvisor", "diegoLeader", "diegoCoordinator"].forEach((id) => {
+    const select = document.getElementById(id);
+    if (select.dataset.bound === "true") return;
+    select.addEventListener("change", applyDiegoFilters);
+    select.dataset.bound = "true";
+  });
+  applyDiegoFilters();
 };
 
 const renderDiegoDashboard = () => {
@@ -260,6 +399,7 @@ const load = async () => {
   setText("reportDescription", current.description);
   setText("reportArea", current.area);
   if (reportId === "fuerza_comercial_diego") {
+    document.querySelector(".compact-hero").hidden = true;
     document.getElementById("standardSummary").hidden = true;
     document.getElementById("standardVisuals").hidden = true;
     document.getElementById("detalle").hidden = true;
@@ -275,9 +415,11 @@ const load = async () => {
       <a href="#etapas"><span>≡</span>Etapas</a>`;
     renderDiegoDashboard();
     document.getElementById("diegoYear").addEventListener("change", async () => {
-      await Promise.all([loadDiegoRadicatedValues(), loadDiegoDashboardData()]);
+      await Promise.all([loadDiegoRadicatedValues(), loadDiegoDashboardData(), loadDiegoPortfolioCollections(), loadDiegoLeadershipAndCommissions()]);
+      setupDiegoFilters();
     });
-    await Promise.all([loadDiegoRadicatedValues(), loadDiegoDashboardData()]);
+    await Promise.all([loadDiegoRadicatedValues(), loadDiegoDashboardData(), loadDiegoPortfolioCollections(), loadDiegoLeadershipAndCommissions()]);
+    setupDiegoFilters();
     return;
   }
   await loadSummary();

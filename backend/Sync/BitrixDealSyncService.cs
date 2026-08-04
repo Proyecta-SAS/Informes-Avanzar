@@ -119,12 +119,16 @@ public sealed class BitrixDealSyncService(
         int start)
     {
         yield return new KeyValuePair<string, string>("filter[CATEGORY_ID]", categoryId.ToString());
+<<<<<<< Updated upstream
         if (!string.IsNullOrWhiteSpace(stageId))
         {
             yield return new KeyValuePair<string, string>("filter[STAGE_ID]", stageId);
         }
 
         yield return new KeyValuePair<string, string>("order[ID]", "ASC");
+=======
+        yield return new KeyValuePair<string, string>("order[ID]", "DESC");
+>>>>>>> Stashed changes
         yield return new KeyValuePair<string, string>("start", start.ToString());
         foreach (var field in DealSummaryFields)
         {

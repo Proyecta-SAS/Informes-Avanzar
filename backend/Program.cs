@@ -1,4 +1,5 @@
 using InformesAvanzar.Api.Bitrix;
+using System.Text.Json;
 using InformesAvanzar.Api.Configuration;
 using InformesAvanzar.Api.Data;
 using InformesAvanzar.Api.Reports;
@@ -156,6 +157,30 @@ app.MapGet("/api/reports/fuerza-comercial-diego/dashboard", async (
         cancellationToken));
 });
 
+app.MapGet("/api/reports/fuerza-comercial-diego/cartera-recaudada", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    var selectedYear = year is >= 2000 and <= 2100 ? year.Value : DateTime.UtcNow.Year;
+    return Results.Ok(await BitrixDataQueries.GetDiegoPortfolioCollectionsAsync(
+        selectedYear,
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/fuerza-comercial-diego/liderazgo-comisiones", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    var selectedYear = year is >= 2000 and <= 2100 ? year.Value : DateTime.UtcNow.Year;
+    return Results.Ok(await BitrixDataQueries.GetDiegoLeadershipAndCommissionsAsync(
+        selectedYear,
+        dataSource,
+        cancellationToken));
+});
+
 app.MapGet("/api/reports/catalog", () => Results.Ok(new[]
 {
     new
@@ -290,6 +315,72 @@ app.MapPost("/api/bitrix/sync/users", async (
 {
     var result = await userSyncService.SyncUsersAsync(cancellationToken);
     return Results.Ok(result);
+});
+
+app.MapPost("/api/bitrix/sync/departments", async (
+    IBitrixClient bitrixClient,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    using var response = await bitrixClient.CallAsync(
+        "department.get",
+        Array.Empty<KeyValuePair<string, string>>(),
+        cancellationToken);
+
+    if (response.RootElement.TryGetProperty("error", out var error))
+    {
+        return Results.BadRequest(new { status = "failed", error = error.GetString() });
+    }
+
+    if (!response.RootElement.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Array)
+    {
+        return Results.Ok(new { status = "succeeded", recordsWritten = 0 });
+    }
+
+    var departments = result.EnumerateArray()
+        .Select(item => new
+        {
+            Id = long.Parse(item.GetProperty("ID").ToString()),
+            Name = item.TryGetProperty("NAME", out var name) ? name.ToString() : "Departamento",
+            ParentId = item.TryGetProperty("PARENT", out var parent)
+                && long.TryParse(parent.ToString(), out var parentId)
+                && parentId > 0 ? parentId : (long?)null,
+            Sort = item.TryGetProperty("SORT", out var sort)
+                && int.TryParse(sort.ToString(), out var sortOrder) ? sortOrder : 0
+        })
+        .ToArray();
+
+    await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+    await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+    foreach (var department in departments)
+    {
+        await using var command = new NpgsqlCommand("""
+            INSERT INTO bitrix.departments (id, name, parent_id, sort_order, updated_at)
+            VALUES (@id, @name, NULL, @sort, now())
+            ON CONFLICT (id) DO UPDATE
+            SET name = EXCLUDED.name,
+                sort_order = EXCLUDED.sort_order,
+                updated_at = now();
+            """, connection, transaction);
+        command.Parameters.AddWithValue("id", department.Id);
+        command.Parameters.AddWithValue("name", department.Name);
+        command.Parameters.AddWithValue("sort", department.Sort);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    foreach (var department in departments)
+    {
+        await using var command = new NpgsqlCommand("""
+            UPDATE bitrix.departments SET parent_id = @parentId WHERE id = @id;
+            """, connection, transaction);
+        command.Parameters.AddWithValue("id", department.Id);
+        command.Parameters.AddWithValue("parentId", (object?)department.ParentId ?? DBNull.Value);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    await transaction.CommitAsync(cancellationToken);
+    return Results.Ok(new { status = "succeeded", recordsWritten = departments.Length });
 });
 
 app.MapPost("/api/bitrix/sync/stages", async (
