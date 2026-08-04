@@ -744,6 +744,49 @@ button:disabled {
   padding: 0 16px 16px;
 }
 
+.database-inventory-total {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.database-inventory-total strong {
+  color: var(--text);
+  font-size: 1.55rem;
+}
+
+.pipeline-stage-detail td {
+  background: #f8fafc;
+  padding: 0;
+}
+
+.pipeline-stage-detail details {
+  padding: 12px 18px 16px;
+}
+
+.pipeline-stage-detail summary {
+  color: var(--navy);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.stage-inventory-table {
+  margin-top: 12px;
+  width: 100%;
+}
+
+.stage-inventory-table th,
+.stage-inventory-table td {
+  background: transparent;
+  padding: 8px 10px;
+}
+
+.stage-unmapped {
+  color: #b45309;
+  font-weight: 700;
+}
+
 .sync-form {
   display: grid;
   grid-template-columns: minmax(220px, 1fr) minmax(280px, 1.4fr) auto;

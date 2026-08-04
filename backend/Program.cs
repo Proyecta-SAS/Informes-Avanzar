@@ -125,6 +125,13 @@ app.MapGet("/api/data/stage-distribution", async (
     return await BitrixDataQueries.GetStageDistributionAsync(pipeline ?? "all", dataSource, cancellationToken);
 });
 
+app.MapGet("/api/data/pipeline-inventory", async (
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return await BitrixDataQueries.GetPipelineInventoryAsync(dataSource, cancellationToken);
+});
+
 app.MapGet("/api/data/responsible-distribution", async (
     string? pipeline,
     NpgsqlDataSource dataSource,
@@ -517,6 +524,19 @@ app.MapPost("/api/bitrix/sync/deals/{pipelineSlug}", async (
     return Results.Ok(result);
 });
 
+app.MapPost("/api/bitrix/sync/deals/{pipelineSlug}/incremental", async (
+    string pipelineSlug,
+    IBitrixDealSyncService dealSyncService,
+    CancellationToken cancellationToken) =>
+{
+    var result = await dealSyncService.SyncPipelineDealsAsync(
+        pipelineSlug,
+        null,
+        cancellationToken,
+        SyncMode.Incremental);
+    return Results.Ok(result);
+});
+
 app.MapPost("/api/bitrix/sync/massive", (
     IServiceScopeFactory scopeFactory) =>
 {
@@ -580,6 +600,41 @@ await PanelAuthentication.EnsureSuperAdminAsync(
     app.Configuration["SUPERADMIN_PASSWORD"] ?? "AvanzarAdmin2026!",
     startupDataSource,
     CancellationToken.None);
+
+var jobMode = builder.Configuration["BITRIX_SYNC_MODE"];
+if (!string.IsNullOrWhiteSpace(jobMode))
+{
+    var mode = jobMode.Trim().ToLowerInvariant() switch
+    {
+        "full" => SyncMode.Full,
+        "incremental" => SyncMode.Incremental,
+        _ => throw new InvalidOperationException(
+            "BITRIX_SYNC_MODE must be either 'full' or 'incremental'.")
+    };
+
+    app.Logger.LogInformation("Starting Bitrix synchronization job in {Mode} mode.", mode);
+    await using var scope = app.Services.CreateAsyncScope();
+    var synchronizer = scope.ServiceProvider.GetRequiredService<IBitrixSynchronizer>();
+    var results = await synchronizer.RunGlobalAsync(mode, CancellationToken.None);
+
+    foreach (var result in results)
+    {
+        app.Logger.LogInformation(
+            "Bitrix job result: {EntityType} {Status}, read {RecordsRead}, wrote {RecordsWritten}, error {ErrorMessage}",
+            result.EntityType,
+            result.Status,
+            result.RecordsRead,
+            result.RecordsWritten,
+            result.ErrorMessage);
+    }
+
+    if (results.Any(result => !string.Equals(result.Status, "succeeded", StringComparison.OrdinalIgnoreCase)))
+    {
+        Environment.ExitCode = 1;
+    }
+
+    return;
+}
 
 app.Run();
 
