@@ -41,7 +41,10 @@ db/
 
 ## Desarrollo local
 
+Copie `.env.example` como `.env` y cambie los valores sensibles antes de iniciar. La administración de usuarios requiere `ADMIN_API_KEY`.
+
 ```bash
+cp .env.example .env
 docker compose up --build
 ```
 
