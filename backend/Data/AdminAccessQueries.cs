@@ -4,6 +4,37 @@ namespace InformesAvanzar.Api.Data;
 
 public static class AdminAccessQueries
 {
+    public static async Task EnsureUserManagementSchemaAsync(NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand("ALTER TABLE auth.users ADD COLUMN IF NOT EXISTS password_hash text;", connection);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public static async Task EnsureReportCatalogAsync(NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+    {
+        const string sql = """
+            INSERT INTO reporting.report_definitions (code, name, description, query_key, status)
+            VALUES
+                ('informe_general_comercial', 'Informe General Comercial', 'Informe consolidado del área comercial.', 'informe_general_comercial', 'published'),
+                ('fuerza_comercial_diego', 'Fuerza Comercial', 'Panel consolidado de la fuerza comercial.', 'fuerza_comercial_diego', 'published'),
+                ('rch_comercial', 'RCH Comercial', 'Negociaciones comerciales RCH.', 'rch_comercial', 'published'),
+                ('rch_operativa', 'RCH Operativa', 'Seguimiento operativo RCH.', 'rch_operativa', 'published'),
+                ('pnnc_comercial', 'PNNC Comercial', 'Negociaciones comerciales PNNC.', 'pnnc_comercial', 'published'),
+                ('pnnc_operativa', 'PNNC Operativa', 'Seguimiento operativo PNNC.', 'pnnc_operativa', 'published')
+            ON CONFLICT (code) DO UPDATE
+            SET name = EXCLUDED.name,
+                description = EXCLUDED.description,
+                query_key = EXCLUDED.query_key,
+                status = EXCLUDED.status,
+                deleted_at = NULL;
+            """;
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public static async Task<object> GetAccessManagementAsync(NpgsqlDataSource dataSource, CancellationToken cancellationToken)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -69,14 +100,15 @@ public static class AdminAccessQueries
         return new { users, roles, permissions, reports };
     }
 
-    public static async Task<Guid> CreateUserAsync(string fullName, string email, Guid? roleId, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+    public static async Task<Guid> CreateUserAsync(string fullName, string email, string password, Guid? roleId, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
     {
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-        const string sql = "INSERT INTO auth.users (full_name, email, status) VALUES (@fullName, lower(@email), 'active') RETURNING id;";
+        const string sql = "INSERT INTO auth.users (full_name, email, password_hash, status) VALUES (@fullName, lower(@email), crypt(@password, gen_salt('bf', 12)), 'active') RETURNING id;";
         await using var command = new NpgsqlCommand(sql, connection, transaction);
         command.Parameters.AddWithValue("fullName", fullName.Trim());
         command.Parameters.AddWithValue("email", email.Trim());
+        command.Parameters.AddWithValue("password", password);
         var userId = (Guid)(await command.ExecuteScalarAsync(cancellationToken) ?? throw new InvalidOperationException("No fue posible crear el usuario."));
         if (roleId is not null)
         {
@@ -87,6 +119,56 @@ public static class AdminAccessQueries
         }
         await transaction.CommitAsync(cancellationToken);
         return userId;
+    }
+
+    public static async Task UpdateUserAsync(Guid userId, string fullName, string email, string status, Guid? roleId, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+    {
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        const string updateSql = "UPDATE auth.users SET full_name = @fullName, email = lower(@email), status = @status WHERE id = @userId AND deleted_at IS NULL;";
+        await using (var command = new NpgsqlCommand(updateSql, connection, transaction))
+        {
+            command.Parameters.AddWithValue("userId", userId);
+            command.Parameters.AddWithValue("fullName", fullName.Trim());
+            command.Parameters.AddWithValue("email", email.Trim());
+            command.Parameters.AddWithValue("status", status is "disabled" or "invited" ? status : "active");
+            if (await command.ExecuteNonQueryAsync(cancellationToken) == 0)
+                throw new InvalidOperationException("El usuario no existe.");
+        }
+        await using (var delete = new NpgsqlCommand("DELETE FROM auth.user_roles WHERE user_id = @userId;", connection, transaction))
+        {
+            delete.Parameters.AddWithValue("userId", userId);
+            await delete.ExecuteNonQueryAsync(cancellationToken);
+        }
+        if (roleId is not null)
+        {
+            await using var insert = new NpgsqlCommand("INSERT INTO auth.user_roles (user_id, role_id) VALUES (@userId, @roleId);", connection, transaction);
+            insert.Parameters.AddWithValue("userId", userId);
+            insert.Parameters.AddWithValue("roleId", roleId.Value);
+            await insert.ExecuteNonQueryAsync(cancellationToken);
+        }
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public static async Task SetUserPasswordAsync(Guid userId, string password, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+    {
+        const string sql = "UPDATE auth.users SET password_hash = crypt(@password, gen_salt('bf', 12)) WHERE id = @userId AND deleted_at IS NULL;";
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("userId", userId);
+        command.Parameters.AddWithValue("password", password);
+        if (await command.ExecuteNonQueryAsync(cancellationToken) == 0)
+            throw new InvalidOperationException("El usuario no existe.");
+    }
+
+    public static async Task DeleteUserAsync(Guid userId, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+    {
+        const string sql = "UPDATE auth.users SET status = 'disabled', deleted_at = now() WHERE id = @userId AND deleted_at IS NULL;";
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("userId", userId);
+        if (await command.ExecuteNonQueryAsync(cancellationToken) == 0)
+            throw new InvalidOperationException("El usuario no existe.");
     }
 
     public static async Task SetUserRoleAsync(Guid userId, Guid? roleId, NpgsqlDataSource dataSource, CancellationToken cancellationToken)

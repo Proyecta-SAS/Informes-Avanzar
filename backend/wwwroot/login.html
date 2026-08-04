@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ingresar | Informes Avanzar</title>
+  <link rel="stylesheet" href="/styles.css?v=20260804-login">
+</head>
+<body class="login-page">
+  <main class="login-shell">
+    <section class="login-brand-panel">
+      <img src="/assets/avanzar-logo-color.svg" alt="Avanzar" class="login-logo">
+      <span class="section-kicker">Panel corporativo</span>
+      <h1>Información que impulsa decisiones.</h1>
+      <p>Consulta indicadores comerciales y operativos de Avanzar desde un único lugar.</p>
+      <div class="login-brand-lines" aria-hidden="true"><span></span><span></span><span></span></div>
+    </section>
+    <section class="login-card">
+      <div class="login-card-logo"><img src="/assets/avanzar-logo-color.svg" alt="Avanzar"></div>
+      <span class="section-kicker">Acceso seguro</span>
+      <h2>Bienvenido</h2>
+      <p>Ingresa tus credenciales para abrir el panel de informes.</p>
+      <form id="panelLoginForm" class="panel-login-form">
+        <label>Correo electrónico<input id="loginEmail" type="email" autocomplete="username" required placeholder="nombre@avanzarsoluciones.com"></label>
+        <label>Contraseña<input id="loginPassword" type="password" autocomplete="current-password" required placeholder="••••••••"></label>
+        <button class="sync-button" type="submit">Ingresar al panel</button>
+      </form>
+      <p id="loginError" class="form-error" hidden></p>
+      <small>Acceso exclusivo para usuarios autorizados.</small>
+    </section>
+  </main>
+  <script src="/login.js?v=20260804"></script>
+</body>
+</html>

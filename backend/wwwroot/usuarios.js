@@ -24,6 +24,7 @@ const renderUsers = (query = "") => {
       <td>${user.email}</td>
       <td><em class="user-status ${user.status}">${user.status === "active" ? "Activo" : user.status}</em></td>
       <td><select class="user-role-select" data-user-id="${user.id}">${roleOptions(user.roleIds[0] ?? "")}</select></td>
+      <td><div class="user-actions"><button class="button-secondary edit-user" data-user-id="${user.id}" type="button">Editar</button><button class="button-danger delete-user" data-user-id="${user.id}" type="button">Eliminar</button></div></td>
     </tr>`).join("");
 };
 
@@ -46,8 +47,6 @@ const renderReportMatrix = () => {
 };
 
 const renderWorkspace = () => {
-  document.getElementById("accessUnlock").hidden = true;
-  document.getElementById("accessWorkspace").hidden = false;
   document.getElementById("newUserRole").innerHTML = roleOptions();
   renderUsers();
   renderPermissionMatrix();
@@ -59,35 +58,50 @@ const loadAccess = async () => {
   renderWorkspace();
 };
 
-document.getElementById("unlockForm").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  adminKey = document.getElementById("adminKey").value.trim();
-  const error = document.getElementById("unlockError");
-  try {
-    await loadAccess();
-    sessionStorage.setItem("adminAccessKey", adminKey);
-    error.hidden = true;
-  } catch (exception) {
-    error.textContent = exception.message;
-    error.hidden = false;
-  }
-});
-
-document.getElementById("lockAccess").addEventListener("click", () => {
-  sessionStorage.removeItem("adminAccessKey");
-  adminKey = "";
-  document.getElementById("accessWorkspace").hidden = true;
-  document.getElementById("accessUnlock").hidden = false;
-});
 document.getElementById("showCreateUser").addEventListener("click", () => document.getElementById("createUserPanel").hidden = false);
 document.getElementById("cancelCreateUser").addEventListener("click", () => document.getElementById("createUserPanel").hidden = true);
 document.getElementById("userSearch").addEventListener("input", (event) => renderUsers(event.target.value));
 
 document.getElementById("createUserForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  await api("/api/admin/users", { method: "POST", body: JSON.stringify({ fullName: document.getElementById("newUserName").value, email: document.getElementById("newUserEmail").value, roleId: document.getElementById("newUserRole").value || null }) });
+  await api("/api/admin/users", { method: "POST", body: JSON.stringify({ fullName: document.getElementById("newUserName").value, email: document.getElementById("newUserEmail").value, password: document.getElementById("newUserPassword").value, roleId: document.getElementById("newUserRole").value || null }) });
   event.target.reset();
   document.getElementById("createUserPanel").hidden = true;
+  await loadAccess();
+});
+
+document.getElementById("accessUserRows").addEventListener("click", async (event) => {
+  const userId = event.target.dataset.userId;
+  if (event.target.matches(".edit-user")) {
+    const user = accessData.users.find((item) => item.id === userId);
+    document.getElementById("editUserId").value = user.id;
+    document.getElementById("editUserName").value = user.fullName;
+    document.getElementById("editUserEmail").value = user.email;
+    document.getElementById("editUserStatus").value = user.status;
+    document.getElementById("editUserRole").innerHTML = roleOptions(user.roleIds[0] ?? "");
+    document.getElementById("editUserPassword").value = "";
+    document.getElementById("editUserPanel").hidden = false;
+    document.getElementById("editUserPanel").scrollIntoView({ behavior: "smooth" });
+  }
+  if (event.target.matches(".delete-user") && confirm("¿Eliminar este usuario? Esta acción desactivará su acceso.")) {
+    await api(`/api/admin/users/${userId}`, { method: "DELETE" });
+    await loadAccess();
+  }
+});
+
+document.getElementById("cancelEditUser").addEventListener("click", () => document.getElementById("editUserPanel").hidden = true);
+document.getElementById("editUserForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const userId = document.getElementById("editUserId").value;
+  await api(`/api/admin/users/${userId}`, { method: "PUT", body: JSON.stringify({
+    fullName: document.getElementById("editUserName").value,
+    email: document.getElementById("editUserEmail").value,
+    status: document.getElementById("editUserStatus").value,
+    roleId: document.getElementById("editUserRole").value || null
+  }) });
+  const password = document.getElementById("editUserPassword").value;
+  if (password) await api(`/api/admin/users/${userId}/password`, { method: "PUT", body: JSON.stringify({ password }) });
+  document.getElementById("editUserPanel").hidden = true;
   await loadAccess();
 });
 
@@ -104,4 +118,6 @@ document.getElementById("reportAccessMatrix").addEventListener("change", async (
   await api(`/api/admin/reports/${event.target.dataset.reportId}/roles/${event.target.dataset.reportRoleId}`, { method: "PUT", body: JSON.stringify({ enabled: event.target.checked, accessLevel: "viewer" }) });
 });
 
-if (adminKey) loadAccess().catch(() => sessionStorage.removeItem("adminAccessKey"));
+loadAccess().catch((exception) => {
+  if (exception.message.includes("401")) location.href = "/login.html?returnUrl=/usuarios.html";
+});

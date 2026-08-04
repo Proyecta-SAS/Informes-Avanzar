@@ -1,4 +1,5 @@
 using InformesAvanzar.Api.Bitrix;
+using InformesAvanzar.Api.Auth;
 using System.Text.Json;
 using InformesAvanzar.Api.Configuration;
 using InformesAvanzar.Api.Data;
@@ -35,8 +36,44 @@ builder.Services.AddScoped<IBitrixMassiveSyncService, BitrixMassiveSyncService>(
 
 var app = builder.Build();
 
+var panelSigningKey = app.Configuration["PANEL_AUTH_SIGNING_KEY"] ?? app.Configuration["ADMIN_API_KEY"] ?? throw new InvalidOperationException("Configure PANEL_AUTH_SIGNING_KEY o ADMIN_API_KEY.");
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value ?? "/";
+    var isPublic = path is "/login.html" or "/login.js" or "/health" or "/health/db" || path.StartsWith("/assets/") || path == "/styles.css" || path == "/api/auth/login";
+    var panelUser = PanelAuthentication.ValidateToken(context.Request.Cookies[PanelAuthentication.CookieName], panelSigningKey);
+    if (panelUser is not null) context.Items["PanelUser"] = panelUser;
+    if (!isPublic && panelUser is null)
+    {
+        if (path.StartsWith("/api/")) { context.Response.StatusCode = StatusCodes.Status401Unauthorized; return; }
+        context.Response.Redirect($"/login.html?returnUrl={Uri.EscapeDataString(path)}");
+        return;
+    }
+    if (path == "/login.html" && panelUser is not null) { context.Response.Redirect("/"); return; }
+    await next();
+});
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
+
+app.MapPost("/api/auth/login", async (JsonElement body, HttpContext context, NpgsqlDataSource dataSource, CancellationToken cancellationToken) =>
+{
+    var email = body.TryGetProperty("email", out var emailProperty) ? emailProperty.GetString() : null;
+    var password = body.TryGetProperty("password", out var passwordProperty) ? passwordProperty.GetString() : null;
+    if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password)) return Results.Unauthorized();
+    var user = await PanelAuthentication.ValidateCredentialsAsync(email, password, dataSource, cancellationToken);
+    if (user is null) return Results.Unauthorized();
+    context.Response.Cookies.Append(PanelAuthentication.CookieName, PanelAuthentication.CreateToken(user, panelSigningKey), new CookieOptions { HttpOnly = true, SameSite = SameSiteMode.Strict, Secure = context.Request.IsHttps, MaxAge = TimeSpan.FromHours(12), Path = "/" });
+    return Results.Ok(new { user.FullName, user.Email, user.RoleCode });
+});
+
+app.MapPost("/api/auth/logout", (HttpContext context) =>
+{
+    context.Response.Cookies.Delete(PanelAuthentication.CookieName, new CookieOptions { Path = "/" });
+    return Results.NoContent();
+});
+
+app.MapGet("/api/auth/me", (HttpContext context) => Results.Ok(context.Items["PanelUser"]));
 
 app.MapGet("/health", (IHostEnvironment environment) => Results.Ok(new
 {
@@ -136,6 +173,7 @@ app.MapGet("/api/data/stages", async (
 var adminApi = app.MapGroup("/api/admin");
 adminApi.AddEndpointFilter(async (context, next) =>
 {
+    if (context.HttpContext.Items["PanelUser"] is PanelUser { RoleCode: "admin" }) return await next(context);
     var configuredKey = app.Configuration["ADMIN_API_KEY"];
     if (string.IsNullOrWhiteSpace(configuredKey))
         return Results.Problem("Configure ADMIN_API_KEY para habilitar la administración de accesos.", statusCode: StatusCodes.Status503ServiceUnavailable);
@@ -152,11 +190,41 @@ adminApi.MapPost("/users", async (JsonElement body, NpgsqlDataSource dataSource,
 {
     var fullName = body.TryGetProperty("fullName", out var nameProperty) ? nameProperty.GetString() : null;
     var email = body.TryGetProperty("email", out var emailProperty) ? emailProperty.GetString() : null;
+    var password = body.TryGetProperty("password", out var passwordProperty) ? passwordProperty.GetString() : null;
+    if (string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        return Results.BadRequest(new { message = "Nombre, correo y contraseña son obligatorios." });
+    if (password.Length < 8)
+        return Results.BadRequest(new { message = "La contraseña debe tener mínimo 8 caracteres." });
+    Guid? roleId = body.TryGetProperty("roleId", out var roleProperty) && Guid.TryParse(roleProperty.GetString(), out var parsedRole) ? parsedRole : null;
+    var userId = await AdminAccessQueries.CreateUserAsync(fullName, email, password, roleId, dataSource, cancellationToken);
+    return Results.Created($"/api/admin/users/{userId}", new { id = userId });
+});
+
+adminApi.MapPut("/users/{userId:guid}", async (Guid userId, JsonElement body, NpgsqlDataSource dataSource, CancellationToken cancellationToken) =>
+{
+    var fullName = body.TryGetProperty("fullName", out var nameProperty) ? nameProperty.GetString() : null;
+    var email = body.TryGetProperty("email", out var emailProperty) ? emailProperty.GetString() : null;
+    var status = body.TryGetProperty("status", out var statusProperty) ? statusProperty.GetString() ?? "active" : "active";
     if (string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(email))
         return Results.BadRequest(new { message = "Nombre y correo son obligatorios." });
     Guid? roleId = body.TryGetProperty("roleId", out var roleProperty) && Guid.TryParse(roleProperty.GetString(), out var parsedRole) ? parsedRole : null;
-    var userId = await AdminAccessQueries.CreateUserAsync(fullName, email, roleId, dataSource, cancellationToken);
-    return Results.Created($"/api/admin/users/{userId}", new { id = userId });
+    await AdminAccessQueries.UpdateUserAsync(userId, fullName, email, status, roleId, dataSource, cancellationToken);
+    return Results.NoContent();
+});
+
+adminApi.MapPut("/users/{userId:guid}/password", async (Guid userId, JsonElement body, NpgsqlDataSource dataSource, CancellationToken cancellationToken) =>
+{
+    var password = body.TryGetProperty("password", out var passwordProperty) ? passwordProperty.GetString() : null;
+    if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
+        return Results.BadRequest(new { message = "La contraseña debe tener mínimo 8 caracteres." });
+    await AdminAccessQueries.SetUserPasswordAsync(userId, password, dataSource, cancellationToken);
+    return Results.NoContent();
+});
+
+adminApi.MapDelete("/users/{userId:guid}", async (Guid userId, NpgsqlDataSource dataSource, CancellationToken cancellationToken) =>
+{
+    await AdminAccessQueries.DeleteUserAsync(userId, dataSource, cancellationToken);
+    return Results.NoContent();
 });
 
 adminApi.MapPut("/users/{userId:guid}/role", async (Guid userId, JsonElement body, NpgsqlDataSource dataSource, CancellationToken cancellationToken) =>
@@ -503,6 +571,15 @@ app.MapGet(
 
         return Results.Ok(new { allowed });
     });
+
+var startupDataSource = app.Services.GetRequiredService<NpgsqlDataSource>();
+await AdminAccessQueries.EnsureUserManagementSchemaAsync(startupDataSource, CancellationToken.None);
+await AdminAccessQueries.EnsureReportCatalogAsync(startupDataSource, CancellationToken.None);
+await PanelAuthentication.EnsureSuperAdminAsync(
+    app.Configuration["SUPERADMIN_EMAIL"] ?? "superadmin@avanzarsoluciones.com",
+    app.Configuration["SUPERADMIN_PASSWORD"] ?? "AvanzarAdmin2026!",
+    startupDataSource,
+    CancellationToken.None);
 
 app.Run();
 

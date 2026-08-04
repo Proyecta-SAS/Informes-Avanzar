@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Usuarios y roles</title>
-  <link rel="stylesheet" href="/styles.css?v=20260804-access-management">
+  <link rel="stylesheet" href="/styles.css?v=20260804-users-table">
 </head>
 <body>
   <aside class="sidebar">
@@ -25,22 +25,10 @@
   <main class="app access-app">
     <header class="topbar">
       <div><h1>Usuarios y roles</h1><p class="access-topbar-copy">Administra quién puede entrar y qué informes puede consultar.</p></div>
-      <div class="topbar-actions"><span class="connection-pill">Acceso protegido</span><button id="lockAccess" class="button-secondary" type="button">Bloquear</button></div>
+      <div class="topbar-actions"><span class="connection-pill">Acceso protegido</span></div>
     </header>
 
-    <section id="accessUnlock" class="access-unlock">
-      <div class="access-unlock-icon">🔐</div>
-      <span class="section-kicker">Administración segura</span>
-      <h2>Permisos de acceso</h2>
-      <p>Ingresa la clave administrativa configurada en <code>ADMIN_API_KEY</code>.</p>
-      <form id="unlockForm" class="access-unlock-form">
-        <label>Clave administrativa<input id="adminKey" type="password" autocomplete="current-password" required></label>
-        <button class="sync-button" type="submit">Abrir administración</button>
-      </form>
-      <p id="unlockError" class="form-error" hidden></p>
-    </section>
-
-    <div id="accessWorkspace" hidden>
+    <div id="accessWorkspace">
       <section class="access-hero">
         <div><span class="section-kicker">Administración</span><h2>Permisos de acceso</h2><p>Gestiona usuarios, roles y acceso a los paneles desde una sola vista.</p></div>
         <button id="showCreateUser" class="sync-button" type="button">+ Crear usuario</button>
@@ -51,6 +39,7 @@
         <form id="createUserForm" class="access-create-form">
           <label>Nombre completo<input id="newUserName" required></label>
           <label>Correo<input id="newUserEmail" type="email" required></label>
+          <label>Contraseña<input id="newUserPassword" type="password" minlength="8" autocomplete="new-password" required></label>
           <label>Rol inicial<select id="newUserRole"><option value="">Sin rol</option></select></label>
           <button class="sync-button" type="submit">Guardar usuario</button>
           <button id="cancelCreateUser" class="button-secondary" type="button">Cancelar</button>
@@ -59,7 +48,21 @@
 
       <section class="access-section">
         <div class="access-section-title"><div><span class="access-section-icon">👥</span><h2>Usuarios</h2></div><label class="access-search">Buscar<input id="userSearch" type="search" placeholder="Nombre o correo"></label></div>
-        <div class="access-table-wrap"><table class="access-users-table"><thead><tr><th>Usuario</th><th>Correo</th><th>Estado</th><th>Rol asignado</th></tr></thead><tbody id="accessUserRows"></tbody></table></div>
+        <div class="access-table-wrap"><table class="access-users-table"><thead><tr><th>Usuario</th><th>Correo</th><th>Estado</th><th>Rol asignado</th><th>Acciones</th></tr></thead><tbody id="accessUserRows"></tbody></table></div>
+      </section>
+
+      <section id="editUserPanel" class="access-create-panel" hidden>
+        <div><h3>Gestionar usuario</h3><p>Actualiza sus datos, estado, rol o contraseña.</p></div>
+        <form id="editUserForm" class="access-create-form">
+          <input id="editUserId" type="hidden">
+          <label>Nombre completo<input id="editUserName" required></label>
+          <label>Correo<input id="editUserEmail" type="email" required></label>
+          <label>Estado<select id="editUserStatus"><option value="active">Activo</option><option value="invited">Invitado</option><option value="disabled">Desactivado</option></select></label>
+          <label>Rol<select id="editUserRole"><option value="">Sin rol</option></select></label>
+          <label>Nueva contraseña<input id="editUserPassword" type="password" minlength="8" autocomplete="new-password" placeholder="Dejar vacía para conservar"></label>
+          <button class="sync-button" type="submit">Guardar cambios</button>
+          <button id="cancelEditUser" class="button-secondary" type="button">Cancelar</button>
+        </form>
       </section>
 
       <section class="access-section">
@@ -73,6 +76,7 @@
       </section>
     </div>
   </main>
-  <script src="/usuarios.js?v=20260804-access-key-trim"></script>
+  <script src="/usuarios.js?v=20260804-direct-access"></script>
+  <script src="/auth-session.js?v=20260804"></script>
 </body>
 </html>
