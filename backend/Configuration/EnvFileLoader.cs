@@ -49,7 +49,11 @@ public static class EnvFileLoader
                 continue;
             }
 
-            Environment.SetEnvironmentVariable(key, value);
+            // Deployment/runtime variables must take precedence over local .env values.
+            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(key)))
+            {
+                Environment.SetEnvironmentVariable(key, value);
+            }
         }
     }
 }

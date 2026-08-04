@@ -9,7 +9,7 @@ const pipelines = [
 let stagesByPipeline = new Map();
 
 const setSyncButtonsDisabled = (disabled) => {
-  document.querySelectorAll("#massiveButton, #stageButton, [data-pipeline-sync]").forEach((button) => {
+  document.querySelectorAll("#incrementalButton, #massiveButton, #stageButton, [data-pipeline-sync], [data-pipeline-incremental]").forEach((button) => {
     const hasNoStage = button.id === "stageButton" && !document.getElementById("stageSelect")?.value;
     button.disabled = disabled || hasNoStage;
   });
@@ -93,7 +93,10 @@ const renderPipelineRows = () => {
         <td><strong>${pipeline.name}</strong></td>
         <td>${pipeline.categoryId}</td>
         <td>${formatNumber.format(stages.length)}</td>
-        <td><button data-pipeline-sync="${pipeline.slug}" type="button">Sincronizar pipeline</button></td>
+        <td>
+          <button data-pipeline-incremental="${pipeline.slug}" type="button">Solo cambios</button>
+          <button data-pipeline-sync="${pipeline.slug}" type="button">Completa</button>
+        </td>
       </tr>
     `;
   }).join("");
@@ -101,6 +104,12 @@ const renderPipelineRows = () => {
   document.querySelectorAll("[data-pipeline-sync]").forEach((button) => {
     button.addEventListener("click", async () => {
       await runSync(`/api/bitrix/sync/deals/${encodeURIComponent(button.dataset.pipelineSync)}`);
+    });
+  });
+
+  document.querySelectorAll("[data-pipeline-incremental]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await runSync(`/api/bitrix/sync/deals/${encodeURIComponent(button.dataset.pipelineIncremental)}/incremental`);
     });
   });
 };
@@ -122,6 +131,10 @@ const runSync = async (url) => {
 
 document.getElementById("massiveButton").addEventListener("click", async () => {
   await runSync("/api/bitrix/sync/massive");
+});
+
+document.getElementById("incrementalButton").addEventListener("click", async () => {
+  await runSync("/api/bitrix/sync/global/incremental");
 });
 
 document.getElementById("stageButton").addEventListener("click", async () => {

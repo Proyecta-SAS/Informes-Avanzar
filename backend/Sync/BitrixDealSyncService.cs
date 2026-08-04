@@ -30,20 +30,33 @@ public sealed class BitrixDealSyncService(
     public async Task<SyncResult> SyncPipelineDealsAsync(
         string pipelineSlug,
         string? stageId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        SyncMode mode = SyncMode.Full)
     {
+        if (mode == SyncMode.Incremental && !string.IsNullOrWhiteSpace(stageId))
+        {
+            throw new InvalidOperationException("La sincronizacion incremental se ejecuta por pipeline, no por etapa.");
+        }
+
         var connectionInfo = await repository.GetActiveConnectionAsync(cancellationToken);
         var pipeline = await GetPipelineAsync(pipelineSlug, cancellationToken);
         var entityType = string.IsNullOrWhiteSpace(stageId)
             ? $"deal:{pipeline.Slug}"
             : $"deal:{pipeline.Slug}:stage:{stageId}";
-        var syncRunId = await repository.StartRunAsync(connectionInfo.Id, entityType, SyncMode.Full, cancellationToken);
+        var syncRunId = await repository.StartRunAsync(connectionInfo.Id, entityType, mode, cancellationToken);
 
         var recordsRead = 0;
         var recordsWritten = 0;
+        DateTimeOffset? since = null;
+        DateTimeOffset? cursor = null;
 
         try
         {
+            since = mode == SyncMode.Incremental
+                ? await GetIncrementalSinceAsync(connectionInfo.Id, pipeline.Id, entityType, cancellationToken)
+                : null;
+            cursor = since;
+
             int? start = 0;
             var visitedStarts = new HashSet<int>();
             await using var dbConnection = await dataSource.OpenConnectionAsync(cancellationToken);
@@ -57,7 +70,7 @@ public sealed class BitrixDealSyncService(
 
                 using var response = await bitrixClient.CallAsync(
                     BitrixMethod.DealList,
-                    BuildDealListParameters(pipeline.CategoryId, stageId, start.Value),
+                    BuildDealListParameters(pipeline.CategoryId, stageId, start.Value, since),
                     cancellationToken);
 
                 var root = response.RootElement;
@@ -82,6 +95,12 @@ public sealed class BitrixDealSyncService(
                     foreach (var deal in result.EnumerateArray())
                     {
                         recordsRead++;
+                        var modifiedAt = GetDateTimeOffset(deal, "DATE_MODIFY");
+                        if (modifiedAt is not null && (cursor is null || modifiedAt > cursor))
+                        {
+                            cursor = modifiedAt;
+                        }
+
                         if (await UpsertDealAsync(
                             dbConnection,
                             transaction,
@@ -98,24 +117,25 @@ public sealed class BitrixDealSyncService(
                     await transaction.CommitAsync(cancellationToken);
                 }
 
-                await repository.UpdateRunProgressAsync(syncRunId, recordsRead, recordsWritten, cancellationToken);
+                await repository.UpdateRunProgressAsync(syncRunId, recordsRead, recordsWritten, cancellationToken, cursor);
                 start = TryGetNext(root);
             }
 
-            await repository.FinishRunAsync(syncRunId, "succeeded", recordsRead, recordsWritten, null, cancellationToken);
-            return new SyncResult(syncRunId, entityType, "full", "succeeded", recordsRead, recordsWritten);
+            await repository.FinishRunAsync(syncRunId, "succeeded", recordsRead, recordsWritten, null, cancellationToken, cursor);
+            return new SyncResult(syncRunId, entityType, ToDbMode(mode), "succeeded", recordsRead, recordsWritten);
         }
         catch (Exception ex)
         {
             await repository.FinishRunAsync(syncRunId, "failed", recordsRead, recordsWritten, ex.Message, cancellationToken);
-            return new SyncResult(syncRunId, entityType, "full", "failed", recordsRead, recordsWritten, ex.Message);
+            return new SyncResult(syncRunId, entityType, ToDbMode(mode), "failed", recordsRead, recordsWritten, ex.Message);
         }
     }
 
     private static IEnumerable<KeyValuePair<string, string>> BuildDealListParameters(
         int categoryId,
         string? stageId,
-        int start)
+        int start,
+        DateTimeOffset? since)
     {
         yield return new KeyValuePair<string, string>("filter[CATEGORY_ID]", categoryId.ToString());
         if (!string.IsNullOrWhiteSpace(stageId))
@@ -123,12 +143,69 @@ public sealed class BitrixDealSyncService(
             yield return new KeyValuePair<string, string>("filter[STAGE_ID]", stageId);
         }
 
+        if (since is not null)
+        {
+            // A small overlap prevents missing records modified at the cursor boundary.
+            yield return new KeyValuePair<string, string>(
+                "filter[>=DATE_MODIFY]",
+                since.Value.Subtract(TimeSpan.FromMinutes(2)).ToString("O", CultureInfo.InvariantCulture));
+        }
+
+        yield return new KeyValuePair<string, string>("order[DATE_MODIFY]", "ASC");
         yield return new KeyValuePair<string, string>("order[ID]", "ASC");
         yield return new KeyValuePair<string, string>("start", start.ToString());
         foreach (var field in DealSummaryFields)
         {
             yield return new KeyValuePair<string, string>("select[]", field);
         }
+    }
+
+    private async Task<DateTimeOffset?> GetIncrementalSinceAsync(
+        Guid connectionId,
+        Guid pipelineId,
+        string entityType,
+        CancellationToken cancellationToken)
+    {
+        var savedCursor = await repository.GetLastSuccessfulCursorAsync(connectionId, entityType, cancellationToken);
+        if (savedCursor is not null)
+        {
+            return savedCursor;
+        }
+
+        const string sql = """
+            SELECT max(bitrix_updated_at)
+            FROM bitrix.deals
+            WHERE connection_id = @connectionId
+              AND pipeline_id = @pipelineId
+              AND EXISTS (
+                  SELECT 1
+                  FROM bitrix.sync_runs
+                  WHERE connection_id = @connectionId
+                    AND entity_type = @entityType
+                    AND mode = 'full'
+                    AND status = 'succeeded'
+                    AND records_read > 0
+              );
+            """;
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("connectionId", connectionId);
+        command.Parameters.AddWithValue("pipelineId", pipelineId);
+        command.Parameters.AddWithValue("entityType", entityType);
+        var value = await command.ExecuteScalarAsync(cancellationToken);
+
+        if (value is DateTimeOffset cursor)
+        {
+            return cursor.ToUniversalTime();
+        }
+        if (value is DateTime dateTime)
+        {
+            return new DateTimeOffset(DateTime.SpecifyKind(dateTime, DateTimeKind.Utc));
+        }
+
+        throw new InvalidOperationException(
+            $"La pipeline '{entityType}' no tiene una carga completa valida. Ejecute primero la carga inicial de esa pipeline.");
     }
 
     private async Task<PipelineRecord> GetPipelineAsync(string slug, CancellationToken cancellationToken)
@@ -513,6 +590,13 @@ public sealed class BitrixDealSyncService(
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
         return Convert.ToHexString(bytes).ToLowerInvariant();
     }
+
+    private static string ToDbMode(SyncMode mode) => mode switch
+    {
+        SyncMode.Full => "full",
+        SyncMode.Incremental => "incremental",
+        _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null)
+    };
 
     private sealed record PipelineRecord(Guid Id, string Slug, string Name, int CategoryId);
 }

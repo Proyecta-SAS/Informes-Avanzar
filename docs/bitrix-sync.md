@@ -59,10 +59,18 @@ La completa reconcilia mejor porque detecta eliminados y deals movidos de catego
 
 ## Sincronizacion incremental
 
-1. Busca la ultima sincronizacion exitosa por pipeline.
-2. Consulta Bitrix con `>=DATE_MODIFY`.
-3. Hace upsert de deals modificados.
-4. Reemplaza datos dependientes solo de esos deals.
+1. Busca `cursor_value` de la ultima sincronizacion exitosa por pipeline.
+2. Si todavia no hay cursor, usa el mayor `bitrix_updated_at` guardado localmente.
+3. Consulta Bitrix con `>=DATE_MODIFY` y un solapamiento de dos minutos.
+4. Hace upsert solo de deals nuevos o modificados.
+5. Actualiza el progreso por pagina y guarda el nuevo cursor al finalizar correctamente.
+
+Endpoints disponibles:
+
+- `POST /api/bitrix/sync/global/incremental`: todas las pipelines activas.
+- `POST /api/bitrix/sync/deals/{pipelineSlug}/incremental`: una pipeline.
+
+Una pipeline sin cursor requiere una carga completa inicial de esa pipeline. Las cargas aisladas por etapa no establecen el punto de partida incremental porque podrían dejar negocios sin consultar.
 
 La incremental no elimina registros que salieron de la pipeline. Por eso debe correr una completa periodica.
 
