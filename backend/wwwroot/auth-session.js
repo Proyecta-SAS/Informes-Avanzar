@@ -47,8 +47,8 @@ if (sessionMenu) {
       <button class="sidebar-group-toggle" type="button" aria-expanded="false"><span class="sidebar-group-icon admin">${icons.admin}</span><span>Gestión</span><b>⌄</b></button>
       <div class="sidebar-group-items">
         <span data-required-permission="bitrix.sync.view">${navLink("/sincronizacion.html", "sync", "Sincronización Bitrix")}</span>
-        <span data-required-permission="users.manage roles.manage reports.manage">${navLink("/usuarios.html", "users", "Usuarios y roles")}</span>
-        <span data-required-permission="users.manage roles.manage">${navLink("/estructura-comercial.html", "structure", "Estructura Comercial")}</span>
+        <span data-superadmin-only>${navLink("/usuarios.html", "users", "Usuarios y roles")}</span>
+        <span data-superadmin-only>${navLink("/estructura-comercial.html", "structure", "Estructura Comercial")}</span>
       </div>
     </div>`;
 
@@ -89,6 +89,9 @@ if (sessionMenu) {
   fetch("/api/auth/me").then((response) => response.ok ? response.json() : Promise.reject()).then((session) => {
     const allowed = new Set(session.accessibleReportCodes ?? []);
     const permissions = new Set(session.permissions ?? []);
+    sessionMenu.querySelectorAll("[data-superadmin-only]").forEach((item) => {
+      if (!session.isSuperAdmin) item.remove();
+    });
     sessionMenu.querySelectorAll("[data-report-code]").forEach((link) => {
       if (!allowed.has(link.dataset.reportCode)) link.remove();
     });

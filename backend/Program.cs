@@ -38,6 +38,7 @@ builder.Services.AddScoped<IBitrixMassiveSyncService, BitrixMassiveSyncService>(
 var app = builder.Build();
 
 var panelSigningKey = app.Configuration["PANEL_AUTH_SIGNING_KEY"] ?? app.Configuration["ADMIN_API_KEY"] ?? throw new InvalidOperationException("Configure PANEL_AUTH_SIGNING_KEY o ADMIN_API_KEY.");
+var superAdminEmail = app.Configuration["SUPERADMIN_EMAIL"] ?? "superadmin@avanzarsoluciones.com";
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value ?? "/";
@@ -56,6 +57,16 @@ app.Use(async (context, next) =>
         return;
     }
     if (path == "/login.html" && panelUser is not null) { context.Response.Redirect("/"); return; }
+
+    var isSuperAdmin = panelUser is not null && string.Equals(panelUser.Email, superAdminEmail, StringComparison.OrdinalIgnoreCase);
+    var isSuperAdminPage = path is "/usuarios.html" or "/estructura-comercial.html";
+    var isSuperAdminApi = path.StartsWith("/api/admin") || path.StartsWith("/api/organization/commercial");
+    if ((isSuperAdminPage || isSuperAdminApi) && !isSuperAdmin)
+    {
+        if (path.StartsWith("/api/")) context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        else context.Response.Redirect("/informes.html?access=denied");
+        return;
+    }
 
     if (path == "/reporte.html" && panelUser is not null && panelUser.RoleCode != "admin")
     {
@@ -123,7 +134,8 @@ app.MapGet("/api/auth/me", async (HttpContext context, IReportAccessService repo
     var blockAccess = user.RoleCode == "admin"
         ? (Configured: false, Blocks: Array.Empty<string>())
         : await OrganizationQueries.GetUserBlockAccessAsync(user.Id, "informe_general_comercial", dataSource, cancellationToken);
-    return Results.Ok(new { user.Id, user.Email, user.FullName, user.RoleCode, accessibleReportCodes = reportCodes, permissions, generalCommercialBlocksConfigured = blockAccess.Configured, generalCommercialBlockCodes = blockAccess.Blocks });
+    var isSuperAdmin = string.Equals(user.Email, superAdminEmail, StringComparison.OrdinalIgnoreCase);
+    return Results.Ok(new { user.Id, user.Email, user.FullName, user.RoleCode, isSuperAdmin, accessibleReportCodes = reportCodes, permissions, generalCommercialBlocksConfigured = blockAccess.Configured, generalCommercialBlockCodes = blockAccess.Blocks });
 });
 app.MapGet("/api/organization/commercial", async (IBitrixClient bitrixClient, NpgsqlDataSource dataSource, CancellationToken cancellationToken) => Results.Ok(await OrganizationQueries.GetCommercialStructureAsync(bitrixClient, dataSource, cancellationToken)));
 app.MapPut("/api/organization/commercial/{departmentId}/settings", async (string departmentId, JsonElement body, NpgsqlDataSource dataSource, CancellationToken cancellationToken) => { var role=body.TryGetProperty("roleLabel",out var roleProperty)?roleProperty.GetString()??"viewer":"viewer";var email=body.TryGetProperty("email",out var emailProperty)?emailProperty.GetString():null;var reports=body.TryGetProperty("visibleReports",out var reportsProperty)&&reportsProperty.ValueKind==JsonValueKind.Array?reportsProperty.EnumerateArray().Select(item=>item.GetString()).Where(item=>!string.IsNullOrWhiteSpace(item)).Cast<string>().ToArray():Array.Empty<string>();var blocks=body.TryGetProperty("visibleBlocks",out var blocksProperty)&&blocksProperty.ValueKind==JsonValueKind.Array?blocksProperty.EnumerateArray().Select(item=>item.GetString()).Where(item=>!string.IsNullOrWhiteSpace(item)).Cast<string>().ToArray():Array.Empty<string>();await OrganizationQueries.SetSettingsAsync(departmentId,email,role,reports,blocks,dataSource,cancellationToken);return Results.NoContent(); });
@@ -235,15 +247,7 @@ adminApi.AddEndpointFilter(async (context, next) =>
 {
     if (context.HttpContext.Items["PanelUser"] is PanelUser panelUser)
     {
-        if (panelUser.RoleCode == "admin") return await next(context);
-        var path = context.HttpContext.Request.Path.Value ?? "";
-        var required = path.Contains("/users/") || path.EndsWith("/users") || path.Contains("/organization/")
-            ? new[] { "users.manage" }
-            : path.Contains("/roles/")
-                ? new[] { "roles.manage" }
-                : new[] { "reports.manage", "roles.manage" };
-        var dataSource = context.HttpContext.RequestServices.GetRequiredService<NpgsqlDataSource>();
-        if (await PanelAuthentication.HasAnyPermissionAsync(panelUser.Id, dataSource, context.HttpContext.RequestAborted, required)) return await next(context);
+        if (string.Equals(panelUser.Email, superAdminEmail, StringComparison.OrdinalIgnoreCase)) return await next(context);
         return Results.Forbid();
     }
     var configuredKey = app.Configuration["ADMIN_API_KEY"];
