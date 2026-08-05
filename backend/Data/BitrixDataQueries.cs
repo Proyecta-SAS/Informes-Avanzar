@@ -817,7 +817,7 @@ public static class BitrixDataQueries
                 )
                 GROUP BY deal.pipeline_id, deal.stage_id
             ), stage_counts AS (
-                SELECT pipeline_id, stage_id, count(*)::integer AS deals_count
+                SELECT deal.pipeline_id, deal.stage_id, count(*)::integer AS deals_count
                 FROM bitrix.deals deal
                 JOIN bitrix.entity_snapshots snapshot
                     ON snapshot.connection_id = deal.connection_id

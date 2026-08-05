@@ -101,20 +101,22 @@ const renderStageInventory = (pipeline) => {
   }
 
   return `
-    <table class="stage-inventory-table">
-      <thead>
-        <tr><th>Etapa</th><th>ID Bitrix</th><th>Negociaciones en BD</th></tr>
-      </thead>
-      <tbody>
-        ${stages.map((stage) => `
-          <tr>
-            <td class="${stage.isUnmapped ? "stage-unmapped" : ""}">${escapeHtml(stage.stageName)}</td>
-            <td>${escapeHtml(stage.stageId ?? "-")}</td>
-            <td>${formatNumber.format(stage.dealsCount ?? 0)}</td>
-          </tr>
-        `).join("")}
-      </tbody>
-    </table>`;
+    <div class="stage-inventory-wrap">
+      <table class="stage-inventory-table">
+        <thead>
+          <tr><th>Etapa</th><th>ID Bitrix</th><th>Negociaciones en BD</th></tr>
+        </thead>
+        <tbody>
+          ${stages.map((stage) => `
+            <tr>
+              <td class="${stage.isUnmapped ? "stage-unmapped" : ""}">${escapeHtml(stage.stageName)}</td>
+              <td><code>${escapeHtml(stage.stageId ?? "-")}</code></td>
+              <td><strong>${formatNumber.format(stage.dealsCount ?? 0)}</strong></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </div>`;
 };
 
 const renderPipelineRows = () => {
@@ -124,12 +126,14 @@ const renderPipelineRows = () => {
         return `
           <tr>
             <td><strong>${escapeHtml(pipeline.name)}</strong><br><small>${escapeHtml(pipeline.slug)}</small></td>
-            <td>${pipeline.categoryId}</td>
+            <td><code>${pipeline.categoryId}</code></td>
             <td><strong>${formatNumber.format(pipeline.dealsCount ?? 0)}</strong></td>
             <td>${formatNumber.format(stages.length)}</td>
             <td>
-              <button data-pipeline-incremental="${escapeHtml(pipeline.slug)}" type="button">Solo cambios</button>
-              <button data-pipeline-sync="${escapeHtml(pipeline.slug)}" type="button">Completa</button>
+              <div class="pipeline-row-actions">
+                <button data-pipeline-incremental="${escapeHtml(pipeline.slug)}" type="button">Solo cambios</button>
+                <button data-pipeline-sync="${escapeHtml(pipeline.slug)}" type="button">Completa</button>
+              </div>
             </td>
           </tr>
           <tr class="pipeline-stage-detail">
