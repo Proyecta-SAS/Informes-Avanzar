@@ -45,7 +45,7 @@ public sealed class BitrixSynchronizer(
         }
         finally
         {
-            await repository.ReleaseGlobalLockAsync(ownerId, cancellationToken);
+            await repository.ReleaseGlobalLockAsync(ownerId, CancellationToken.None);
         }
     }
 

@@ -67,12 +67,12 @@ public sealed class BitrixUserSyncService(
                 start = TryGetNext(root);
             }
 
-            await repository.FinishRunAsync(syncRunId, "succeeded", recordsRead, recordsWritten, null, cancellationToken);
+            await repository.FinishRunAsync(syncRunId, "succeeded", recordsRead, recordsWritten, null, CancellationToken.None);
             return new SyncResult(syncRunId, "user", "full", "succeeded", recordsRead, recordsWritten);
         }
         catch (Exception ex)
         {
-            await repository.FinishRunAsync(syncRunId, "failed", recordsRead, recordsWritten, ex.Message, cancellationToken);
+            await repository.FinishRunAsync(syncRunId, "failed", recordsRead, recordsWritten, ex.Message, CancellationToken.None);
             return new SyncResult(syncRunId, "user", "full", "failed", recordsRead, recordsWritten, ex.Message);
         }
     }

@@ -41,7 +41,7 @@ public sealed class BitrixMassiveSyncService(
         }
         finally
         {
-            await repository.ReleaseGlobalLockAsync(ownerId, cancellationToken);
+            await repository.ReleaseGlobalLockAsync(ownerId, CancellationToken.None);
         }
     }
 }
