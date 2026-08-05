@@ -383,10 +383,14 @@ const renderManagementKpis = (data) => {
     goalsByMonth.set(month, (goalsByMonth.get(month) ?? 0) + Number(item.goal ?? 0));
   });
   const valuesByMonth = new Map();
-  items.forEach((item) => valuesByMonth.set(item.month, (valuesByMonth.get(item.month) ?? 0) + Number(item.totalAchieved ?? 0)));
+  items.forEach((item) => {
+    const month = normalizeMonthLabel(item.month);
+    valuesByMonth.set(month, (valuesByMonth.get(month) ?? 0) + Number(item.totalAchieved ?? 0));
+  });
   const annualRate = annualGoal ? annual / annualGoal : 0;
+  const fallbackMonthlyGoal = annualGoal ? annualGoal / 12 : 0;
   const monthlyRate = [...valuesByMonth.entries()].reduce((sum, [month, value]) => {
-    const goal = goalsByMonth.get(month) ?? 0;
+    const goal = goalsByMonth.get(month) ?? fallbackMonthlyGoal;
     return sum + (goal ? value / goal : 0);
   }, 0);
   const cards = [
