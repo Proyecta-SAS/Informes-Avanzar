@@ -71,15 +71,6 @@ public sealed class BitrixSyncRepository(NpgsqlDataSource dataSource) : IBitrixS
 
     public async Task<Guid> StartRunAsync(Guid connectionId, string entityType, SyncMode mode, CancellationToken cancellationToken)
     {
-        const string guardSql = """
-            UPDATE bitrix.sync_runs
-            SET status = 'failed',
-                finished_at = now(),
-                error_message = 'Sync interrumpida o sin cierre automatico.'
-            WHERE status = 'running'
-              AND created_at < now() - interval '2 hours';
-            """;
-
         const string activeRunSql = """
             SELECT entity_type
             FROM bitrix.sync_runs
@@ -97,10 +88,7 @@ public sealed class BitrixSyncRepository(NpgsqlDataSource dataSource) : IBitrixS
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
-        await using (var guardCommand = new NpgsqlCommand(guardSql, connection, transaction))
-        {
-            await guardCommand.ExecuteNonQueryAsync(cancellationToken);
-        }
+        await RecoverStaleRunsAsync(connection, transaction, TimeSpan.FromHours(2), cancellationToken);
 
         await using (var activeCommand = new NpgsqlCommand(activeRunSql, connection, transaction))
         {
@@ -210,7 +198,21 @@ public sealed class BitrixSyncRepository(NpgsqlDataSource dataSource) : IBitrixS
 
     public async Task<bool> TryAcquireGlobalLockAsync(string ownerId, TimeSpan ttl, CancellationToken cancellationToken)
     {
-        const string sql = """
+        const string cleanupLockSql = """
+            DELETE FROM bitrix.sync_locks
+            WHERE lock_key = 'sync_global'
+              AND (
+                  expires_at < now()
+                  OR NOT EXISTS (
+                      SELECT 1
+                      FROM bitrix.sync_runs
+                      WHERE status = 'running'
+                        AND updated_at >= now() - @staleAfter
+                  )
+              );
+            """;
+
+        const string acquireSql = """
             INSERT INTO bitrix.sync_locks (lock_key, owner_id, expires_at)
             VALUES ('sync_global', @ownerId, now() + @ttl)
             ON CONFLICT (lock_key) DO UPDATE
@@ -222,11 +224,23 @@ public sealed class BitrixSyncRepository(NpgsqlDataSource dataSource) : IBitrixS
             """;
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
-        await using var command = new NpgsqlCommand(sql, connection);
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+
+        var staleAfter = TimeSpan.FromHours(2);
+        await RecoverStaleRunsAsync(connection, transaction, staleAfter, cancellationToken);
+
+        await using (var cleanupCommand = new NpgsqlCommand(cleanupLockSql, connection, transaction))
+        {
+            cleanupCommand.Parameters.AddWithValue("staleAfter", staleAfter);
+            await cleanupCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await using var command = new NpgsqlCommand(acquireSql, connection, transaction);
         command.Parameters.AddWithValue("ownerId", ownerId);
         command.Parameters.AddWithValue("ttl", ttl);
 
         var result = await command.ExecuteScalarAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return result is not null;
     }
 
@@ -246,4 +260,24 @@ public sealed class BitrixSyncRepository(NpgsqlDataSource dataSource) : IBitrixS
         SyncMode.Incremental => "incremental",
         _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, null)
     };
+
+    private static async Task RecoverStaleRunsAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        TimeSpan staleAfter,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            UPDATE bitrix.sync_runs
+            SET status = 'failed',
+                finished_at = now(),
+                error_message = 'Sync interrumpida o sin cierre automatico.'
+            WHERE status = 'running'
+              AND updated_at < now() - @staleAfter;
+            """;
+
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue("staleAfter", staleAfter);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
 }

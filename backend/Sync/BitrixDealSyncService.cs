@@ -57,78 +57,251 @@ public sealed class BitrixDealSyncService(
                 : null;
             cursor = since;
 
-            int? start = 0;
-            var visitedStarts = new HashSet<int>();
             await using var dbConnection = await dataSource.OpenConnectionAsync(cancellationToken);
+            var firstPage = await FetchDealListPageAsync(pipeline.CategoryId, stageId, 0, since, cancellationToken);
+            cursor = await ProcessDealPageAsync(
+                dbConnection,
+                connectionInfo.Id,
+                pipeline.Id,
+                syncRunId,
+                firstPage.Result,
+                recordsRead,
+                recordsWritten,
+                cursor,
+                cancellationToken,
+                progress => (recordsRead, recordsWritten, cursor) = progress);
 
-            while (start is not null)
+            await repository.UpdateRunProgressAsync(syncRunId, recordsRead, recordsWritten, cancellationToken, cursor);
+
+            if (firstPage.Total is not null)
             {
-                if (!visitedStarts.Add(start.Value))
+                foreach (var chunk in GetDealListPageStarts(firstPage.Next, firstPage.Total.Value).Chunk(50))
                 {
-                    break;
-                }
-
-                using var response = await bitrixClient.CallAsync(
-                    BitrixMethod.DealList,
-                    BuildDealListParameters(pipeline.CategoryId, stageId, start.Value, since),
-                    cancellationToken);
-
-                var root = response.RootElement;
-
-                if (root.TryGetProperty("error", out var error))
-                {
-                    throw new InvalidOperationException(error.GetString());
-                }
-
-                if (!root.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Array)
-                {
-                    break;
-                }
-
-                if (result.GetArrayLength() == 0)
-                {
-                    break;
-                }
-
-                await using (var transaction = await dbConnection.BeginTransactionAsync(cancellationToken))
-                {
-                    foreach (var deal in result.EnumerateArray())
+                    foreach (var page in await FetchDealListPageBatchAsync(
+                        pipeline.CategoryId,
+                        stageId,
+                        chunk,
+                        since,
+                        cancellationToken))
                     {
-                        recordsRead++;
-                        var modifiedAt = GetDateTimeOffset(deal, "DATE_MODIFY");
-                        if (modifiedAt is not null && (cursor is null || modifiedAt > cursor))
-                        {
-                            cursor = modifiedAt;
-                        }
-
-                        if (await UpsertDealAsync(
+                        cursor = await ProcessDealPageAsync(
                             dbConnection,
-                            transaction,
                             connectionInfo.Id,
                             pipeline.Id,
                             syncRunId,
-                            deal,
-                            cancellationToken))
-                        {
-                            recordsWritten++;
-                        }
+                            page,
+                            recordsRead,
+                            recordsWritten,
+                            cursor,
+                            cancellationToken,
+                            progress => (recordsRead, recordsWritten, cursor) = progress);
+
+                        await repository.UpdateRunProgressAsync(syncRunId, recordsRead, recordsWritten, cancellationToken, cursor);
+                    }
+                }
+            }
+            else
+            {
+                var start = firstPage.Next;
+                var visitedStarts = new HashSet<int>();
+                while (start is not null && visitedStarts.Add(start.Value))
+                {
+                    var page = await FetchDealListPageAsync(pipeline.CategoryId, stageId, start.Value, since, cancellationToken);
+                    if (page.Result.GetArrayLength() == 0)
+                    {
+                        break;
                     }
 
-                    await transaction.CommitAsync(cancellationToken);
-                }
+                    cursor = await ProcessDealPageAsync(
+                        dbConnection,
+                        connectionInfo.Id,
+                        pipeline.Id,
+                        syncRunId,
+                        page.Result,
+                        recordsRead,
+                        recordsWritten,
+                        cursor,
+                        cancellationToken,
+                        progress => (recordsRead, recordsWritten, cursor) = progress);
 
-                await repository.UpdateRunProgressAsync(syncRunId, recordsRead, recordsWritten, cancellationToken, cursor);
-                start = TryGetNext(root);
+                    await repository.UpdateRunProgressAsync(syncRunId, recordsRead, recordsWritten, cancellationToken, cursor);
+                    start = page.Next;
+                }
             }
 
-            await repository.FinishRunAsync(syncRunId, "succeeded", recordsRead, recordsWritten, null, cancellationToken, cursor);
+            await repository.FinishRunAsync(syncRunId, "succeeded", recordsRead, recordsWritten, null, CancellationToken.None, cursor);
             return new SyncResult(syncRunId, entityType, ToDbMode(mode), "succeeded", recordsRead, recordsWritten);
         }
         catch (Exception ex)
         {
-            await repository.FinishRunAsync(syncRunId, "failed", recordsRead, recordsWritten, ex.Message, cancellationToken);
+            await repository.FinishRunAsync(syncRunId, "failed", recordsRead, recordsWritten, ex.Message, CancellationToken.None);
             return new SyncResult(syncRunId, entityType, ToDbMode(mode), "failed", recordsRead, recordsWritten, ex.Message);
         }
+    }
+
+    private async Task<DealListPage> FetchDealListPageAsync(
+        int categoryId,
+        string? stageId,
+        int start,
+        DateTimeOffset? since,
+        CancellationToken cancellationToken)
+    {
+        using var response = await bitrixClient.CallAsync(
+            BitrixMethod.DealList,
+            BuildDealListParameters(categoryId, stageId, start, since),
+            cancellationToken);
+
+        var root = response.RootElement;
+
+        if (root.TryGetProperty("error", out var error))
+        {
+            throw new InvalidOperationException(error.GetString());
+        }
+
+        if (!root.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Array)
+        {
+            return new DealListPage(JsonDocument.Parse("[]").RootElement.Clone(), null, null);
+        }
+
+        return new DealListPage(result.Clone(), TryGetNext(root), TryGetTotal(root));
+    }
+
+    private async Task<IReadOnlyList<JsonElement>> FetchDealListPageBatchAsync(
+        int categoryId,
+        string? stageId,
+        int[] starts,
+        DateTimeOffset? since,
+        CancellationToken cancellationToken)
+    {
+        if (starts.Length == 0)
+        {
+            return Array.Empty<JsonElement>();
+        }
+
+        var pages = new List<JsonElement>();
+        var batchParameters = starts.Select(start =>
+            new KeyValuePair<string, string>(
+                $"cmd[deal_{start}]",
+                BuildBatchCommand(BitrixMethod.DealList, BuildDealListParameters(categoryId, stageId, start, since))));
+
+        using var response = await bitrixClient.CallAsync(BitrixMethod.Batch, batchParameters, cancellationToken);
+        var root = response.RootElement;
+        if (root.TryGetProperty("error", out var error))
+        {
+            throw new InvalidOperationException(error.GetString());
+        }
+
+        if (!root.TryGetProperty("result", out var batchResult))
+        {
+            return pages;
+        }
+
+        if (batchResult.TryGetProperty("result_error", out var resultErrors) &&
+            resultErrors.ValueKind == JsonValueKind.Object &&
+            resultErrors.EnumerateObject().Any())
+        {
+            var firstError = resultErrors.EnumerateObject().First();
+            throw new InvalidOperationException($"Bitrix batch error in {firstError.Name}: {firstError.Value}");
+        }
+
+        if (batchResult.TryGetProperty("result", out var results) && results.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var start in starts)
+            {
+                if (results.TryGetProperty($"deal_{start}", out var page) && page.ValueKind == JsonValueKind.Array)
+                {
+                    pages.Add(page.Clone());
+                }
+            }
+        }
+
+        return pages;
+    }
+
+    private static IEnumerable<int> GetDealListPageStarts(int? firstStart, int total)
+    {
+        const int bitrixPageSize = 50;
+        if (firstStart is null || firstStart.Value >= total)
+        {
+            yield break;
+        }
+
+        for (var start = firstStart.Value; start < total; start += bitrixPageSize)
+        {
+            yield return start;
+        }
+    }
+
+    private async Task<DateTimeOffset?> ProcessDealPageAsync(
+        NpgsqlConnection dbConnection,
+        Guid connectionId,
+        Guid pipelineId,
+        Guid syncRunId,
+        JsonElement result,
+        int recordsRead,
+        int recordsWritten,
+        DateTimeOffset? cursor,
+        CancellationToken cancellationToken,
+        Action<(int RecordsRead, int RecordsWritten, DateTimeOffset? Cursor)> setProgress)
+    {
+        if (result.ValueKind != JsonValueKind.Array || result.GetArrayLength() == 0)
+        {
+            setProgress((recordsRead, recordsWritten, cursor));
+            return cursor;
+        }
+
+        await using var transaction = await dbConnection.BeginTransactionAsync(cancellationToken);
+        var currentHashes = await LoadCurrentDealHashesAsync(
+            dbConnection,
+            transaction,
+            connectionId,
+            result.EnumerateArray()
+                .Select(deal => GetString(deal, "ID"))
+                .Where(bitrixId => !string.IsNullOrWhiteSpace(bitrixId))
+                .Cast<string>()
+                .Distinct(StringComparer.Ordinal)
+                .ToArray(),
+            cancellationToken);
+
+        foreach (var deal in result.EnumerateArray())
+        {
+            recordsRead++;
+            var bitrixId = GetString(deal, "ID")
+                ?? throw new InvalidOperationException("Bitrix deal without ID.");
+            var modifiedAt = GetDateTimeOffset(deal, "DATE_MODIFY");
+            if (modifiedAt is not null && (cursor is null || modifiedAt > cursor))
+            {
+                cursor = modifiedAt;
+            }
+
+            if (await UpsertDealAsync(
+                dbConnection,
+                transaction,
+                connectionId,
+                pipelineId,
+                syncRunId,
+                deal,
+                bitrixId,
+                currentHashes.GetValueOrDefault(bitrixId),
+                cancellationToken))
+            {
+                recordsWritten++;
+            }
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        setProgress((recordsRead, recordsWritten, cursor));
+        return cursor;
+    }
+
+    private static string BuildBatchCommand(string method, IEnumerable<KeyValuePair<string, string>> parameters)
+    {
+        var query = string.Join(
+            "&",
+            parameters.Select(parameter =>
+                $"{Uri.EscapeDataString(parameter.Key)}={Uri.EscapeDataString(parameter.Value)}"));
+
+        return $"{method}?{query}";
     }
 
     private static IEnumerable<KeyValuePair<string, string>> BuildDealListParameters(
@@ -241,16 +414,16 @@ public sealed class BitrixDealSyncService(
         Guid pipelineId,
         Guid syncRunId,
         JsonElement deal,
+        string bitrixId,
+        string? currentHash,
         CancellationToken cancellationToken)
     {
-        var bitrixId = GetString(deal, "ID")
-            ?? throw new InvalidOperationException("Bitrix deal without ID.");
         var payload = SanitizeJsonForPostgres(JsonSerializer.Serialize(deal));
         var hash = Sha256(payload);
         var customFields = ExtractCustomFields(deal);
         var coreData = ExtractCoreData(deal);
 
-        if (await DealPayloadIsUnchangedAsync(connection, transaction, connectionId, bitrixId, hash, cancellationToken))
+        if (string.Equals(currentHash, hash, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
@@ -291,31 +464,40 @@ public sealed class BitrixDealSyncService(
         return true;
     }
 
-    private static async Task<bool> DealPayloadIsUnchangedAsync(
+    private static async Task<IReadOnlyDictionary<string, string>> LoadCurrentDealHashesAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
         Guid connectionId,
-        string bitrixId,
-        string hash,
+        string[] bitrixIds,
         CancellationToken cancellationToken)
     {
+        if (bitrixIds.Length == 0)
+        {
+            return new Dictionary<string, string>();
+        }
+
         const string sql = """
-            SELECT rp.payload_hash
+            SELECT es.bitrix_id, rp.payload_hash
             FROM bitrix.entity_snapshots es
             JOIN bitrix.raw_payloads rp ON rp.id = es.raw_payload_id
             WHERE es.connection_id = @connectionId
               AND es.entity_type = 'deal'
-              AND es.bitrix_id = @bitrixId
-              AND es.is_deleted = false
-            LIMIT 1;
+              AND es.bitrix_id = ANY(@bitrixIds)
+              AND es.is_deleted = false;
             """;
 
         await using var command = new NpgsqlCommand(sql, connection, transaction);
         command.Parameters.AddWithValue("connectionId", connectionId);
-        command.Parameters.AddWithValue("bitrixId", bitrixId);
+        command.Parameters.AddWithValue("bitrixIds", bitrixIds);
 
-        var currentHash = (string?)await command.ExecuteScalarAsync(cancellationToken);
-        return string.Equals(currentHash, hash, StringComparison.OrdinalIgnoreCase);
+        var hashes = new Dictionary<string, string>(StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            hashes[reader.GetString(0)] = reader.GetString(1);
+        }
+
+        return hashes;
     }
 
     private static async Task<Guid> InsertRawPayloadAsync(
@@ -585,6 +767,26 @@ public sealed class BitrixDealSyncService(
         return null;
     }
 
+    private static int? TryGetTotal(JsonElement root)
+    {
+        if (!root.TryGetProperty("total", out var total))
+        {
+            return null;
+        }
+
+        if (total.ValueKind == JsonValueKind.Number && total.TryGetInt32(out var totalNumber))
+        {
+            return totalNumber;
+        }
+
+        if (total.ValueKind == JsonValueKind.String && int.TryParse(total.GetString(), out var totalStringNumber))
+        {
+            return totalStringNumber;
+        }
+
+        return null;
+    }
+
     private static string Sha256(string value)
     {
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value));
@@ -599,4 +801,5 @@ public sealed class BitrixDealSyncService(
     };
 
     private sealed record PipelineRecord(Guid Id, string Slug, string Name, int CategoryId);
+    private sealed record DealListPage(JsonElement Result, int? Next, int? Total);
 }
