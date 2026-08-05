@@ -720,7 +720,16 @@ app.MapGet(
 var startupDataSource = app.Services.GetRequiredService<NpgsqlDataSource>();
 await AdminAccessQueries.EnsureUserManagementSchemaAsync(startupDataSource, CancellationToken.None);
 await AdminAccessQueries.EnsureReportCatalogAsync(startupDataSource, CancellationToken.None);
-await OrganizationQueries.EnsureSchemaAsync(startupDataSource, CancellationToken.None);
+try
+{
+    await OrganizationQueries.EnsureSchemaAsync(startupDataSource, CancellationToken.None);
+}
+catch (Exception exception)
+{
+    app.Logger.LogError(
+        exception,
+        "The commercial organization schema could not be updated during startup. The panel will continue starting.");
+}
 await PanelAuthentication.EnsureSuperAdminAsync(
     app.Configuration["SUPERADMIN_EMAIL"] ?? "superadmin@avanzarsoluciones.com",
     app.Configuration["SUPERADMIN_PASSWORD"] ?? "AvanzarAdmin2026!",
