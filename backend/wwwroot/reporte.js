@@ -717,6 +717,22 @@ const setupDiegoFilters = () => {
   applyDiegoFilters();
 };
 
+const clearDiegoFilters = async () => {
+  const year = document.getElementById("diegoYear");
+  const yearChanged = year.value !== "2026";
+  year.value = "2026";
+  document.getElementById("diegoMonth").value = "all";
+  document.getElementById("diegoLine").value = "all";
+  document.getElementById("diegoCoordinator").value = "all";
+  document.getElementById("diegoLeader").value = "all";
+  document.getElementById("diegoAdvisor").value = "all";
+  document.getElementById("diegoPendingLeader").value = "all";
+  if (yearChanged) {
+    await Promise.all([loadDiegoRadicatedValues(), loadDiegoDashboardData(), loadDiegoPortfolioCollections(), loadDiegoLeadershipAndCommissions()]);
+  }
+  setupDiegoFilters();
+};
+
 const renderDiegoDashboard = () => {
   const sourceSections = reportId === "informe_general_comercial" ? [...diegoSections, generalManagementSection] : diegoSections;
   const sections = sourceSections.map((section) => {
@@ -836,6 +852,7 @@ const load = async () => {
     }
     renderDiegoDashboard();
     await loadDiegoFilterHierarchy();
+    document.getElementById("clearDiegoFilters").addEventListener("click", clearDiegoFilters);
     document.getElementById("diegoYear").addEventListener("change", async () => {
       await Promise.all([loadDiegoRadicatedValues(), loadDiegoDashboardData(), loadDiegoPortfolioCollections(), loadDiegoLeadershipAndCommissions()]);
       setupDiegoFilters();

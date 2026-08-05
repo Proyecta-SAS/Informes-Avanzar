@@ -103,6 +103,7 @@
         <label>Líder<select id="diegoLeader"><option value="all">Todos</option></select></label>
         <label>Coordinador<select id="diegoCoordinator"><option value="all">Todos</option></select></label>
         <label id="pendingLeaderFilter" hidden>Pendiente líder comercial<select id="diegoPendingLeader"><option value="all">Todos</option><option value="pending">Pendiente</option><option value="resolved">Sin pendiente</option></select></label>
+        <button id="clearDiegoFilters" class="clear-report-filters" type="button"><span>↺</span> Limpiar filtros</button>
       </section>
 
       <div id="diegoSections"></div>
@@ -133,7 +134,7 @@
     </section>
   </main>
 
-  <script src="/reporte.js?v=20260805-filter-results"></script>
+  <script src="/reporte.js?v=20260805-clear-filters"></script>
   <script src="/auth-session.js?v=20260805-area-blocks"></script>
 </body>
 </html>
