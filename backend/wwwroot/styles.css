@@ -1148,15 +1148,17 @@ tbody tr:hover {
 
 .diego-filters {
   display: grid;
-  grid-template-columns: 1.4fr repeat(6, minmax(120px, 1fr));
-  gap: 12px;
-  align-items: end;
+  gap: 18px;
   border: 1px solid var(--line);
   border-radius: 18px;
   background: var(--surface);
   padding: 18px;
   box-shadow: 0 8px 24px rgba(31, 55, 91, 0.07);
 }
+
+.filter-panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; border-bottom: 1px solid #e8edf3; padding-bottom: 15px; }
+.filter-panel-heading > div { min-width: 0; }
+.filter-controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px; align-items: end; }
 
 .filter-title { display: block; color: var(--navy); font-size: 13px; font-weight: 950; letter-spacing: .04em; text-transform: uppercase; }
 
@@ -1188,13 +1190,18 @@ tbody tr:hover {
 
 .diego-filters select:hover { border-color: #a9b7ca; background-color: #fff; }
 .diego-filters select:focus { outline: none; border-color: #8d2944; box-shadow: 0 0 0 3px rgba(169, 22, 50, .1); background-color: #fff; }
-.clear-report-filters { display: inline-flex; height: 42px; align-items: center; justify-content: center; gap: 7px; border: 1px solid #d8b9c2; border-radius: 10px; background: #fff8fa; color: #9f1832; padding: 0 14px; font-size: 12px; font-weight: 900; white-space: nowrap; cursor: pointer; transition: background .18s ease, border-color .18s ease, transform .18s ease; }
+.clear-report-filters { display: inline-flex; min-width: 150px; height: 40px; align-items: center; justify-content: center; gap: 7px; border: 1px solid #d8b9c2; border-radius: 10px; background: #fff8fa; color: #9f1832; padding: 0 15px; font-size: 12px; font-weight: 900; white-space: nowrap; cursor: pointer; transition: background .18s ease, border-color .18s ease, transform .18s ease; }
 .clear-report-filters:hover { border-color: #b21b38; background: #fff; transform: translateY(-1px); }
 .clear-report-filters:focus-visible { outline: 3px solid rgba(169, 22, 50, .14); outline-offset: 2px; }
 .clear-report-filters span { font-size: 17px; line-height: 1; }
-.general-commercial-report .diego-filters { grid-template-columns: 220px repeat(5, minmax(135px, 1fr)); }
 .general-commercial-report .diego-filters .filter-title::after { content: " · Informe general"; color: #8d2944; }
 .diego-filters [hidden] { display: none !important; }
+
+@media (max-width: 700px) {
+  .filter-panel-heading { align-items: stretch; flex-direction: column; }
+  .clear-report-filters { width: 100%; }
+  .filter-controls { grid-template-columns: 1fr; }
+}
 
 .diego-kpis {
   display: grid;

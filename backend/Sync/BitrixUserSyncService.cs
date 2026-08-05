@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using InformesAvanzar.Api.Bitrix;
+using InformesAvanzar.Api.Data;
 using Npgsql;
 using NpgsqlTypes;
 
@@ -134,7 +135,8 @@ public sealed class BitrixUserSyncService(
         await using var command = new NpgsqlCommand(upsertUserSql, connection, transaction);
         command.Parameters.AddWithValue("connectionId", connectionId);
         command.Parameters.AddWithValue("bitrixId", bitrixId);
-        command.Parameters.AddWithValue("email", (object?)GetString(user, "EMAIL") ?? DBNull.Value);
+        var email = KnownBitrixCorrections.ResolveUserEmail(bitrixId, GetString(user, "EMAIL"));
+        command.Parameters.AddWithValue("email", (object?)email ?? DBNull.Value);
         command.Parameters.AddWithValue("fullName", BuildFullName(user));
         command.Parameters.AddWithValue("department", (object?)GetString(user, "WORK_DEPARTMENT") ?? DBNull.Value);
         command.Parameters.AddWithValue("active", GetString(user, "ACTIVE") != "N");

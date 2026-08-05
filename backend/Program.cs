@@ -727,6 +727,7 @@ app.MapGet(
 
 var startupDataSource = app.Services.GetRequiredService<NpgsqlDataSource>();
 await BitrixDataQueries.EnsureManagementPipelinesAsync(startupDataSource, CancellationToken.None);
+await KnownBitrixCorrections.ApplyAsync(startupDataSource, CancellationToken.None);
 await AdminAccessQueries.EnsureUserManagementSchemaAsync(startupDataSource, CancellationToken.None);
 await AdminAccessQueries.EnsureReportCatalogAsync(startupDataSource, CancellationToken.None);
 try
