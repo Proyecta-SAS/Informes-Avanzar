@@ -13,6 +13,9 @@ public sealed class BitrixDealSyncService(
     IBitrixSyncRepository repository,
     NpgsqlDataSource dataSource) : IBitrixDealSyncService
 {
+    private static readonly DateTimeOffset FullSyncCreatedFrom =
+        new(2025, 1, 1, 0, 0, 0, TimeSpan.Zero);
+
     // Bitrix requires UF_* explicitly; '*' alone only returns standard deal fields.
     // The general commercial report depends on payment, hierarchy and period fields,
     // so every synchronization must preserve the complete custom-field payload.
@@ -49,6 +52,7 @@ public sealed class BitrixDealSyncService(
         var recordsWritten = 0;
         DateTimeOffset? since = null;
         DateTimeOffset? cursor = null;
+        var createdFrom = mode == SyncMode.Full ? FullSyncCreatedFrom : (DateTimeOffset?)null;
 
         try
         {
@@ -58,7 +62,7 @@ public sealed class BitrixDealSyncService(
             cursor = since;
 
             await using var dbConnection = await dataSource.OpenConnectionAsync(cancellationToken);
-            var firstPage = await FetchDealListPageAsync(pipeline.CategoryId, stageId, 0, since, cancellationToken);
+            var firstPage = await FetchDealListPageAsync(pipeline.CategoryId, stageId, 0, since, createdFrom, cancellationToken);
             cursor = await ProcessDealPageAsync(
                 dbConnection,
                 connectionInfo.Id,
@@ -82,6 +86,7 @@ public sealed class BitrixDealSyncService(
                         stageId,
                         chunk,
                         since,
+                        createdFrom,
                         cancellationToken))
                     {
                         cursor = await ProcessDealPageAsync(
@@ -106,7 +111,7 @@ public sealed class BitrixDealSyncService(
                 var visitedStarts = new HashSet<int>();
                 while (start is not null && visitedStarts.Add(start.Value))
                 {
-                    var page = await FetchDealListPageAsync(pipeline.CategoryId, stageId, start.Value, since, cancellationToken);
+                    var page = await FetchDealListPageAsync(pipeline.CategoryId, stageId, start.Value, since, createdFrom, cancellationToken);
                     if (page.Result.GetArrayLength() == 0)
                     {
                         break;
@@ -155,11 +160,12 @@ public sealed class BitrixDealSyncService(
         string? stageId,
         int start,
         DateTimeOffset? since,
+        DateTimeOffset? createdFrom,
         CancellationToken cancellationToken)
     {
         using var response = await bitrixClient.CallAsync(
             BitrixMethod.DealList,
-            BuildDealListParameters(categoryId, stageId, start, since),
+            BuildDealListParameters(categoryId, stageId, start, since, createdFrom),
             cancellationToken);
 
         var root = response.RootElement;
@@ -182,6 +188,7 @@ public sealed class BitrixDealSyncService(
         string? stageId,
         int[] starts,
         DateTimeOffset? since,
+        DateTimeOffset? createdFrom,
         CancellationToken cancellationToken)
     {
         if (starts.Length == 0)
@@ -193,7 +200,7 @@ public sealed class BitrixDealSyncService(
         var batchParameters = starts.Select(start =>
             new KeyValuePair<string, string>(
                 $"cmd[deal_{start}]",
-                BuildBatchCommand(BitrixMethod.DealList, BuildDealListParameters(categoryId, stageId, start, since))));
+                BuildBatchCommand(BitrixMethod.DealList, BuildDealListParameters(categoryId, stageId, start, since, createdFrom))));
 
         using var response = await bitrixClient.CallAsync(BitrixMethod.Batch, batchParameters, cancellationToken);
         var root = response.RootElement;
@@ -361,7 +368,8 @@ public sealed class BitrixDealSyncService(
         int categoryId,
         string? stageId,
         int start,
-        DateTimeOffset? since)
+        DateTimeOffset? since,
+        DateTimeOffset? createdFrom)
     {
         yield return new KeyValuePair<string, string>("filter[CATEGORY_ID]", categoryId.ToString());
         if (!string.IsNullOrWhiteSpace(stageId))
@@ -375,6 +383,13 @@ public sealed class BitrixDealSyncService(
             yield return new KeyValuePair<string, string>(
                 "filter[>=DATE_MODIFY]",
                 since.Value.Subtract(TimeSpan.FromMinutes(2)).ToString("O", CultureInfo.InvariantCulture));
+        }
+
+        if (createdFrom is not null)
+        {
+            yield return new KeyValuePair<string, string>(
+                "filter[>=DATE_CREATE]",
+                createdFrom.Value.ToString("O", CultureInfo.InvariantCulture));
         }
 
         yield return new KeyValuePair<string, string>("order[DATE_MODIFY]", "ASC");
