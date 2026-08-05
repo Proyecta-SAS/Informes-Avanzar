@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard</title>
-  <link rel="stylesheet" href="/styles.css?v=20260804-access-modal">
+  <link rel="stylesheet" href="/styles.css?v=20260805-area-blocks">
 </head>
 <body>
   <aside class="sidebar">
@@ -105,15 +105,6 @@
         <label id="pendingLeaderFilter" hidden>Pendiente líder comercial<select id="diegoPendingLeader"><option value="all">Todos</option><option value="pending">Pendiente</option><option value="resolved">Sin pendiente</option></select></label>
       </section>
 
-      <section class="diego-kpis" aria-label="Indicadores principales">
-        <article><span>Negociaciones</span><strong>—</strong><small>Total del periodo</small></article>
-        <article><span>Estudios</span><strong>—</strong><small>Casos estudiados</small></article>
-        <article><span>Radicados</span><strong>—</strong><small>Casos radicados</small></article>
-        <article class="accent"><span>Tasa de cierre</span><strong>—</strong><small>Radicados / estudios</small></article>
-        <article><span>Valor radicado</span><strong>—</strong><small>Total alcanzado</small></article>
-        <article><span>Cartera recaudada</span><strong>—</strong><small>Valor recuperado</small></article>
-      </section>
-
       <div id="diegoSections"></div>
     </section>
 
@@ -142,7 +133,7 @@
     </section>
   </main>
 
-  <script src="/reporte.js?v=20260804-persistent-sidebar"></script>
-  <script src="/auth-session.js?v=20260804-superadmin-only"></script>
+  <script src="/reporte.js?v=20260804-without-summary-cards"></script>
+  <script src="/auth-session.js?v=20260805-area-blocks"></script>
 </body>
 </html>
