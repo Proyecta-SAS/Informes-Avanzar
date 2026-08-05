@@ -560,6 +560,11 @@ public static class BitrixDataQueries
                 SELECT count(d.id)::integer AS deals_count
                 FROM bitrix.deals d
                 JOIN selected_pipelines p ON p.id = d.pipeline_id
+                JOIN bitrix.entity_snapshots snapshot
+                    ON snapshot.connection_id = d.connection_id
+                    AND snapshot.entity_type = 'deal'
+                    AND snapshot.bitrix_id = d.bitrix_id
+                    AND snapshot.is_deleted = false
             ),
             stage_counts AS (
                 SELECT count(s.id)::integer AS stages_count
@@ -651,6 +656,11 @@ public static class BitrixDataQueries
                 d.bitrix_updated_at
             FROM bitrix.deals d
             JOIN bitrix.pipelines p ON p.id = d.pipeline_id
+            JOIN bitrix.entity_snapshots snapshot
+                ON snapshot.connection_id = d.connection_id
+                AND snapshot.entity_type = 'deal'
+                AND snapshot.bitrix_id = d.bitrix_id
+                AND snapshot.is_deleted = false
             LEFT JOIN bitrix.pipeline_stages s ON s.pipeline_id = p.id AND s.bitrix_stage_id = d.stage_id
             LEFT JOIN bitrix.users u ON u.connection_id = d.connection_id AND u.bitrix_id = d.assigned_by_bitrix_id
             WHERE (@pipeline = 'all' OR p.slug = @pipeline)
@@ -727,6 +737,11 @@ public static class BitrixDataQueries
                 count(d.id)::integer AS deals_count
             FROM bitrix.deals d
             JOIN bitrix.pipelines p ON p.id = d.pipeline_id
+            JOIN bitrix.entity_snapshots snapshot
+                ON snapshot.connection_id = d.connection_id
+                AND snapshot.entity_type = 'deal'
+                AND snapshot.bitrix_id = d.bitrix_id
+                AND snapshot.is_deleted = false
             LEFT JOIN bitrix.pipeline_stages s ON s.pipeline_id = p.id AND s.bitrix_stage_id = d.stage_id
             WHERE (@pipeline = 'all' OR p.slug = @pipeline)
             GROUP BY d.stage_id, s.name
@@ -758,9 +773,14 @@ public static class BitrixDataQueries
     {
         const string sql = """
             WITH pipeline_counts AS (
-                SELECT pipeline_id, count(*)::integer AS deals_count
-                FROM bitrix.deals
-                GROUP BY pipeline_id
+                SELECT deal.pipeline_id, count(*)::integer AS deals_count
+                FROM bitrix.deals deal
+                JOIN bitrix.entity_snapshots snapshot
+                    ON snapshot.connection_id = deal.connection_id
+                    AND snapshot.entity_type = 'deal'
+                    AND snapshot.bitrix_id = deal.bitrix_id
+                    AND snapshot.is_deleted = false
+                GROUP BY deal.pipeline_id
             ), inventory_stages AS (
                 SELECT
                     stage.pipeline_id,
@@ -784,6 +804,11 @@ public static class BitrixDataQueries
                     NULL::text AS status_type,
                     true AS is_unmapped
                 FROM bitrix.deals deal
+                JOIN bitrix.entity_snapshots snapshot
+                    ON snapshot.connection_id = deal.connection_id
+                    AND snapshot.entity_type = 'deal'
+                    AND snapshot.bitrix_id = deal.bitrix_id
+                    AND snapshot.is_deleted = false
                 WHERE NOT EXISTS (
                     SELECT 1
                     FROM bitrix.pipeline_stages stage
@@ -793,8 +818,13 @@ public static class BitrixDataQueries
                 GROUP BY deal.pipeline_id, deal.stage_id
             ), stage_counts AS (
                 SELECT pipeline_id, stage_id, count(*)::integer AS deals_count
-                FROM bitrix.deals
-                GROUP BY pipeline_id, stage_id
+                FROM bitrix.deals deal
+                JOIN bitrix.entity_snapshots snapshot
+                    ON snapshot.connection_id = deal.connection_id
+                    AND snapshot.entity_type = 'deal'
+                    AND snapshot.bitrix_id = deal.bitrix_id
+                    AND snapshot.is_deleted = false
+                GROUP BY deal.pipeline_id, deal.stage_id
             )
             SELECT
                 pipeline.id,
@@ -876,6 +906,11 @@ public static class BitrixDataQueries
                 count(d.id)::integer AS deals_count
             FROM bitrix.deals d
             JOIN bitrix.pipelines p ON p.id = d.pipeline_id
+            JOIN bitrix.entity_snapshots snapshot
+                ON snapshot.connection_id = d.connection_id
+                AND snapshot.entity_type = 'deal'
+                AND snapshot.bitrix_id = d.bitrix_id
+                AND snapshot.is_deleted = false
             LEFT JOIN bitrix.users u ON u.connection_id = d.connection_id AND u.bitrix_id = d.assigned_by_bitrix_id
             WHERE (@pipeline = 'all' OR p.slug = @pipeline)
             GROUP BY d.assigned_by_bitrix_id, u.full_name

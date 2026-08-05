@@ -129,6 +129,17 @@ public sealed class BitrixDealSyncService(
                 }
             }
 
+            if (mode == SyncMode.Full)
+            {
+                await ReconcileMissingDealsAsync(
+                    dbConnection,
+                    connectionInfo.Id,
+                    pipeline.Id,
+                    syncRunId,
+                    stageId,
+                    cancellationToken);
+            }
+
             await repository.FinishRunAsync(syncRunId, "succeeded", recordsRead, recordsWritten, null, CancellationToken.None, cursor);
             return new SyncResult(syncRunId, entityType, ToDbMode(mode), "succeeded", recordsRead, recordsWritten);
         }
@@ -302,6 +313,48 @@ public sealed class BitrixDealSyncService(
                 $"{Uri.EscapeDataString(parameter.Key)}={Uri.EscapeDataString(parameter.Value)}"));
 
         return $"{method}?{query}";
+    }
+
+    private static async Task ReconcileMissingDealsAsync(
+        NpgsqlConnection connection,
+        Guid connectionId,
+        Guid pipelineId,
+        Guid syncRunId,
+        string? stageId,
+        CancellationToken cancellationToken)
+    {
+        var stageFilter = string.IsNullOrWhiteSpace(stageId)
+            ? string.Empty
+            : "AND snapshot.stage_id = @stageId";
+
+        var sql = $"""
+            UPDATE bitrix.entity_snapshots snapshot
+            SET is_deleted = true,
+                deleted_detected_at = now()
+            WHERE snapshot.connection_id = @connectionId
+              AND snapshot.pipeline_id = @pipelineId
+              AND snapshot.entity_type = 'deal'
+              AND snapshot.is_deleted = false
+              {stageFilter}
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM bitrix.raw_payloads payload
+                  WHERE payload.sync_run_id = @syncRunId
+                    AND payload.entity_type = 'deal'
+                    AND payload.bitrix_id = snapshot.bitrix_id
+              );
+            """;
+
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("connectionId", connectionId);
+        command.Parameters.AddWithValue("pipelineId", pipelineId);
+        command.Parameters.AddWithValue("syncRunId", syncRunId);
+        if (!string.IsNullOrWhiteSpace(stageId))
+        {
+            command.Parameters.AddWithValue("stageId", stageId);
+        }
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private static IEnumerable<KeyValuePair<string, string>> BuildDealListParameters(
