@@ -134,8 +134,11 @@ app.MapGet("/api/auth/me", async (HttpContext context, IReportAccessService repo
     var blockAccess = user.RoleCode == "admin"
         ? (Configured: false, Blocks: Array.Empty<string>())
         : await OrganizationQueries.GetUserBlockAccessAsync(user.Id, "informe_general_comercial", dataSource, cancellationToken);
+    var teamScope = user.RoleCode == "admin"
+        ? null
+        : await OrganizationQueries.GetUserTeamScopeAsync(user.Id, dataSource, cancellationToken);
     var isSuperAdmin = string.Equals(user.Email, superAdminEmail, StringComparison.OrdinalIgnoreCase);
-    return Results.Ok(new { user.Id, user.Email, user.FullName, user.RoleCode, isSuperAdmin, accessibleReportCodes = reportCodes, permissions, generalCommercialBlocksConfigured = blockAccess.Configured, generalCommercialBlockCodes = blockAccess.Blocks });
+    return Results.Ok(new { user.Id, user.Email, user.FullName, user.RoleCode, isSuperAdmin, accessibleReportCodes = reportCodes, permissions, teamScope, generalCommercialBlocksConfigured = blockAccess.Configured, generalCommercialBlockCodes = blockAccess.Blocks });
 });
 app.MapGet("/api/organization/commercial", async (NpgsqlDataSource dataSource, CancellationToken cancellationToken) => Results.Ok(await OrganizationQueries.GetCommercialStructureAsync(dataSource, cancellationToken)));
 app.MapPut("/api/organization/commercial/{departmentId}/settings", async (string departmentId, JsonElement body, NpgsqlDataSource dataSource, CancellationToken cancellationToken) => { var role=body.TryGetProperty("roleLabel",out var roleProperty)?roleProperty.GetString()??"viewer":"viewer";var email=body.TryGetProperty("email",out var emailProperty)?emailProperty.GetString():null;var reports=body.TryGetProperty("visibleReports",out var reportsProperty)&&reportsProperty.ValueKind==JsonValueKind.Array?reportsProperty.EnumerateArray().Select(item=>item.GetString()).Where(item=>!string.IsNullOrWhiteSpace(item)).Cast<string>().ToArray():Array.Empty<string>();var blocks=body.TryGetProperty("visibleBlocks",out var blocksProperty)&&blocksProperty.ValueKind==JsonValueKind.Array?blocksProperty.EnumerateArray().Select(item=>item.GetString()).Where(item=>!string.IsNullOrWhiteSpace(item)).Cast<string>().ToArray():Array.Empty<string>();await OrganizationQueries.SetSettingsAsync(departmentId,email,role,reports,blocks,dataSource,cancellationToken);return Results.NoContent(); });
@@ -718,6 +721,7 @@ app.MapGet(
     });
 
 var startupDataSource = app.Services.GetRequiredService<NpgsqlDataSource>();
+await BitrixDataQueries.EnsureManagementPipelinesAsync(startupDataSource, CancellationToken.None);
 await AdminAccessQueries.EnsureUserManagementSchemaAsync(startupDataSource, CancellationToken.None);
 await AdminAccessQueries.EnsureReportCatalogAsync(startupDataSource, CancellationToken.None);
 try

@@ -242,6 +242,10 @@ Pipelines principales:
 | `rch_operativa` | RCH Operativa | 10 | operaciones |
 | `pnnc_comercial` | PNNC Comercial | 26 | comercial |
 | `pnnc_operativa` | PNNC Operativa | 28 | operaciones |
+| `1116_comercial` | 1116 Comercial | 30 | comercial |
+| `1116_operativa` | 1116 Operativa | 32 | operaciones |
+| `informes_bi_builder` | Informes BI Builder | 224 | comercial |
+| `lp_2445_operativa` | LP-2445 Operativa | 248 | operaciones |
 
 Pipelines adicionales de la migración `002`:
 

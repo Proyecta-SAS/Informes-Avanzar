@@ -6,6 +6,9 @@ VALUES
     ('pnnc_cartera', 'PNNC Cartera', 68, 'cartera', 60),
     ('cuentas_cobro', 'Cuentas de Cobro', 72, 'comercial', 70),
     ('informes_bi_builder', 'Informes BI Builder', 224, 'comercial', 80),
+    ('1116_comercial', '1116 Comercial', 30, 'comercial', 81),
+    ('1116_operativa', '1116 Operativa', 32, 'operaciones', 82),
+    ('lp_2445_operativa', 'LP-2445 Operativa', 248, 'operaciones', 83),
     ('cobro_juridico_rch', 'Cobro Juridico RCH', 302, 'cartera', 90),
     ('cobro_juridico_pnnc', 'Cobro Juridico PNNC', 308, 'cartera', 100)
 ON CONFLICT (slug) DO UPDATE

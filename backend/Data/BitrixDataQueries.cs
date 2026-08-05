@@ -5,6 +5,32 @@ namespace InformesAvanzar.Api.Data;
 
 public static class BitrixDataQueries
 {
+    public static async Task EnsureManagementPipelinesAsync(NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+    {
+        const string sql = """
+            INSERT INTO bitrix.pipelines (slug, name, category_id, domain, sync_order, is_active)
+            VALUES
+                ('1116_comercial', '1116 Comercial', 30, 'comercial', 41, true),
+                ('1116_operativa', '1116 Operativa', 32, 'operaciones', 42, true),
+                ('lp_2445_operativa', 'LP-2445 Operativa', 248, 'operaciones', 43, true),
+                ('informes_bi_builder', 'Informes BI Builder', 224, 'comercial', 44, true)
+            ON CONFLICT DO NOTHING;
+
+            UPDATE bitrix.pipelines pipeline
+            SET name = source.name, domain = source.domain, sync_order = source.sync_order, is_active = true
+            FROM (VALUES
+                (30, '1116 Comercial', 'comercial', 41),
+                (32, '1116 Operativa', 'operaciones', 42),
+                (248, 'LP-2445 Operativa', 'operaciones', 43),
+                (224, 'Informes BI Builder', 'comercial', 44)
+            ) AS source(category_id, name, domain, sync_order)
+            WHERE pipeline.category_id = source.category_id;
+            """;
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public static async Task<IResult> GetSyncStateAsync(
         NpgsqlDataSource dataSource,
         CancellationToken cancellationToken)
@@ -64,6 +90,12 @@ public static class BitrixDataQueries
                         WHEN s.custom_fields ->> 'UF_CRM_1676419915' = '39160' OR UPPER(COALESCE(s.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%NOVIEMBRE%' THEN '11 NOV'
                         WHEN s.custom_fields ->> 'UF_CRM_1676419915' = '39162' OR UPPER(COALESCE(s.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%DICIEMBRE%' THEN '12 DIC'
                     END AS month,
+                    CASE
+                        WHEN p.category_id = 28 THEN 'PNNC'
+                        WHEN p.category_id = 10 THEN 'RCH'
+                        WHEN p.category_id = 32 THEN '1116'
+                        WHEN p.category_id = 248 THEN 'LP-2445'
+                    END AS pipeline,
                     COALESCE(NULLIF(u.full_name, ''), d.assigned_by_bitrix_id, 'Sin asesor') AS advisor,
                     d.opportunity AS amount
                 FROM bitrix.deals d
@@ -78,8 +110,7 @@ public static class BitrixDataQueries
                     AND u.bitrix_id = d.assigned_by_bitrix_id
                 WHERE
                     (
-                        p.category_id IN (10, 28)
-                        OR UPPER(p.name) IN ('1116 OPERATIVA', 'LP OPERATIVA', 'LP OPERATIVA 2445')
+                        p.category_id IN (10, 28, 32, 248)
                     )
                     AND (
                         s.custom_fields ->> 'UF_CRM_1737653376' = @year
@@ -90,15 +121,17 @@ public static class BitrixDataQueries
                         END
                     )
             )
-            SELECT month, advisor, COALESCE(SUM(amount), 0) AS total_achieved
+            SELECT month, pipeline, advisor, COALESCE(SUM(amount), 0) AS total_achieved
             FROM radicated
             WHERE month IS NOT NULL
-            GROUP BY month, advisor
-            ORDER BY total_achieved DESC, month, advisor;
+            GROUP BY month, pipeline, advisor
+            ORDER BY total_achieved DESC, month, pipeline, advisor;
             """;
 
         var items = new List<object>();
         decimal total = 0;
+        decimal annualGoal = 0;
+        var monthlyGoals = new List<object>();
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var command = new NpgsqlCommand(sql, connection);
@@ -107,17 +140,63 @@ public static class BitrixDataQueries
 
         while (await reader.ReadAsync(cancellationToken))
         {
-            var amount = reader.GetDecimal(2);
+            var amount = reader.GetDecimal(3);
             total += amount;
             items.Add(new
             {
                 month = reader.GetString(0),
-                advisor = reader.GetString(1),
+                pipeline = reader.GetString(1),
+                advisor = reader.GetString(2),
                 totalAchieved = amount
             });
         }
 
-        return new { year, totalAchieved = total, items };
+        const string goalsSql = """
+            SELECT
+                d.title AS month,
+                CASE
+                    WHEN UPPER(COALESCE(stage.name, '')) = 'METAS INS COMERCIAL' THEN 'PNNC'
+                    WHEN UPPER(COALESCE(stage.name, '')) = 'METAS RCH COMERCIAL' THEN 'RCH'
+                    WHEN UPPER(COALESCE(stage.name, '')) = 'METAS 1116 COMERCIAL' THEN '1116'
+                    WHEN UPPER(COALESCE(stage.name, '')) = 'METAS LP-2445 COMERCIAL' THEN 'LP-2445'
+                END AS pipeline,
+                COALESCE(SUM(d.opportunity), 0) AS goal
+            FROM bitrix.deals d
+            JOIN bitrix.pipelines p ON p.id = d.pipeline_id
+            JOIN bitrix.entity_snapshots snapshot
+                ON snapshot.connection_id = d.connection_id
+                AND snapshot.entity_type = 'deal'
+                AND snapshot.bitrix_id = d.bitrix_id
+                AND snapshot.is_deleted = false
+            LEFT JOIN bitrix.pipeline_stages stage
+                ON stage.pipeline_id = p.id
+                AND stage.bitrix_stage_id = d.stage_id
+            WHERE p.category_id = 224
+              AND UPPER(COALESCE(stage.name, '')) IN ('METAS INS COMERCIAL', 'METAS RCH COMERCIAL', 'METAS 1116 COMERCIAL', 'METAS LP-2445 COMERCIAL')
+              AND (
+                  snapshot.custom_fields ->> 'UF_CRM_1737653376' = @year
+                  OR snapshot.custom_fields ->> 'UF_CRM_1737653376' = CASE @year
+                      WHEN '2024' THEN '37206' WHEN '2025' THEN '37036' WHEN '2026' THEN '39138'
+                  END
+              )
+            GROUP BY d.title, 2
+            ORDER BY d.title, 2;
+            """;
+
+        await reader.DisposeAsync();
+        await using (var goalsCommand = new NpgsqlCommand(goalsSql, connection))
+        {
+            goalsCommand.Parameters.AddWithValue("year", year.ToString(CultureInfo.InvariantCulture));
+            await using var goalsReader = await goalsCommand.ExecuteReaderAsync(cancellationToken);
+            while (await goalsReader.ReadAsync(cancellationToken))
+            {
+                var goal = goalsReader.GetDecimal(2);
+                annualGoal += goal;
+                monthlyGoals.Add(new { month = goalsReader.GetString(0), pipeline = goalsReader.GetString(1), goal });
+            }
+        }
+
+        return new { year, totalAchieved = total, annualGoal, monthlyGoals, items };
     }
 
     public static async Task<object> GetDiegoCommercialDashboardAsync(
@@ -212,10 +291,38 @@ public static class BitrixDataQueries
             ORDER BY stage;
             """;
 
+        const string possibleCloseGeneralSql = """
+            WITH classified AS (
+                SELECT
+                    CASE
+                        WHEN UPPER(TRANSLATE(COALESCE(s.name, d.stage_id, ''), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) LIKE '%REVISION DE LIDER%' THEN '01 Revisión líder'
+                        WHEN UPPER(TRANSLATE(COALESCE(s.name, d.stage_id, ''), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) LIKE '%RADICACION POR VALIDAR%' THEN '02 Radicación por validar'
+                        WHEN UPPER(TRANSLATE(COALESCE(s.name, d.stage_id, ''), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) ~ '(DOCUMENTACION PENDIENTE COMERCIAL|DOCUMENTOS PENDIENTES)' THEN '03 Documentación pendiente'
+                        WHEN UPPER(TRANSLATE(COALESCE(s.name, d.stage_id, ''), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) ~ '(DOCUMENTACION SUBSANADA COMERCIAL|DOCUMENTOS SUBSANADOS|DOCUMENTOS SUBSANDADOS COMERCIAL)' THEN '04 Documentación subsanada'
+                    END AS stage,
+                    CASE
+                        WHEN p.category_id IN (26, 28) THEN 'PNNC'
+                        WHEN p.category_id IN (8, 10) THEN 'RCH'
+                        WHEN p.category_id IN (30, 32) THEN '1116'
+                    END AS pipeline,
+                    d.opportunity
+                FROM bitrix.deals d
+                JOIN bitrix.pipelines p ON p.id = d.pipeline_id
+                LEFT JOIN bitrix.pipeline_stages s ON s.pipeline_id = p.id AND s.bitrix_stage_id = d.stage_id
+                WHERE p.category_id IN (8, 10, 26, 28, 30, 32)
+            )
+            SELECT stage, pipeline, COALESCE(SUM(opportunity),0) AS amount, COUNT(*)::bigint AS cases
+            FROM classified
+            WHERE stage IS NOT NULL
+            GROUP BY stage, pipeline
+            ORDER BY stage, pipeline;
+            """;
+
         var advisors = new List<object>();
         var stages = new List<object>();
         var departments = new List<object>();
         var possibleClosePnnc = new List<object>();
+        var possibleCloseGeneral = new List<object>();
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
         await using (var command = new NpgsqlCommand(advisorSql, connection))
@@ -272,7 +379,14 @@ public static class BitrixDataQueries
                 possibleClosePnnc.Add(new { stage = reader.GetString(0), amount = reader.GetDecimal(1), cases = reader.GetInt64(2) });
         }
 
-        return new { year, advisors, stages, departments, possibleClosePnnc };
+        await using (var command = new NpgsqlCommand(possibleCloseGeneralSql, connection))
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+                possibleCloseGeneral.Add(new { stage = reader.GetString(0), pipeline = reader.GetString(1), amount = reader.GetDecimal(2), cases = reader.GetInt64(3) });
+        }
+
+        return new { year, advisors, stages, departments, possibleClosePnnc, possibleCloseGeneral };
     }
 
     public static async Task<object> GetDiegoPortfolioCollectionsAsync(
@@ -410,14 +524,19 @@ public static class BitrixDataQueries
         CancellationToken cancellationToken)
     {
         const string leadershipSql = """
-            WITH RECURSIVE user_departments AS (
+            WITH RECURSIVE latest_users AS (
+                SELECT DISTINCT ON (connection_id, bitrix_id) connection_id, bitrix_id, payload
+                FROM bitrix.raw_payloads
+                WHERE entity_type = 'user'
+                ORDER BY connection_id, bitrix_id, received_at DESC
+            ), user_departments AS (
                 SELECT DISTINCT
                     u.connection_id,
                     u.bitrix_id,
                     u.full_name,
                     (jsonb_array_elements_text(payload.payload -> 'UF_DEPARTMENT'))::bigint AS department_id
                 FROM bitrix.users u
-                JOIN bitrix.raw_payloads payload ON payload.id = u.raw_payload_id
+                JOIN latest_users payload ON payload.connection_id = u.connection_id AND payload.bitrix_id = u.bitrix_id
                 WHERE u.active = true AND jsonb_typeof(payload.payload -> 'UF_DEPARTMENT') = 'array'
             ), hierarchy AS (
                 SELECT
@@ -445,6 +564,10 @@ public static class BitrixDataQueries
                 SELECT
                     d.connection_id,
                     d.assigned_by_bitrix_id,
+                    CASE
+                        WHEN pipeline.category_id = 10 THEN 'RCH'
+                        WHEN pipeline.category_id = 28 THEN 'PNNC'
+                    END AS commercial_line,
                     CASE
                         WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '22560' THEN '01 ENE'
                         WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '22562' THEN '02 FEB'
@@ -477,15 +600,17 @@ public static class BitrixDataQueries
             )
             SELECT
                 radicated.month,
+                COALESCE(NULLIF(people.full_name, ''), radicated.assigned_by_bitrix_id, 'Sin asesor') AS advisor,
                 COALESCE(people.leader, 'Sin líder') AS leader,
                 COALESCE(people.coordinator, 'Sin coordinador') AS coordinator,
+                radicated.commercial_line,
                 COALESCE(SUM(radicated.amount), 0) AS total_achieved
             FROM radicated
             LEFT JOIN people
                 ON people.connection_id = radicated.connection_id
                 AND people.bitrix_id = radicated.assigned_by_bitrix_id
             WHERE radicated.month IS NOT NULL
-            GROUP BY radicated.month, people.leader, people.coordinator
+            GROUP BY radicated.month, people.full_name, radicated.assigned_by_bitrix_id, people.leader, people.coordinator, radicated.commercial_line
             ORDER BY total_achieved DESC;
             """;
 
@@ -507,8 +632,55 @@ public static class BitrixDataQueries
             ORDER BY total DESC;
             """;
 
+        const string relationshipsSql = """
+            WITH RECURSIVE latest_users AS (
+                SELECT DISTINCT ON (connection_id, bitrix_id) connection_id, bitrix_id, payload
+                FROM bitrix.raw_payloads
+                WHERE entity_type = 'user'
+                ORDER BY connection_id, bitrix_id, received_at DESC
+            ), user_departments AS (
+                SELECT DISTINCT
+                    u.connection_id,
+                    u.bitrix_id,
+                    u.full_name,
+                    (jsonb_array_elements_text(payload.payload -> 'UF_DEPARTMENT'))::bigint AS department_id
+                FROM bitrix.users u
+                JOIN latest_users payload ON payload.connection_id = u.connection_id AND payload.bitrix_id = u.bitrix_id
+                WHERE u.active = true
+                  AND jsonb_typeof(payload.payload -> 'UF_DEPARTMENT') = 'array'
+            ), hierarchy AS (
+                SELECT
+                    ud.connection_id, ud.bitrix_id, ud.full_name,
+                    department.id, department.name, department.parent_id, 1 AS depth
+                FROM user_departments ud
+                JOIN bitrix.departments department ON department.id = ud.department_id
+                UNION ALL
+                SELECT
+                    hierarchy.connection_id, hierarchy.bitrix_id, hierarchy.full_name,
+                    parent.id, parent.name, parent.parent_id, hierarchy.depth + 1
+                FROM hierarchy
+                JOIN bitrix.departments parent ON parent.id = hierarchy.parent_id
+                WHERE hierarchy.depth < 8
+            )
+            SELECT
+                COALESCE(NULLIF(full_name, ''), bitrix_id, 'Sin asesor') AS advisor,
+                COALESCE(MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. LIDER%'), 'Sin líder') AS leader,
+                COALESCE(MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. COOR%'), 'Sin coordinador') AS coordinator,
+                CASE
+                    WHEN BOOL_OR(UPPER(name) LIKE '%RCH%') THEN 'RCH'
+                    WHEN BOOL_OR(UPPER(name) LIKE '%PNNC%' OR UPPER(name) LIKE '%INSOLV%') THEN 'PNNC'
+                    ELSE 'COMERCIAL'
+                END AS commercial_line
+            FROM hierarchy
+            GROUP BY connection_id, bitrix_id, full_name
+            HAVING MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. COOR%') IS NOT NULL
+                OR MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. LIDER%') IS NOT NULL
+            ORDER BY coordinator, leader, advisor;
+            """;
+
         var leadership = new List<object>();
         var commissions = new List<object>();
+        var relationships = new List<object>();
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
         await using (var command = new NpgsqlCommand(leadershipSql, connection))
@@ -520,9 +692,11 @@ public static class BitrixDataQueries
                 leadership.Add(new
                 {
                     month = reader.GetString(0),
-                    leader = reader.GetString(1),
-                    coordinator = reader.GetString(2),
-                    totalAchieved = reader.GetDecimal(3)
+                    advisor = reader.GetString(1),
+                    leader = reader.GetString(2),
+                    coordinator = reader.GetString(3),
+                    commercialLine = reader.GetString(4),
+                    totalAchieved = reader.GetDecimal(5)
                 });
             }
         }
@@ -542,7 +716,22 @@ public static class BitrixDataQueries
             }
         }
 
-        return new { year, leadership, commissions };
+        await using (var command = new NpgsqlCommand(relationshipsSql, connection))
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                relationships.Add(new
+                {
+                    advisor = reader.GetString(0),
+                    leader = reader.GetString(1),
+                    coordinator = reader.GetString(2),
+                    commercialLine = reader.GetString(3)
+                });
+            }
+        }
+
+        return new { year, leadership, commissions, relationships };
     }
 
     public static async Task<IResult> GetSyncSummaryAsync(

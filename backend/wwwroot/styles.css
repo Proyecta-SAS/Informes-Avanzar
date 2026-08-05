@@ -1269,6 +1269,8 @@ tbody tr:hover {
 .diego-block-wide-table { grid-column: 1 / -1; }
 .diego-block-commissions { grid-column: 1 / -1; }
 .diego-block-donut { grid-column: 1 / -1; }
+.diego-block-management-kpis,
+.diego-block-management-close { grid-column: 1 / -1; }
 
 .diego-block {
   min-width: 0;
@@ -1303,6 +1305,29 @@ tbody tr:hover {
 .block-funnel { display: grid; justify-items: center; gap: 7px; margin-top: 24px; }
 .block-funnel i { height: 24px; border-radius: 5px; background: linear-gradient(90deg, var(--navy), var(--red)); opacity: .82; }
 .block-funnel i:nth-child(1) { width: 84%; }.block-funnel i:nth-child(2) { width: 67%; }.block-funnel i:nth-child(3) { width: 48%; }.block-funnel i:nth-child(4) { width: 30%; }
+
+.management-placeholder { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 22px; }
+.management-placeholder span { height: 82px; border-radius: 14px; background: linear-gradient(110deg, #f2f5f9 20%, #fff 45%, #f2f5f9 70%); background-size: 220% 100%; }
+.management-kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
+.management-kpi-grid article { display: grid; min-height: 118px; align-content: space-between; gap: 16px; border: 1px solid #dfe6ef; border-radius: 15px; background: linear-gradient(145deg, #fff, #f7f9fc); padding: 17px; box-shadow: 0 6px 16px rgba(31, 55, 91, .05); }
+.management-kpi-grid article:nth-child(4n+1) { border-top: 3px solid #48143e; }
+.management-kpi-grid article:nth-child(4n+2) { border-top: 3px solid #c3172d; }
+.management-kpi-grid article:nth-child(4n+3) { border-top: 3px solid #4d739f; }
+.management-kpi-grid article:nth-child(4n+4) { border-top: 3px solid #2e8a70; }
+.management-kpi-grid span { color: #60728b; font-size: 11px; font-weight: 800; line-height: 1.4; text-transform: uppercase; }
+.management-kpi-grid strong { color: #17253a; font-size: clamp(20px, 2vw, 29px); font-variant-numeric: tabular-nums; }
+.management-close-table { min-width: 760px; }
+.management-close-table td:not(:first-child),
+.management-close-table tfoot td { color: #0878f9; font-variant-numeric: tabular-nums; }
+.management-compliance-table { min-width: 640px; }
+
+@media (max-width: 1050px) {
+  .management-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 700px) {
+  .management-kpi-grid { grid-template-columns: 1fr; }
+}
 
 .radicated-values { min-width: 0; margin-top: 18px; }
 .radicated-values > p { color: var(--muted); font-size: 13px; }

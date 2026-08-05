@@ -77,6 +77,20 @@ const diegoSections = [
   }
 ];
 
+const generalManagementSection = {
+  id: "gerencial",
+  icon: "◇",
+  title: "Indicadores gerenciales",
+  description: "Metas, acumulados, posibles cierres y cumplimiento por línea comercial.",
+  blocks: [
+    ["Resumen gerencial comercial", "Indicadores acumulados y metas del periodo.", "management-kpis"],
+    ["Posible cierre general", "Monto proyectado por etapa para 1116, PNNC y RCH.", "management-close"],
+    ["Detalle cumplimiento PNNC 2025", "Meta y cumplimiento mensual consolidado de PNNC y LP-2445.", "management-compliance"],
+    ["Detalle cumplimiento RCH 2026", "Meta, valor alcanzado y porcentaje mensual de RCH Operativa.", "management-compliance"],
+    ["Detalle cumplimiento 1116 2026", "Meta, valor alcanzado y porcentaje mensual de 1116 Operativa.", "management-compliance"]
+  ]
+};
+
 const generalBlockCodes = {
   "Valores radicados por asesor": "radicated_values",
   "Total de negociaciones por asesor": "advisor_negotiations",
@@ -93,11 +107,24 @@ const generalBlockCodes = {
   "Etapas Operativa RCH": "stages_rch_operativa",
   "Etapas Comercial PNNC": "stages_pnnc_commercial",
   "Etapas Operativa PNNC": "stages_pnnc_operativa",
-  "Posible cierre PNC": "possible_close_pnnc"
+  "Posible cierre PNC": "possible_close_pnnc",
+  "Resumen gerencial comercial": "management_summary",
+  "Posible cierre general": "management_possible_close",
+  "Detalle cumplimiento PNNC 2025": "management_compliance_pnnc",
+  "Detalle cumplimiento RCH 2026": "management_compliance_rch",
+  "Detalle cumplimiento 1116 2026": "management_compliance_1116"
 };
 let generalBlockAccess = { configured: false, codes: new Set() };
+let teamScope = null;
+let generalRadicatedData = null;
+let generalDashboardData = null;
+let commercialHierarchy = [];
+const normalizeTeamValue = (value = "") => value.trim().toLocaleLowerCase("es-CO");
+const isTeamMember = (name) => !teamScope || new Set((teamScope.memberNames ?? []).map(normalizeTeamValue)).has(normalizeTeamValue(name));
+const isTeamDepartment = (name) => !teamScope || new Set((teamScope.departmentNames ?? []).map(normalizeTeamValue)).has(normalizeTeamValue(name));
 
 const blockPreview = (type) => {
+  if (type.startsWith("management-")) return `<div class="management-placeholder"><span></span><span></span><span></span></div>`;
   if (type === "radicated") return `<div id="diegoValoresRadicados" class="radicated-values"><p>Cargando información…</p></div>`;
   if (type === "commissions") return `<div class="block-table commission-placeholder"><i></i><i></i><i></i><i></i></div>`;
   if (type === "table") return `<div class="block-table"><i></i><i></i><i></i><i></i></div>`;
@@ -138,6 +165,9 @@ const loadDiegoRadicatedValues = async () => {
     const response = await fetch(`/api/reports/fuerza-comercial-diego/valores-radicados?year=${encodeURIComponent(year)}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
+    if (teamScope) data.items = (data.items ?? []).filter((item) => isTeamMember(item.advisor));
+    generalRadicatedData = data;
+    renderGeneralManagement();
 
     if (!data.items?.length) {
       container.innerHTML = `<div class="empty-block"><strong>Sin valores radicados para ${data.year}</strong><span>Sincronice los negocios de Bitrix para cargar este indicador.</span></div>`;
@@ -327,8 +357,85 @@ const replaceBlockPreview = (title, content, count) => {
   const block = findDiegoBlock(title);
   if (!block) return;
   block.querySelector(".diego-block-title em").textContent = `${count} registros`;
-  const preview = block.querySelector(".block-table, .block-bars, .block-funnel, .block-donut");
+  const preview = block.querySelector(".block-table, .block-bars, .block-funnel, .block-donut, .management-placeholder, .management-kpi-grid, .radicated-table-wrap, .empty-block");
   if (preview) preview.outerHTML = content;
+};
+
+const commercialGoals = {
+  annual: 46190000000,
+  monthly: 46190000000,
+  weekly: 10545450000,
+  pipelines: { PNNC: 1250000000, RCH: 1250000000, "1116": 750000000 }
+};
+
+const normalizeMonthLabel = (value = "") => {
+  const normalized = normalizeFilterText(value);
+  return Object.values(spanishMonthLabels).find((label) => normalized.includes(normalizeFilterText(label.slice(3))) || normalized === normalizeFilterText(label)) ?? value;
+};
+
+const renderManagementKpis = (data) => {
+  const items = data.items ?? [];
+  const annual = items.reduce((sum, item) => sum + Number(item.totalAchieved ?? 0), 0);
+  const annualGoal = Number(data.annualGoal ?? 0) || commercialGoals.annual;
+  const goalsByMonth = new Map();
+  (data.monthlyGoals ?? []).forEach((item) => {
+    const month = normalizeMonthLabel(item.month);
+    goalsByMonth.set(month, (goalsByMonth.get(month) ?? 0) + Number(item.goal ?? 0));
+  });
+  const valuesByMonth = new Map();
+  items.forEach((item) => valuesByMonth.set(item.month, (valuesByMonth.get(item.month) ?? 0) + Number(item.totalAchieved ?? 0)));
+  const annualRate = annualGoal ? annual / annualGoal : 0;
+  const monthlyRate = [...valuesByMonth.entries()].reduce((sum, [month, value]) => {
+    const goal = goalsByMonth.get(month) ?? 0;
+    return sum + (goal ? value / goal : 0);
+  }, 0);
+  const cards = [
+    ["(GER) Porcentaje Acumulado Anual Comercial 2026", `${(annualRate * 100).toLocaleString("es-CO", { maximumFractionDigits: 1 })}%`],
+    ["(GER) Porcentaje Acumulado Mensual Comercial 2026", monthlyRate.toLocaleString("es-CO", { maximumFractionDigits: 2 })],
+    ["(GER) $ Acumulado Anual Comercial 2026", formatNumber.format(annual)],
+    ["(GER) Total Radicado Comercial General Mensual DEF 2026", formatNumber.format(annual)],
+    ["(COM) Meta anual 2026", formatNumber.format(annualGoal)],
+    ["(COM) Meta Mensual 2026", formatNumber.format(annualGoal)],
+    ["(COM) Meta Semanal 2026", formatNumber.format(commercialGoals.weekly)]
+  ];
+  return `<div class="management-kpi-grid">${cards.map(([label, value]) => `<article><span>${label}</span><strong>${value}</strong></article>`).join("")}</div>`;
+};
+
+const renderGeneralPossibleClose = (items) => {
+  const pipelines = ["1116", "PNNC", "RCH"];
+  const stages = [...new Set(items.map((item) => item.stage))].sort();
+  const valueFor = (stage, pipeline) => items.filter((item) => item.stage === stage && item.pipeline === pipeline).reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
+  const totals = new Map(pipelines.map((pipeline) => [pipeline, items.filter((item) => item.pipeline === pipeline).reduce((sum, item) => sum + Number(item.amount ?? 0), 0)]));
+  const grandTotal = [...totals.values()].reduce((sum, value) => sum + value, 0);
+  return `<div class="radicated-table-wrap"><table class="radicated-table synced-table management-close-table"><thead><tr><th>Etapa</th>${pipelines.map((pipeline) => `<th>${pipeline}</th>`).join("")}<th>Total (Sum)</th></tr></thead><tbody>${stages.map((stage) => { const rowTotal = pipelines.reduce((sum, pipeline) => sum + valueFor(stage, pipeline), 0); return `<tr><td>${stage}</td>${pipelines.map((pipeline) => `<td>${formatNumber.format(valueFor(stage, pipeline))}</td>`).join("")}<td>${formatNumber.format(rowTotal)}</td></tr>`; }).join("")}</tbody><tfoot><tr><th>Total (Sum)</th>${pipelines.map((pipeline) => `<td>${formatNumber.format(totals.get(pipeline))}</td>`).join("")}<td>${formatNumber.format(grandTotal)}</td></tr></tfoot></table></div>`;
+};
+
+const renderPipelineCompliance = (items, pipeline, monthlyGoals) => {
+  const monthly = new Map();
+  const includedPipelines = pipeline === "PNNC" ? new Set(["PNNC", "LP-2445"]) : new Set([pipeline]);
+  items.filter((item) => includedPipelines.has(item.pipeline)).forEach((item) => monthly.set(item.month, (monthly.get(item.month) ?? 0) + Number(item.totalAchieved ?? 0)));
+  const goals = new Map((monthlyGoals ?? []).filter((item) => item.pipeline === pipeline).map((item) => [normalizeMonthLabel(item.month), Number(item.goal ?? 0)]));
+  const rows = [...monthly.entries()].sort(([left], [right]) => right.localeCompare(left)).map(([month, achieved]) => {
+    const goal = goals.get(month) ?? commercialGoals.pipelines[pipeline];
+    const rate = goal ? (achieved / goal) * 100 : 0;
+    return `<tr><td>${month}</td><td>${formatNumber.format(goal)}</td><td>${formatNumber.format(achieved)}</td><td>${rate.toLocaleString("es-CO", { maximumFractionDigits: 1 })}%</td></tr>`;
+  });
+  const headers = pipeline === "PNNC"
+    ? ["Meses", "Meta PNNC", "Cumplimiento PNNC", "% de Cumplimiento"]
+    : ["Meses", `Meta ${pipeline}`, `Cumplimiento ${pipeline}`, "% de Cumplimiento"];
+  return rows.length ? renderDataTable(headers, rows, "management-compliance-table") : `<div class="empty-block"><strong>Sin resultados para ${pipeline}</strong><span>No hay valores radicados de esta línea para el periodo.</span></div>`;
+};
+
+const renderGeneralManagement = () => {
+  if (reportId !== "informe_general_comercial" || !generalRadicatedData || !generalDashboardData) return;
+  const items = generalRadicatedData.items ?? [];
+  replaceBlockPreview("Resumen gerencial comercial", renderManagementKpis(generalRadicatedData), items.length);
+  const closeItems = generalDashboardData.possibleCloseGeneral ?? [];
+  replaceBlockPreview("Posible cierre general", closeItems.length ? renderGeneralPossibleClose(closeItems) : `<div class="empty-block"><strong>Sin posibles cierres</strong><span>No hay negocios en las etapas configuradas.</span></div>`, closeItems.length);
+  [["Detalle cumplimiento PNNC 2025", "PNNC"], ["Detalle cumplimiento RCH 2026", "RCH"], ["Detalle cumplimiento 1116 2026", "1116"]].forEach(([title, pipeline]) => {
+    const count = items.filter((item) => pipeline === "PNNC" ? ["PNNC", "LP-2445"].includes(item.pipeline) : item.pipeline === pipeline).length;
+    replaceBlockPreview(title, renderPipelineCompliance(items, pipeline, generalRadicatedData.monthlyGoals), count);
+  });
 };
 
 const loadDiegoDashboardData = async () => {
@@ -336,6 +443,12 @@ const loadDiegoDashboardData = async () => {
   const response = await fetch(`/api/reports/fuerza-comercial-diego/dashboard?year=${encodeURIComponent(year)}`);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
+  if (teamScope) {
+    data.advisors = (data.advisors ?? []).filter((item) => isTeamMember(item.advisor));
+    data.departments = (data.departments ?? []).filter((item) => isTeamDepartment(item.department));
+  }
+  generalDashboardData = data;
+  renderGeneralManagement();
 
   replaceBlockPreview("Total de negociaciones por asesor", renderDataTable(
     ["Asesor", "Total de negociaciones", "Estudios", "Estudios sobre total", "Radicados", "Tasa de cierre"],
@@ -387,6 +500,10 @@ const loadDiegoPortfolioCollections = async () => {
   const response = await fetch(`/api/reports/fuerza-comercial-diego/cartera-recaudada?year=${encodeURIComponent(year)}`);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
+  if (teamScope) {
+    data.portfolio = (data.portfolio ?? []).filter((item) => isTeamMember(item.advisor));
+    data.items = (data.items ?? []).filter((item) => !item.advisor || isTeamMember(item.advisor));
+  }
   const portfolioRows = data.portfolio.map((item) => `<tr><td>${item.advisor}</td><td><span class="portfolio-line ${normalizeFilterText(item.commercialLine)}">${item.commercialLine}</span></td><td>${formatNumber.format(item.receivable)}</td><td>${formatNumber.format(item.withNovelty)}</td><td>${formatNumber.format(item.successful)}</td></tr>`);
   const portfolioContent = portfolioRows.length
     ? renderDataTable(["Asesor", "Línea", "Valor cartera por cobrar", "Valor cartera con novedad", "Valor cartera exitosa"], portfolioRows, "portfolio-state-table")
@@ -412,6 +529,12 @@ const loadDiegoLeadershipAndCommissions = async () => {
   const response = await fetch(`/api/reports/fuerza-comercial-diego/liderazgo-comisiones?year=${encodeURIComponent(year)}`);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
+  if (teamScope) {
+    data.leadership = (data.leadership ?? []).filter((item) => isTeamDepartment(item.leader) || isTeamDepartment(item.coordinator));
+    data.commissions = (data.commissions ?? []).filter((item) => isTeamMember(item.advisor));
+    data.relationships = (data.relationships ?? []).filter((item) => isTeamMember(item.advisor));
+  }
+  commercialHierarchy = data.relationships?.length ? data.relationships : (data.leadership ?? []);
 
   const leaderCount = new Set(data.leadership.map((item) => item.leader).filter(Boolean)).size;
   const coordinatorCount = new Set(data.leadership.map((item) => item.coordinator).filter(Boolean)).size;
@@ -427,6 +550,27 @@ const loadDiegoLeadershipAndCommissions = async () => {
 };
 
 const normalizeFilterText = (value) => value.trim().toLocaleLowerCase("es-CO");
+
+const hierarchySelection = () => ({
+  line: document.getElementById("diegoLine").value,
+  coordinator: document.getElementById("diegoCoordinator").value,
+  leader: document.getElementById("diegoLeader").value,
+  advisor: document.getElementById("diegoAdvisor").value
+});
+
+const matchesHierarchySelection = (item, selection, ignored = "") => {
+  const line = normalizeFilterText(item.commercialLine ?? "");
+  return (ignored === "line" || selection.line === "all" || line === selection.line)
+    && (ignored === "coordinator" || selection.coordinator === "all" || normalizeFilterText(item.coordinator ?? "") === normalizeFilterText(selection.coordinator))
+    && (ignored === "leader" || selection.leader === "all" || normalizeFilterText(item.leader ?? "") === normalizeFilterText(selection.leader))
+    && (ignored === "advisor" || selection.advisor === "all" || normalizeFilterText(item.advisor ?? "") === normalizeFilterText(selection.advisor));
+};
+
+const uniqueHierarchyValues = (field, selection, ignored) => [...new Set(commercialHierarchy
+  .filter((item) => matchesHierarchySelection(item, selection, ignored))
+  .map((item) => item[field])
+  .filter((value) => value && !value.startsWith("Sin ")))]
+  .sort((left, right) => left.localeCompare(right, "es", { sensitivity: "base" }));
 
 const collectColumnValues = (headerName) => {
   const values = new Set();
@@ -476,7 +620,7 @@ const applyDiegoFilters = () => {
     const belongsToRch = title.includes("rch");
     const belongsToInsolvency = title.includes("pnnc") || title.includes("insolvencia");
     block.hidden = (selectedLine === "rch" && belongsToInsolvency)
-      || (selectedLine === "insolvencia" && belongsToRch);
+      || (selectedLine === "pnnc" && belongsToRch);
 
     const table = block.querySelector("table");
     if (!table) return;
@@ -499,8 +643,26 @@ const applyDiegoFilters = () => {
         if (index < 0) return true;
         const cellValue = row.children[index]?.textContent.trim() ?? "";
         if (headerName === "Mes") return cellValue.startsWith(selected);
-        if (headerName === "Línea comercial") return normalizeFilterText(cellValue).includes(selected);
+        if (headerName === "Línea comercial") {
+          const normalizedLine = normalizeFilterText(cellValue).includes("insolvencia") ? "pnnc" : normalizeFilterText(cellValue);
+          return normalizedLine.includes(selected);
+        }
         return normalizeFilterText(cellValue) === normalizeFilterText(selected);
+      });
+      const selectedHierarchy = hierarchySelection();
+      const advisorIndex = headers.indexOf("Asesor");
+      const leaderIndex = headers.indexOf("Líder");
+      const coordinatorIndex = headers.indexOf("Coordinador");
+      const rowAdvisor = advisorIndex >= 0 ? row.children[advisorIndex]?.textContent.trim() : null;
+      const rowLeader = leaderIndex >= 0 ? row.children[leaderIndex]?.textContent.trim() : (title.includes("líder") ? row.dataset.group : null);
+      const rowCoordinator = coordinatorIndex >= 0 ? row.children[coordinatorIndex]?.textContent.trim() : (title.includes("coordinador") ? row.dataset.group : null);
+      const hasHierarchyIdentity = rowAdvisor || rowLeader || rowCoordinator;
+      const matchesRelatedTeam = !hasHierarchyIdentity || !commercialHierarchy.length || commercialHierarchy.some((item) => {
+        if (!matchesHierarchySelection(item, selectedHierarchy)) return false;
+        if (rowAdvisor && normalizeFilterText(item.advisor ?? "") !== normalizeFilterText(rowAdvisor)) return false;
+        if (rowLeader && normalizeFilterText(item.leader ?? "") !== normalizeFilterText(rowLeader)) return false;
+        if (rowCoordinator && normalizeFilterText(item.coordinator ?? "") !== normalizeFilterText(rowCoordinator)) return false;
+        return true;
       });
       const stageIndex = headers.findIndex((header) => normalizeFilterText(header).startsWith("etapa"));
       const stageValue = stageIndex >= 0 ? normalizeFilterText(row.children[stageIndex]?.textContent ?? "") : "";
@@ -508,8 +670,8 @@ const applyDiegoFilters = () => {
       const matchesPendingLeader = selectedPendingLeader === "all"
         || stageIndex < 0
         || (selectedPendingLeader === "pending" ? isPendingLeader : !isPendingLeader);
-      row.hidden = !(matches && matchesPendingLeader);
-      if (matches && matchesPendingLeader) visibleRows += 1;
+      row.hidden = !(matches && matchesPendingLeader && matchesRelatedTeam);
+      if (matches && matchesPendingLeader && matchesRelatedTeam) visibleRows += 1;
     });
 
     const badge = block.querySelector(".diego-block-title em");
@@ -518,20 +680,38 @@ const applyDiegoFilters = () => {
 };
 
 const setupDiegoFilters = () => {
-  fillFilterOptions("diegoAdvisor", collectColumnValues("Asesor"));
-  fillFilterOptions("diegoLeader", collectColumnValues("Líder"));
-  fillFilterOptions("diegoCoordinator", collectColumnValues("Coordinador"));
+  const selection = hierarchySelection();
+  fillFilterOptions("diegoCoordinator", uniqueHierarchyValues("coordinator", selection, "coordinator"));
+  const afterCoordinator = hierarchySelection();
+  fillFilterOptions("diegoLeader", uniqueHierarchyValues("leader", afterCoordinator, "leader"));
+  const afterLeader = hierarchySelection();
+  const hierarchyAdvisors = uniqueHierarchyValues("advisor", afterLeader, "advisor");
+  fillFilterOptions("diegoAdvisor", hierarchyAdvisors.length ? hierarchyAdvisors : collectColumnValues("Asesor"));
   ["diegoMonth", "diegoLine", "diegoAdvisor", "diegoLeader", "diegoCoordinator", "diegoPendingLeader"].forEach((id) => {
     const select = document.getElementById(id);
     if (select.dataset.bound === "true") return;
-    select.addEventListener("change", applyDiegoFilters);
+    select.addEventListener("change", () => {
+      if (id === "diegoLine") {
+        document.getElementById("diegoCoordinator").value = "all";
+        document.getElementById("diegoLeader").value = "all";
+        document.getElementById("diegoAdvisor").value = "all";
+      } else if (id === "diegoCoordinator") {
+        document.getElementById("diegoLeader").value = "all";
+        document.getElementById("diegoAdvisor").value = "all";
+      } else if (id === "diegoLeader") {
+        document.getElementById("diegoAdvisor").value = "all";
+      }
+      if (["diegoLine", "diegoCoordinator", "diegoLeader"].includes(id)) setupDiegoFilters();
+      else applyDiegoFilters();
+    });
     select.dataset.bound = "true";
   });
   applyDiegoFilters();
 };
 
 const renderDiegoDashboard = () => {
-  const sections = diegoSections.map((section) => {
+  const sourceSections = reportId === "informe_general_comercial" ? [...diegoSections, generalManagementSection] : diegoSections;
+  const sections = sourceSections.map((section) => {
     const reportBlocks = section.blocks.filter(([title]) => reportId === "informe_general_comercial" || title !== "Posible cierre PNC");
     return { ...section, blocks: reportId === "informe_general_comercial" && generalBlockAccess.configured
       ? reportBlocks.filter(([title]) => generalBlockAccess.codes.has(generalBlockCodes[title]))
@@ -626,8 +806,9 @@ const load = async () => {
   setText("reportArea", current.area);
   if (["fuerza_comercial_diego", "informe_general_comercial"].includes(reportId)) {
     const isGeneralCommercial = reportId === "informe_general_comercial";
+    const session = await fetch("/api/auth/me").then((response) => response.json());
+    teamScope = session.teamScope ?? null;
     if (isGeneralCommercial) {
-      const session = await fetch("/api/auth/me").then((response) => response.json());
       generalBlockAccess = { configured: Boolean(session.generalCommercialBlocksConfigured), codes: new Set(session.generalCommercialBlockCodes ?? []) };
     }
     document.body.classList.toggle("general-commercial-report", isGeneralCommercial);

@@ -3,8 +3,15 @@ CREATE TABLE IF NOT EXISTS reporting.organization_access (
     role_label text NOT NULL DEFAULT 'viewer',
     visible_reports text[] NOT NULL DEFAULT ARRAY[]::text[],
     visible_blocks text[] NOT NULL DEFAULT ARRAY[]::text[],
+    user_id uuid NULL REFERENCES auth.users(id) ON DELETE SET NULL,
     updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE reporting.organization_access
+    ADD COLUMN IF NOT EXISTS user_id uuid NULL REFERENCES auth.users(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS ix_organization_access_user
+    ON reporting.organization_access(user_id);
 
 CREATE TABLE IF NOT EXISTS reporting.user_report_block_settings (
     user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
