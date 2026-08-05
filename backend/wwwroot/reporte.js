@@ -193,7 +193,7 @@ const loadDiegoRadicatedValues = async () => {
             <tr>${months.map((month) => `<th data-month="${month.slice(0, 2)}">${month}</th>`).join("")}</tr>
           </thead>
           <tbody>${advisors.map((advisor) => `
-            <tr><td>${advisor}</td>${months.map((month) => {
+          <tr data-advisor="${encodeURIComponent(advisor)}"><td>${advisor}</td>${months.map((month) => {
               const value = advisorValues.get(advisor).get(month);
               return `<td data-month="${month.slice(0, 2)}">${value ? formatNumber.format(value) : ""}</td>`;
             }).join("")}</tr>
@@ -284,7 +284,7 @@ const renderMonthlyMatrix = (groupLabel, items, groupField) => {
           <tr>${months.map((month) => `<th data-month="${month.slice(0, 2)}">${month}</th>`).join("")}</tr>
         </thead>
         <tbody>${groups.map((group) => `
-          <tr><td>${group}</td>${months.map((month) => {
+          <tr data-${groupField}="${encodeURIComponent(group)}"><td>${group}</td>${months.map((month) => {
             const value = groupedValues.get(group).get(month);
             return `<td data-month="${month.slice(0, 2)}">${value ? formatNumber.format(value) : ""}</td>`;
           }).join("")}</tr>
@@ -318,7 +318,7 @@ const renderPerformanceTable = (items, groupField, coordinatorMode = false) => {
     html: `<div class="radicated-table-wrap performance-table-wrap">
       <table class="radicated-table synced-table performance-table">
         <thead><tr><th>Mes</th><th>Meta</th><th>Valor alcanzado</th><th>% de cumplimiento</th></tr></thead>
-        <tbody>${rows.map((row) => `<tr data-group="${row.group}"><td>${row.month}</td><td>${formatNumber.format(row.goal)}</td><td>${formatNumber.format(row.total)}</td><td>${row.compliance.toLocaleString("es-CO", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</td></tr>`).join("")}</tbody>
+        <tbody>${rows.map((row) => `<tr data-group="${encodeURIComponent(row.group)}" data-${groupField}="${encodeURIComponent(row.group)}"><td>${row.month}</td><td>${formatNumber.format(row.goal)}</td><td>${formatNumber.format(row.total)}</td><td>${row.compliance.toLocaleString("es-CO", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</td></tr>`).join("")}</tbody>
       </table>
     </div>`
   };
@@ -346,7 +346,7 @@ const renderCommissionMatrix = (items) => {
       <tbody>${advisors.map((advisor) => {
         const values = advisorValues.get(advisor);
         const advisorTotal = [...values.values()].reduce((sum, value) => sum + value, 0);
-        return `<tr><td>${advisor}</td>${months.map((month) => `<td data-month="${month.slice(0, 2)}">${values.get(month) ? formatNumber.format(values.get(month)) : ""}</td>`).join("")}<td>${formatNumber.format(advisorTotal)}</td></tr>`;
+        return `<tr data-advisor="${encodeURIComponent(advisor)}"><td>${advisor}</td>${months.map((month) => `<td data-month="${month.slice(0, 2)}">${values.get(month) ? formatNumber.format(values.get(month)) : ""}</td>`).join("")}<td>${formatNumber.format(advisorTotal)}</td></tr>`;
       }).join("")}</tbody>
       <tfoot><tr><th>Total (Sum)</th>${months.map((month) => `<td data-month="${month.slice(0, 2)}">${formatNumber.format(monthTotals.get(month))}</td>`).join("")}<td>${formatNumber.format(grandTotal)}</td></tr></tfoot>
     </table>
@@ -457,7 +457,7 @@ const loadDiegoDashboardData = async () => {
       .map((item) => {
         const studiesRate = item.negotiations ? `${((item.commercialCases / item.negotiations) * 100).toFixed(1)}%` : "0.0%";
         const closingRate = item.commercialCases ? `${((item.radicatedCases / item.commercialCases) * 100).toFixed(1)}%` : "N/A";
-        return `<tr><td>${item.advisor}</td><td>${formatNumber.format(item.negotiations)}</td><td>${formatNumber.format(item.commercialCases)}</td><td>${studiesRate}</td><td>${formatNumber.format(item.radicatedCases)}</td><td>${closingRate}</td></tr>`;
+        return `<tr data-advisor="${encodeURIComponent(item.advisor)}"><td>${item.advisor}</td><td>${formatNumber.format(item.negotiations)}</td><td>${formatNumber.format(item.commercialCases)}</td><td>${studiesRate}</td><td>${formatNumber.format(item.radicatedCases)}</td><td>${closingRate}</td></tr>`;
       }),
     "advisor-negotiations-table"
   ), data.advisors.length);
@@ -504,7 +504,7 @@ const loadDiegoPortfolioCollections = async () => {
     data.portfolio = (data.portfolio ?? []).filter((item) => isTeamMember(item.advisor));
     data.items = (data.items ?? []).filter((item) => !item.advisor || isTeamMember(item.advisor));
   }
-  const portfolioRows = data.portfolio.map((item) => `<tr><td>${item.advisor}</td><td><span class="portfolio-line ${normalizeFilterText(item.commercialLine)}">${item.commercialLine}</span></td><td>${formatNumber.format(item.receivable)}</td><td>${formatNumber.format(item.withNovelty)}</td><td>${formatNumber.format(item.successful)}</td></tr>`);
+  const portfolioRows = data.portfolio.map((item) => `<tr data-advisor="${encodeURIComponent(item.advisor)}" data-line="${normalizeFilterText(item.commercialLine).includes("insolvencia") ? "pnnc" : normalizeFilterText(item.commercialLine)}"><td>${item.advisor}</td><td><span class="portfolio-line ${normalizeFilterText(item.commercialLine)}">${item.commercialLine}</span></td><td>${formatNumber.format(item.receivable)}</td><td>${formatNumber.format(item.withNovelty)}</td><td>${formatNumber.format(item.successful)}</td></tr>`);
   const portfolioContent = portfolioRows.length
     ? renderDataTable(["Asesor", "Línea", "Valor cartera por cobrar", "Valor cartera con novedad", "Valor cartera exitosa"], portfolioRows, "portfolio-state-table")
     : `<div class="empty-block"><strong>Sin cartera disponible</strong><span>Sincronice las pipelines RCH Cartera e Insolvencia Cartera.</span></div>`;
@@ -547,6 +547,14 @@ const loadDiegoLeadershipAndCommissions = async () => {
   replaceBlockPreview("Comisiones por asesor", data.commissions.length
     ? renderCommissionMatrix(data.commissions)
     : `<div class="empty-block"><strong>Sin comisiones para ${data.year}</strong><span>La pipeline Cuentas de Cobro no contiene registros pagados para este periodo.</span></div>`, data.commissions.length);
+};
+
+const loadDiegoFilterHierarchy = async () => {
+  const response = await fetch("/api/reports/fuerza-comercial-diego/jerarquia-filtros");
+  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  const data = await response.json();
+  commercialHierarchy = (data.items ?? []).filter((item) => !teamScope || isTeamMember(item.advisor));
+  setupDiegoFilters();
 };
 
 const normalizeFilterText = (value) => value.trim().toLocaleLowerCase("es-CO");
@@ -636,8 +644,8 @@ const applyDiegoFilters = () => {
       const matches = Object.entries(filters).every(([headerName, selected]) => {
         if (selected === "all") return true;
         if (table.classList.contains("performance-table") && row.dataset.group) {
-          if (headerName === "Coordinador" && title.includes("coordinadores")) return normalizeFilterText(row.dataset.group) === normalizeFilterText(selected);
-          if (headerName === "Líder" && title.includes("líder")) return normalizeFilterText(row.dataset.group) === normalizeFilterText(selected);
+          if (headerName === "Coordinador" && title.includes("coordinadores")) return normalizeFilterText(decodeURIComponent(row.dataset.group)) === normalizeFilterText(selected);
+          if (headerName === "Líder" && title.includes("líder")) return normalizeFilterText(decodeURIComponent(row.dataset.group)) === normalizeFilterText(selected);
         }
         const index = headers.indexOf(headerName);
         if (index < 0) return true;
@@ -653,9 +661,9 @@ const applyDiegoFilters = () => {
       const advisorIndex = headers.indexOf("Asesor");
       const leaderIndex = headers.indexOf("Líder");
       const coordinatorIndex = headers.indexOf("Coordinador");
-      const rowAdvisor = advisorIndex >= 0 ? row.children[advisorIndex]?.textContent.trim() : null;
-      const rowLeader = leaderIndex >= 0 ? row.children[leaderIndex]?.textContent.trim() : (title.includes("líder") ? row.dataset.group : null);
-      const rowCoordinator = coordinatorIndex >= 0 ? row.children[coordinatorIndex]?.textContent.trim() : (title.includes("coordinador") ? row.dataset.group : null);
+      const rowAdvisor = row.dataset.advisor ? decodeURIComponent(row.dataset.advisor) : (advisorIndex >= 0 ? row.children[advisorIndex]?.textContent.trim() : null);
+      const rowLeader = row.dataset.leader ? decodeURIComponent(row.dataset.leader) : (leaderIndex >= 0 ? row.children[leaderIndex]?.textContent.trim() : (title.includes("líder") ? row.dataset.group : null));
+      const rowCoordinator = row.dataset.coordinator ? decodeURIComponent(row.dataset.coordinator) : (coordinatorIndex >= 0 ? row.children[coordinatorIndex]?.textContent.trim() : (title.includes("coordinador") ? row.dataset.group : null));
       const hasHierarchyIdentity = rowAdvisor || rowLeader || rowCoordinator;
       const matchesRelatedTeam = !hasHierarchyIdentity || !commercialHierarchy.length || commercialHierarchy.some((item) => {
         if (!matchesHierarchySelection(item, selectedHierarchy)) return false;
@@ -827,6 +835,7 @@ const load = async () => {
       document.getElementById("pendingLeaderFilter").hidden = false;
     }
     renderDiegoDashboard();
+    await loadDiegoFilterHierarchy();
     document.getElementById("diegoYear").addEventListener("change", async () => {
       await Promise.all([loadDiegoRadicatedValues(), loadDiegoDashboardData(), loadDiegoPortfolioCollections(), loadDiegoLeadershipAndCommissions()]);
       setupDiegoFilters();

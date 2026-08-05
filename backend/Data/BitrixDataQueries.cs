@@ -734,6 +734,69 @@ public static class BitrixDataQueries
         return new { year, leadership, commissions, relationships };
     }
 
+    public static async Task<object> GetCommercialFilterHierarchyAsync(
+        NpgsqlDataSource dataSource,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            WITH RECURSIVE latest_users AS (
+                SELECT DISTINCT ON (connection_id, bitrix_id) connection_id, bitrix_id, payload
+                FROM bitrix.raw_payloads
+                WHERE entity_type = 'user'
+                ORDER BY connection_id, bitrix_id, received_at DESC
+            ), user_departments AS (
+                SELECT DISTINCT
+                    u.connection_id,
+                    u.bitrix_id,
+                    u.full_name,
+                    (jsonb_array_elements_text(payload.payload -> 'UF_DEPARTMENT'))::bigint AS department_id
+                FROM bitrix.users u
+                JOIN latest_users payload ON payload.connection_id = u.connection_id AND payload.bitrix_id = u.bitrix_id
+                WHERE u.active = true
+                  AND jsonb_typeof(payload.payload -> 'UF_DEPARTMENT') = 'array'
+            ), hierarchy AS (
+                SELECT ud.connection_id, ud.bitrix_id, ud.full_name, department.id, department.name, department.parent_id, 1 AS depth
+                FROM user_departments ud
+                JOIN bitrix.departments department ON department.id = ud.department_id
+                UNION ALL
+                SELECT hierarchy.connection_id, hierarchy.bitrix_id, hierarchy.full_name, parent.id, parent.name, parent.parent_id, hierarchy.depth + 1
+                FROM hierarchy
+                JOIN bitrix.departments parent ON parent.id = hierarchy.parent_id
+                WHERE hierarchy.depth < 8
+            )
+            SELECT
+                COALESCE(NULLIF(full_name, ''), bitrix_id, 'Sin asesor') AS advisor,
+                COALESCE(MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. LIDER%'), 'Sin líder') AS leader,
+                COALESCE(MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. COOR%'), 'Sin coordinador') AS coordinator,
+                CASE
+                    WHEN BOOL_OR(UPPER(name) LIKE '%RCH%') THEN 'RCH'
+                    WHEN BOOL_OR(UPPER(name) LIKE '%PNNC%' OR UPPER(name) LIKE '%INSOLV%') THEN 'PNNC'
+                    ELSE 'COMERCIAL'
+                END AS commercial_line
+            FROM hierarchy
+            GROUP BY connection_id, bitrix_id, full_name
+            HAVING MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. COOR%') IS NOT NULL
+                OR MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. LIDER%') IS NOT NULL
+            ORDER BY coordinator, leader, advisor;
+            """;
+
+        var items = new List<object>();
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            items.Add(new
+            {
+                advisor = reader.GetString(0),
+                leader = reader.GetString(1),
+                coordinator = reader.GetString(2),
+                commercialLine = reader.GetString(3)
+            });
+        }
+        return new { items };
+    }
+
     public static async Task<IResult> GetSyncSummaryAsync(
         string pipeline,
         NpgsqlDataSource dataSource,

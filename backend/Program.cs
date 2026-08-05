@@ -423,6 +423,11 @@ app.MapGet("/api/reports/fuerza-comercial-diego/liderazgo-comisiones", async (
         cancellationToken));
 });
 
+app.MapGet("/api/reports/fuerza-comercial-diego/jerarquia-filtros", async (
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+    Results.Ok(await BitrixDataQueries.GetCommercialFilterHierarchyAsync(dataSource, cancellationToken)));
+
 app.MapGet("/api/reports/catalog", () => Results.Ok(new[]
 {
     new
