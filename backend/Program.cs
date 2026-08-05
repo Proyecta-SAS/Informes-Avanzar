@@ -137,7 +137,7 @@ app.MapGet("/api/auth/me", async (HttpContext context, IReportAccessService repo
     var isSuperAdmin = string.Equals(user.Email, superAdminEmail, StringComparison.OrdinalIgnoreCase);
     return Results.Ok(new { user.Id, user.Email, user.FullName, user.RoleCode, isSuperAdmin, accessibleReportCodes = reportCodes, permissions, generalCommercialBlocksConfigured = blockAccess.Configured, generalCommercialBlockCodes = blockAccess.Blocks });
 });
-app.MapGet("/api/organization/commercial", async (IBitrixClient bitrixClient, NpgsqlDataSource dataSource, CancellationToken cancellationToken) => Results.Ok(await OrganizationQueries.GetCommercialStructureAsync(bitrixClient, dataSource, cancellationToken)));
+app.MapGet("/api/organization/commercial", async (NpgsqlDataSource dataSource, CancellationToken cancellationToken) => Results.Ok(await OrganizationQueries.GetCommercialStructureAsync(dataSource, cancellationToken)));
 app.MapPut("/api/organization/commercial/{departmentId}/settings", async (string departmentId, JsonElement body, NpgsqlDataSource dataSource, CancellationToken cancellationToken) => { var role=body.TryGetProperty("roleLabel",out var roleProperty)?roleProperty.GetString()??"viewer":"viewer";var email=body.TryGetProperty("email",out var emailProperty)?emailProperty.GetString():null;var reports=body.TryGetProperty("visibleReports",out var reportsProperty)&&reportsProperty.ValueKind==JsonValueKind.Array?reportsProperty.EnumerateArray().Select(item=>item.GetString()).Where(item=>!string.IsNullOrWhiteSpace(item)).Cast<string>().ToArray():Array.Empty<string>();var blocks=body.TryGetProperty("visibleBlocks",out var blocksProperty)&&blocksProperty.ValueKind==JsonValueKind.Array?blocksProperty.EnumerateArray().Select(item=>item.GetString()).Where(item=>!string.IsNullOrWhiteSpace(item)).Cast<string>().ToArray():Array.Empty<string>();await OrganizationQueries.SetSettingsAsync(departmentId,email,role,reports,blocks,dataSource,cancellationToken);return Results.NoContent(); });
 
 app.MapGet("/health", (IHostEnvironment environment) => Results.Ok(new
@@ -561,33 +561,40 @@ app.MapPost("/api/bitrix/sync/departments", async (
     NpgsqlDataSource dataSource,
     CancellationToken cancellationToken) =>
 {
-    using var response = await bitrixClient.CallAsync(
-        "department.get",
-        Array.Empty<KeyValuePair<string, string>>(),
-        cancellationToken);
-
-    if (response.RootElement.TryGetProperty("error", out var error))
+    var departments = new List<(long Id, string Name, long? ParentId, int Sort, string? HeadId)>();
+    for (var start = 0; ; start += 50)
     {
-        return Results.BadRequest(new { status = "failed", error = error.GetString() });
-    }
+        using var response = await bitrixClient.CallAsync(
+            "department.get",
+            new[] { new KeyValuePair<string, string>("start", start.ToString()) },
+            cancellationToken);
 
-    if (!response.RootElement.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Array)
-    {
-        return Results.Ok(new { status = "succeeded", recordsWritten = 0 });
-    }
-
-    var departments = result.EnumerateArray()
-        .Select(item => new
+        if (response.RootElement.TryGetProperty("error", out var error))
         {
-            Id = long.Parse(item.GetProperty("ID").ToString()),
-            Name = item.TryGetProperty("NAME", out var name) ? name.ToString() : "Departamento",
-            ParentId = item.TryGetProperty("PARENT", out var parent)
-                && long.TryParse(parent.ToString(), out var parentId)
-                && parentId > 0 ? parentId : (long?)null,
-            Sort = item.TryGetProperty("SORT", out var sort)
-                && int.TryParse(sort.ToString(), out var sortOrder) ? sortOrder : 0
-        })
-        .ToArray();
+            var description = response.RootElement.TryGetProperty("error_description", out var detail)
+                ? detail.GetString()
+                : error.GetString();
+            return Results.BadRequest(new { status = "failed", error = description });
+        }
+
+        if (!response.RootElement.TryGetProperty("result", out var result) || result.ValueKind != JsonValueKind.Array) break;
+        var page = result.EnumerateArray().ToArray();
+        departments.AddRange(page.Select(item =>
+        {
+            var id = long.Parse(item.GetProperty("ID").ToString());
+            var name = item.TryGetProperty("NAME", out var departmentName) ? departmentName.ToString() : "Departamento";
+            var parentId = item.TryGetProperty("PARENT", out var parent)
+                && long.TryParse(parent.ToString(), out var parsedParentId)
+                && parsedParentId > 0 ? parsedParentId : (long?)null;
+            var sortOrder = item.TryGetProperty("SORT", out var sort)
+                && int.TryParse(sort.ToString(), out var parsedSortOrder) ? parsedSortOrder : 0;
+            var headId = item.TryGetProperty("UF_HEAD", out var head) && head.ValueKind != JsonValueKind.Null && head.ToString() != "0"
+                ? head.ToString()
+                : null;
+            return (id, name, parentId, sortOrder, headId);
+        }));
+        if (page.Length < 50) break;
+    }
 
     await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
     await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
@@ -595,16 +602,18 @@ app.MapPost("/api/bitrix/sync/departments", async (
     foreach (var department in departments)
     {
         await using var command = new NpgsqlCommand("""
-            INSERT INTO bitrix.departments (id, name, parent_id, sort_order, updated_at)
-            VALUES (@id, @name, NULL, @sort, now())
+            INSERT INTO bitrix.departments (id, name, parent_id, sort_order, head_bitrix_id, updated_at)
+            VALUES (@id, @name, NULL, @sort, @headId, now())
             ON CONFLICT (id) DO UPDATE
             SET name = EXCLUDED.name,
                 sort_order = EXCLUDED.sort_order,
+                head_bitrix_id = EXCLUDED.head_bitrix_id,
                 updated_at = now();
             """, connection, transaction);
         command.Parameters.AddWithValue("id", department.Id);
         command.Parameters.AddWithValue("name", department.Name);
         command.Parameters.AddWithValue("sort", department.Sort);
+        command.Parameters.AddWithValue("headId", (object?)department.HeadId ?? DBNull.Value);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -619,7 +628,7 @@ app.MapPost("/api/bitrix/sync/departments", async (
     }
 
     await transaction.CommitAsync(cancellationToken);
-    return Results.Ok(new { status = "succeeded", recordsWritten = departments.Length });
+    return Results.Ok(new { status = "succeeded", recordsWritten = departments.Count });
 });
 
 app.MapPost("/api/bitrix/sync/stages", async (

@@ -7,30 +7,47 @@ const areas = [
     tone: "violet",
     reports: [
       { title: "Informe General Comercial", description: "Radicación, negociaciones, comisiones, cartera, embudos y etapas en una sola vista.", href: "/reporte.html?id=informe_general_comercial", badge: "Informe general" },
+      { title: "Fuerza Comercial", description: "Radicación, cartera, comisiones, embudos y liderazgo.", href: "/reporte.html?id=fuerza_comercial_diego", badge: "Informe ejecutivo" },
       { title: "RCH Comercial", description: "Negociaciones y avance de la pipeline comercial RCH.", href: "/reporte.html?id=rch_comercial", badge: "Pipeline" },
       { title: "PNNC Comercial", description: "Prospectos, seguimiento y conversión comercial PNNC.", href: "/reporte.html?id=pnnc_comercial", badge: "Comercial" },
-      { title: "Fuerza Comercial", description: "Radicación, cartera, comisiones, embudos y liderazgo.", href: "/reporte.html?id=fuerza_comercial_diego", badge: "Informe ejecutivo" }
+      { title: "Marketing", description: "Espacio para campañas, generación de demanda y métricas de marketing.", badge: "Próximamente", upcoming: true }
     ]
   },
   {
-    id: "pnnc",
-    icon: "◇",
-    title: "PNNC",
-    description: "Vista comercial y operativa de insolvencia y negociación de cartera.",
+    id: "operativo",
+    icon: "⚙",
+    title: "Operativo",
+    description: "Control operativo, documentación y avance de los casos radicados.",
     tone: "blue",
     reports: [
-      { title: "PNNC Operativa", description: "Casos, documentación y etapas operativas PNNC.", href: "/reporte.html?id=pnnc_operativa", badge: "Operativa" }
+      { title: "PNNC Operativa", description: "Casos, documentación y etapas operativas PNNC.", href: "/reporte.html?id=pnnc_operativa", badge: "Operativa" },
+      { title: "RCH Operativa", description: "Gestión operativa de negociaciones y etapas RCH.", href: "/reporte.html?id=rch_operativa", badge: "Pipeline" },
+      { title: "LP Operativa", description: "Espacio para el seguimiento operativo de la línea LP.", badge: "Próximamente", upcoming: true }
     ]
   },
   {
-    id: "operaciones",
-    icon: "⚙",
-    title: "Operativa",
-    description: "Control operativo, documentación y avance de los casos radicados.",
+    id: "administrativo",
+    icon: "▦",
+    title: "Administrativo",
+    description: "Indicadores administrativos, financieros y de soporte corporativo.",
     tone: "red",
-    reports: [
-      { title: "RCH Operativa", description: "Gestión operativa de negociaciones y etapas RCH.", href: "/reporte.html?id=rch_operativa", badge: "Pipeline" }
-    ]
+    reports: []
+  },
+  {
+    id: "gerencia",
+    icon: "◇",
+    title: "Gerencia",
+    description: "Tableros ejecutivos y consolidación estratégica para la gerencia.",
+    tone: "violet",
+    reports: []
+  },
+  {
+    id: "subgerencia",
+    icon: "◫",
+    title: "Subgerencia",
+    description: "Seguimiento de gestión, objetivos y resultados de subgerencia.",
+    tone: "blue",
+    reports: []
   }
 ];
 
@@ -43,14 +60,17 @@ const renderAreas = (query = "") => {
   const content = areas.map((area) => {
     const areaMatch = `${area.title} ${area.description}`.toLocaleLowerCase("es-CO").includes(normalized);
     const allowed = new Set(homeSession.accessibleReportCodes ?? []);
-    const reports = area.reports.filter((report) => allowed.has(reportCodeFromHref(report.href)))
+    const reports = area.reports.filter((report) => report.upcoming || allowed.has(reportCodeFromHref(report.href)))
       .filter((report) => areaMatch || `${report.title} ${report.description} ${report.badge}`.toLocaleLowerCase("es-CO").includes(normalized));
-    if (!reports.length) return "";
-    visibleReports += reports.length;
+    if (!reports.length && normalized && !areaMatch) return "";
+    visibleReports += reports.filter((report) => !report.upcoming).length;
     return `<article id="${area.id}" class="home-area-card ${area.tone}">
-      <header><span>${area.icon}</span><div><small>Área</small><h3>${area.title}</h3></div><em>${reports.length} ${reports.length === 1 ? "informe" : "informes"}</em></header>
-      <p>${area.description}</p>
-      <div class="home-report-links">${reports.map((report) => `<a href="${report.href}"><div><span>${report.badge}</span><strong>${report.title}</strong><small>${report.description}</small></div><b>→</b></a>`).join("")}</div>
+      <header data-area-toggle><span>${area.icon}</span><div><small>Área</small><h3>${area.title}</h3></div><em>${reports.length ? `${reports.length} ${reports.length === 1 ? "módulo" : "módulos"}` : "Disponible"}</em><button type="button" aria-expanded="false" aria-label="Abrir ${area.title}">⌄</button></header>
+      <div class="area-card-content" hidden><p>${area.description}</p>
+      <div class="home-report-links">${reports.length ? reports.map((report) => report.upcoming
+        ? `<div class="home-report-placeholder"><div><span>${report.badge}</span><strong>${report.title}</strong><small>${report.description}</small></div><b>En preparación</b></div>`
+        : `<a href="${report.href}"><div><span>${report.badge}</span><strong>${report.title}</strong><small>${report.description}</small></div><b>→</b></a>`).join("")
+        : `<div class="home-area-empty"><strong>Área preparada</strong><small>Los informes se agregarán cuando sean definidos.</small></div>`}</div></div>
     </article>`;
   }).join("");
   document.getElementById("homeAreas").innerHTML = content || `<div class="home-no-results"><strong>No encontramos informes</strong><span>Prueba con otro nombre o área.</span></div>`;
@@ -58,6 +78,16 @@ const renderAreas = (query = "") => {
 };
 
 document.getElementById("reportSearch").addEventListener("input", (event) => renderAreas(event.target.value));
+document.getElementById("homeAreas").addEventListener("click", (event) => {
+  const header = event.target.closest("[data-area-toggle]");
+  if (!header) return;
+  const card = header.closest(".home-area-card");
+  const content = card.querySelector(".area-card-content");
+  const open = !card.classList.contains("open");
+  card.classList.toggle("open", open);
+  content.hidden = !open;
+  header.querySelector("button").setAttribute("aria-expanded", String(open));
+});
 fetch("/api/auth/me").then((response) => response.json()).then((session) => {
   homeSession = session;
   const permissions = new Set(session.permissions ?? []);

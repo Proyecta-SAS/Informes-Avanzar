@@ -30,18 +30,18 @@ if (sessionMenu) {
         ${navLink("/reporte.html?id=fuerza_comercial_diego", "report", "Fuerza Comercial", "fuerza_comercial_diego")}
         ${navLink("/reporte.html?id=rch_comercial", "report", "RCH Comercial", "rch_comercial")}
         ${navLink("/reporte.html?id=pnnc_comercial", "report", "PNNC Comercial", "pnnc_comercial")}
+        <span class="sidebar-coming">${icon("report")}<span>Marketing</span></span>
       </div>
     </div>
     <div class="sidebar-group" data-nav-group="operativa">
-      <button class="sidebar-group-toggle" type="button" aria-expanded="false"><span class="sidebar-group-icon operative">${icons.operative}</span><span>Operativa</span><b>⌄</b></button>
-      <div class="sidebar-group-items">${navLink("/reporte.html?id=rch_operativa", "report", "RCH Operativa", "rch_operativa")}</div>
-    </div>
-    <div class="sidebar-group" data-nav-group="pnnc">
-      <button class="sidebar-group-toggle" type="button" aria-expanded="false"><span class="sidebar-group-icon pnnc">${icons.pnnc}</span><span>PNNC</span><b>⌄</b></button>
+      <button class="sidebar-group-toggle" type="button" aria-expanded="false"><span class="sidebar-group-icon operative">${icons.operative}</span><span>Operativo</span><b>⌄</b></button>
       <div class="sidebar-group-items">
         ${navLink("/reporte.html?id=pnnc_operativa", "report", "PNNC Operativa", "pnnc_operativa")}
+        ${navLink("/reporte.html?id=rch_operativa", "report", "RCH Operativa", "rch_operativa")}
+        <span class="sidebar-coming">${icon("report")}<span>LP Operativa</span></span>
       </div>
     </div>
+    ${["Administrativo", "Gerencia", "Subgerencia"].map((area) => `<div class="sidebar-group sidebar-area-empty" data-nav-group="${area.toLowerCase()}"><button class="sidebar-group-toggle" type="button" aria-expanded="false"><span class="sidebar-group-icon pnnc">${icons.pnnc}</span><span>${area}</span><b>⌄</b></button><div class="sidebar-group-items"><span class="sidebar-empty">Sin informes configurados</span></div></div>`).join("")}
     <p>ADMINISTRACIÓN</p>
     <div class="sidebar-group" data-nav-group="administracion">
       <button class="sidebar-group-toggle" type="button" aria-expanded="false"><span class="sidebar-group-icon admin">${icons.admin}</span><span>Gestión</span><b>⌄</b></button>
@@ -51,6 +51,12 @@ if (sessionMenu) {
         <span data-superadmin-only>${navLink("/estructura-comercial.html", "structure", "Estructura Comercial")}</span>
       </div>
     </div>`;
+
+  sessionMenu.querySelectorAll(".sidebar-group-items > span[data-required-permission], .sidebar-group-items > span[data-superadmin-only]").forEach((row) => {
+    row.style.cssText = "display:block;flex:0 0 auto;width:100%;height:auto;min-height:36px;margin:0";
+    const link = row.querySelector(".sidebar-sub-link");
+    if (link) link.style.cssText = "width:100%;height:auto;min-height:36px;margin:0";
+  });
 
   document.querySelectorAll(".sidebar-group").forEach((group) => {
     const key = `navGroup:${group.dataset.navGroup}`;
@@ -100,7 +106,7 @@ if (sessionMenu) {
       if (session.roleCode !== "admin" && !required.some((code) => permissions.has(code))) item.remove();
     });
     sessionMenu.querySelectorAll(".sidebar-group").forEach((group) => {
-      if (!group.querySelector(".sidebar-group-items a")) group.remove();
+      if (!group.querySelector(".sidebar-group-items a, .sidebar-coming, .sidebar-empty")) group.remove();
     });
   }).catch(() => {});
 }

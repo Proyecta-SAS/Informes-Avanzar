@@ -139,9 +139,6 @@ const loadDiegoRadicatedValues = async () => {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
 
-    const valueKpi = document.querySelector(".diego-kpis article:nth-child(5) strong");
-    valueKpi.textContent = currencyFormatter.format(data.totalAchieved ?? 0);
-
     if (!data.items?.length) {
       container.innerHTML = `<div class="empty-block"><strong>Sin valores radicados para ${data.year}</strong><span>Sincronice los negocios de Bitrix para cargar este indicador.</span></div>`;
       return;
@@ -340,16 +337,6 @@ const loadDiegoDashboardData = async () => {
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
 
-  const totalNegotiations = data.advisors.reduce((sum, item) => sum + item.negotiations, 0);
-  const totalCommercial = data.advisors.reduce((sum, item) => sum + item.commercialCases, 0);
-  const totalRadicated = data.advisors.reduce((sum, item) => sum + item.radicatedCases, 0);
-  document.querySelector(".diego-kpis article:nth-child(1) strong").textContent = formatNumber.format(totalNegotiations);
-  document.querySelector(".diego-kpis article:nth-child(2) strong").textContent = formatNumber.format(totalCommercial);
-  document.querySelector(".diego-kpis article:nth-child(3) strong").textContent = formatNumber.format(totalRadicated);
-  document.querySelector(".diego-kpis article:nth-child(4) strong").textContent = totalCommercial
-    ? `${((totalRadicated / totalCommercial) * 100).toFixed(1)}%`
-    : "0%";
-
   replaceBlockPreview("Total de negociaciones por asesor", renderDataTable(
     ["Asesor", "Total de negociaciones", "Estudios", "Estudios sobre total", "Radicados", "Tasa de cierre"],
     [...data.advisors]
@@ -400,7 +387,6 @@ const loadDiegoPortfolioCollections = async () => {
   const response = await fetch(`/api/reports/fuerza-comercial-diego/cartera-recaudada?year=${encodeURIComponent(year)}`);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
-  document.querySelector(".diego-kpis article:nth-child(6) strong").textContent = currencyFormatter.format(data.totalCollected ?? 0);
   const portfolioRows = data.portfolio.map((item) => `<tr><td>${item.advisor}</td><td><span class="portfolio-line ${normalizeFilterText(item.commercialLine)}">${item.commercialLine}</span></td><td>${formatNumber.format(item.receivable)}</td><td>${formatNumber.format(item.withNovelty)}</td><td>${formatNumber.format(item.successful)}</td></tr>`);
   const portfolioContent = portfolioRows.length
     ? renderDataTable(["Asesor", "Línea", "Valor cartera por cobrar", "Valor cartera con novedad", "Valor cartera exitosa"], portfolioRows, "portfolio-state-table")
