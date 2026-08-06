@@ -42,8 +42,20 @@ if (sessionMenu) {
         <span class="sidebar-coming">${icon("report")}<span>LP Operativa</span></span>
       </div>
     </div>
-    ${["Administrativo", "Gerencia", "Subgerencia"].map((area) => `<div class="sidebar-group sidebar-area-empty" data-nav-group="${area.toLowerCase()}"><button class="sidebar-group-toggle" type="button" aria-expanded="false"><span class="sidebar-group-icon pnnc">${icons.pnnc}</span><span>${area}</span><b>⌄</b></button><div class="sidebar-group-items"><span class="sidebar-empty">Sin informes configurados</span></div></div>`).join("")}
-    <p>ADMINISTRACIÓN</p>
+    <div class="sidebar-group sidebar-area-empty" data-nav-group="administrativo">
+      <button class="sidebar-group-toggle" type="button" aria-expanded="false"><span class="sidebar-group-icon pnnc">${icons.pnnc}</span><span>Administrativo</span><b>⌄</b></button>
+      <div class="sidebar-group-items"><span class="sidebar-empty">Sin informes configurados</span></div>
+    </div>
+    <div class="sidebar-group" data-nav-group="gerencia">
+      <button class="sidebar-group-toggle" type="button" aria-expanded="false"><span class="sidebar-group-icon pnnc">${icons.pnnc}</span><span>Gerencia</span><b>⌄</b></button>
+      <div class="sidebar-group-items">
+        ${navLink("/reporte.html?id=informe_gerencia_2026_2027", "report", "Informe Gerencia", "informe_gerencia_2026_2027")}
+      </div>
+    </div>
+    <div class="sidebar-group sidebar-area-empty" data-nav-group="subgerencia">
+      <button class="sidebar-group-toggle" type="button" aria-expanded="false"><span class="sidebar-group-icon pnnc">${icons.pnnc}</span><span>Subgerencia</span><b>⌄</b></button>
+      <div class="sidebar-group-items"><span class="sidebar-empty">Sin informes configurados</span></div>
+    </div>
     <div class="sidebar-group" data-nav-group="administracion">
       <button class="sidebar-group-toggle" type="button" aria-expanded="false"><span class="sidebar-group-icon admin">${icons.admin}</span><span>Gestión</span><b>⌄</b></button>
       <div class="sidebar-group-items">
@@ -100,7 +112,7 @@ if (sessionMenu) {
       if (!session.isSuperAdmin) item.remove();
     });
     sessionMenu.querySelectorAll("[data-report-code]").forEach((link) => {
-      if (!allowed.has(link.dataset.reportCode)) link.remove();
+      if (session.roleCode !== "admin" && !allowed.has(link.dataset.reportCode)) link.remove();
     });
     sessionMenu.querySelectorAll("[data-required-permission]").forEach((item) => {
       const required = item.dataset.requiredPermission.split(" ");

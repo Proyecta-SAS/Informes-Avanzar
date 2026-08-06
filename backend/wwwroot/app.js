@@ -39,7 +39,9 @@ const areas = [
     title: "Gerencia",
     description: "Tableros ejecutivos y consolidación estratégica para la gerencia.",
     tone: "violet",
-    reports: []
+    reports: [
+      { title: "Informe Gerencia 2026 y 2027", description: "Panel ejecutivo para seguimiento gerencial de indicadores 2026 y 2027.", href: "/reporte.html?id=informe_gerencia_2026_2027", badge: "Gerencia" }
+    ]
   },
   {
     id: "subgerencia",
@@ -61,7 +63,7 @@ const renderAreas = (query = "") => {
     const areaMatch = `${area.title} ${area.description}`.toLocaleLowerCase("es-CO").includes(normalized);
     const allowed = new Set(homeSession.accessibleReportCodes ?? []);
     const canSeePlaceholders = homeSession.roleCode === "admin";
-    const reports = area.reports.filter((report) => (report.upcoming && canSeePlaceholders) || allowed.has(reportCodeFromHref(report.href)))
+    const reports = area.reports.filter((report) => canSeePlaceholders || allowed.has(reportCodeFromHref(report.href)))
       .filter((report) => areaMatch || `${report.title} ${report.description} ${report.badge}`.toLocaleLowerCase("es-CO").includes(normalized));
     if (!reports.length && !canSeePlaceholders) return "";
     if (!reports.length && normalized && !areaMatch) return "";

@@ -6,7 +6,8 @@ public sealed class BitrixSynchronizer(
     IBitrixSyncRepository repository,
     IBitrixUserSyncService userSyncService,
     IBitrixStageSyncService stageSyncService,
-    IBitrixDealSyncService dealSyncService) : IBitrixSynchronizer
+    IBitrixDealSyncService dealSyncService,
+    IBitrixActivitySyncService activitySyncService) : IBitrixSynchronizer
 {
     public async Task<IReadOnlyList<SyncResult>> RunGlobalAsync(SyncMode mode, CancellationToken cancellationToken)
     {
@@ -40,6 +41,8 @@ public sealed class BitrixSynchronizer(
                     cancellationToken,
                     mode));
             }
+
+            results.Add(await activitySyncService.SyncActivitiesAsync(cancellationToken));
 
             return results;
         }

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard</title>
-  <link rel="stylesheet" href="/styles.css?v=20260805-management">
+  <link rel="stylesheet" href="/styles.css?v=20260806-merged-management-permissions">
 </head>
 <body>
   <aside class="sidebar">
@@ -15,11 +15,11 @@
     </div>
     <nav class="menu">
       <p>GENERAL</p>
-      <a href="/"><span>🏠</span>Inicio</a>
-      <a href="/informes.html"><span>📊</span>Informes</a>
+      <a href="/"><span></span>Inicio</a>
+      <a href="/informes.html"><span></span>Informes</a>
       <p>VISTAS</p>
-      <a class="active" href="#"><span>📌</span>Resumen</a>
-      <a href="#detalle"><span>📋</span>Detalle</a>
+      <a class="active" href="#"><span></span>Resumen</a>
+      <a href="#detalle"><span></span>Detalle</a>
     </nav>
   </aside>
 
@@ -42,7 +42,7 @@
       <aside>
         <span>Estado</span>
         <strong id="reportStatus">OK</strong>
-        <p id="reportArea">Area</p>
+        <p id="reportArea">Ãrea</p>
         <em>Power BI style</em>
       </aside>
     </section>
@@ -64,7 +64,7 @@
         <span class="kpi-note">Responsables</span>
       </article>
       <article class="kpi success">
-        <span class="card-label">Ultima sync</span>
+        <span class="card-label">Última sincronización</span>
         <strong id="summaryStatus" class="kpi-value">-</strong>
         <span id="summaryLastRun" class="kpi-note">Sin datos</span>
       </article>
@@ -72,7 +72,7 @@
 
     <section id="standardVisuals" class="dashboard-layout">
       <div class="visual-panel">
-        <div class="panel-title"><h2>Distribucion por etapa</h2></div>
+        <div class="panel-title"><h2>Distribución por etapa</h2></div>
         <div id="stageBars" class="stage-bars"></div>
       </div>
       <div class="visual-panel">
@@ -113,6 +113,818 @@
       <div id="diegoSections"></div>
     </section>
 
+    <section id="gerenciaDashboard" class="gerencia-dashboard" hidden>
+      <section class="gerencia-filters" aria-label="Filtros del informe de gerencia">
+        <div>
+          <span class="filter-title">Filtros del informe</span>
+          <p>Indicadores ejecutivos comerciales por periodo.</p>
+        </div>
+        <label>Año<select id="gerenciaYear"><option>2026</option><option>2027</option></select></label>
+        <div class="month-filter-group" id="gerenciaMonthGroup">
+          <span class="month-filter-label">Meses</span>
+          <details class="month-multiselect" id="gerenciaMonthDropdown">
+            <summary><span id="gerenciaMonthSummary">Todos</span></summary>
+            <div class="month-filter-options">
+              <label class="month-filter-option all"><input type="checkbox" id="gerenciaMonthAll" checked> Todos</label>
+              <label class="month-filter-option"><input type="checkbox" value="01 ENE" data-gerencia-month-filter> Enero</label>
+              <label class="month-filter-option"><input type="checkbox" value="02 FEB" data-gerencia-month-filter> Febrero</label>
+              <label class="month-filter-option"><input type="checkbox" value="03 MAR" data-gerencia-month-filter> Marzo</label>
+              <label class="month-filter-option"><input type="checkbox" value="04 ABR" data-gerencia-month-filter> Abril</label>
+              <label class="month-filter-option"><input type="checkbox" value="05 MAY" data-gerencia-month-filter> Mayo</label>
+              <label class="month-filter-option"><input type="checkbox" value="06 JUN" data-gerencia-month-filter> Junio</label>
+              <label class="month-filter-option"><input type="checkbox" value="07 JUL" data-gerencia-month-filter> Julio</label>
+              <label class="month-filter-option"><input type="checkbox" value="08 AGO" data-gerencia-month-filter> Agosto</label>
+              <label class="month-filter-option"><input type="checkbox" value="09 SEP" data-gerencia-month-filter> Septiembre</label>
+              <label class="month-filter-option"><input type="checkbox" value="10 OCT" data-gerencia-month-filter> Octubre</label>
+              <label class="month-filter-option"><input type="checkbox" value="11 NOV" data-gerencia-month-filter> Noviembre</label>
+              <label class="month-filter-option"><input type="checkbox" value="12 DIC" data-gerencia-month-filter> Diciembre</label>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <h2 class="gerencia-section-title">Informe Comercial</h2>
+
+      <section class="gerencia-panel-grid">
+        <article class="gerencia-kpi-card">
+          <h3>(COMERCIAL) % de cumplimiento</h3>
+          <strong id="gerenciaComercialCumplimiento">-</strong>
+          <p id="gerenciaComercialDetalle">Leyendo datos desde PostgreSQL.</p>
+        </article>
+        <article class="gerencia-table-card">
+          <h3>(GER) Cumplimiento Comercial General 2026</h3>
+          <div class="gerencia-table-wrap">
+            <table class="gerencia-table">
+              <thead>
+                <tr>
+                  <th><button class="sort-header" type="button" data-gerencia-sort="month">Meses<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-gerencia-sort="target">Meta<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-gerencia-sort="achieved">Total Radicado<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-gerencia-sort="compliance">% de Cumplimiento<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                </tr>
+              </thead>
+              <tbody id="gerenciaComercialMensualRows">
+                <tr><td colspan="4">Cargando información...</td></tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th>Summary</th>
+                  <th id="gerenciaMetaTotal"></th>
+                  <th id="gerenciaRadicadoTotal"></th>
+                  <th id="gerenciaCumplimientoTotal"></th>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section class="gerencia-chart-grid">
+        <article class="gerencia-chart-card">
+          <h3 id="gerenciaLineChartTitle">(GER) Gráfica Cumplimiento Comercial General 2026</h3>
+          <div class="chart-legend">
+            <button class="legend-series active" type="button" data-chart-series="meta"><i class="legend-meta"></i>Meta</button>
+            <button class="legend-series active" type="button" data-chart-series="radicado"><i class="legend-radicado"></i>Total Radicado</button>
+            <button class="legend-chip" type="button" data-chart-action="all">All</button>
+            <button class="legend-chip" type="button" data-chart-action="invert">Inv</button>
+          </div>
+          <div id="gerenciaLineChart" class="gerencia-line-chart"></div>
+        </article>
+        <article class="gerencia-chart-card">
+          <h3 id="gerenciaAverageChartTitle">(GER) Porcentaje promedio acumulado Comercial General 2026</h3>
+          <div id="gerenciaAverageChart" class="gerencia-average-chart"></div>
+        </article>
+      </section>
+
+      <section class="gerencia-wide-card">
+        <h3>(COM) Posible Cierre</h3>
+        <div class="possible-close-wrap">
+          <table class="possible-close-table">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Metric</th>
+                <th colspan="3">MONTO</th>
+              </tr>
+              <tr>
+                <th></th>
+                <th>PIPELINE</th>
+                <th>1116</th>
+                <th>PNNC</th>
+                <th>RCH</th>
+              </tr>
+              <tr>
+                <th>ETAPA</th>
+                <th></th>
+                <th></th>
+                <th></th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="possibleCloseRows">
+              <tr><td colspan="5">Cargando información...</td></tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <th colspan="2">Total (Sum)</th>
+                <th id="possibleCloseTotal1116"></th>
+                <th id="possibleCloseTotalPnnc"></th>
+                <th id="possibleCloseTotalRch"></th>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </section>
+
+      <section class="gerencia-detail-grid">
+        <article class="gerencia-detail-table-card">
+          <h3 id="pnncDetailTableTitle">(GER) Detalle Cumplimiento PNNC 2026</h3>
+          <div class="gerencia-table-wrap">
+            <table class="gerencia-table pnnc-detail-table">
+              <thead>
+                <tr>
+                  <th><button class="sort-header" type="button" data-pnnc-sort="month">Meses<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-pnnc-sort="target">Meta PNNC<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-pnnc-sort="achieved">Cumplimiento PNNC<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-pnnc-sort="compliance">% de Cumplimiento<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                </tr>
+              </thead>
+              <tbody id="pnncDetailRows">
+                <tr><td colspan="4">Cargando información...</td></tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th>Summary</th>
+                  <th></th>
+                  <th id="pnncDetailTotalAchieved"></th>
+                  <th id="pnncDetailTotalCompliance"></th>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </article>
+        <article class="gerencia-chart-card">
+          <h3 id="pnncDetailChartTitle">(GER) Gráfica Detalle Cumplimiento PNNC 2026</h3>
+          <div class="chart-legend">
+            <button class="legend-series active" type="button" data-pnnc-chart-series="meta"><i class="legend-meta"></i>Meta PNNC</button>
+            <button class="legend-series active" type="button" data-pnnc-chart-series="radicado"><i class="legend-radicado"></i>Total Radicado PNNC</button>
+            <button class="legend-chip" type="button" data-pnnc-chart-action="all">All</button>
+            <button class="legend-chip" type="button" data-pnnc-chart-action="invert">Inv</button>
+          </div>
+          <div id="pnncDetailChart" class="gerencia-line-chart"></div>
+        </article>
+      </section>
+
+      <section class="gerencia-rch-average-row">
+        <article class="gerencia-rch-average-card">
+          <h3 id="rchAverageTitle">(GER) Promedio acumulado RCH 2026</h3>
+          <strong id="rchAverageValue">-</strong>
+        </article>
+      </section>
+
+      <section class="operativa-rch-section">
+        <h2>Informe Operativa RCH</h2>
+        <div class="operativa-rch-panel">
+          <div class="operativa-rch-year" id="operativaRchYearBadge">2026</div>
+          <section class="operativa-rch-grid">
+            <article class="operativa-rch-table-card">
+              <h3 id="operativaRchTableTitle">(GER) Procesos Iniciados y Finalizados RCH 2026</h3>
+              <div class="gerencia-table-wrap">
+                <table class="gerencia-table operativa-rch-table">
+                  <thead>
+                    <tr>
+                      <th><button class="sort-header" type="button" data-rch-operativa-sort="month">Meses<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                      <th><button class="sort-header" type="button" data-rch-operativa-sort="started">Casos Iniciados<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                      <th><button class="sort-header" type="button" data-rch-operativa-sort="finished">Casos Finalizados<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    </tr>
+                  </thead>
+                  <tbody id="operativaRchRows">
+                    <tr><td colspan="3">Cargando información...</td></tr>
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <th>Summary</th>
+                      <th id="operativaRchTotalStarted"></th>
+                      <th id="operativaRchTotalFinished"></th>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </article>
+            <article class="operativa-rch-chart-card">
+              <h3 id="operativaRchChartTitle">(GER) Gráfica Procesos Iniciados y Finalizados RCH 2026</h3>
+              <div class="chart-legend">
+                <button class="legend-series active" type="button" data-rch-operativa-chart-series="started"><i class="legend-meta"></i>Casos Iniciados</button>
+                <button class="legend-series active" type="button" data-rch-operativa-chart-series="finished"><i class="legend-radicado"></i>Casos Finalizados</button>
+                <button class="legend-chip" type="button" data-rch-operativa-chart-action="all">All</button>
+                <button class="legend-chip" type="button" data-rch-operativa-chart-action="invert">Inv</button>
+              </div>
+              <div id="operativaRchChart" class="gerencia-line-chart"></div>
+            </article>
+          </section>
+          <section class="operativa-rch-bank-card">
+            <h3 id="operativaRchBankTitle">(GER) Procesos iniciados por banco 2026</h3>
+            <div id="operativaRchBankLegend" class="bank-legend"></div>
+            <div id="operativaRchBankChart" class="operativa-bank-chart"></div>
+          </section>
+          <section class="operativa-rch-approved-grid">
+            <article class="operativa-rch-approved-card">
+              <h3 id="operativaRchApprovedTitle">(RCH) Casos Aprobados por Mes 2026</h3>
+              <div class="approved-table-wrap">
+                <table class="approved-rch-table">
+                  <colgroup>
+                    <col>
+                    <col>
+                    <col>
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th></th>
+                      <th colspan="2">Metric</th>
+                    </tr>
+                    <tr>
+                      <th>Meses</th>
+                      <th>Numero de Casos</th>
+                      <th>Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody id="operativaRchApprovedRows">
+                    <tr><td colspan="3">Cargando información...</td></tr>
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <th>Total (Sum)</th>
+                      <th id="operativaRchApprovedTotalCases"></th>
+                      <th id="operativaRchApprovedTotalAmount"></th>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </article>
+            <article class="operativa-rch-approved-chart-card">
+              <h3 id="operativaRchApprovedChartTitle">(RCH) Valor Casos Aprobados 2026</h3>
+              <div class="chart-legend approved-chart-legend">
+                <button class="legend-series active" type="button" data-rch-approved-chart-series="amount"><i class="legend-meta"></i>Valor</button>
+                <button class="legend-chip" type="button" data-rch-approved-chart-action="all">All</button>
+                <button class="legend-chip" type="button" data-rch-approved-chart-action="invert">Inv</button>
+              </div>
+              <div id="operativaRchApprovedChart" class="approved-line-chart"></div>
+            </article>
+          </section>
+        </div>
+      </section>
+
+      <section class="operativa-pnnc-section">
+        <h2>Informe Operativa PNNC</h2>
+        <article class="operativa-pnnc-card">
+          <div class="card-menu" aria-hidden="true">⋮</div>
+          <h3>Tabla operaciones insolvencia</h3>
+          <label class="pnnc-search-label">Search <input id="operativaPnncSearch" type="search" placeholder="7 records..."></label>
+          <div class="gerencia-table-wrap">
+            <table class="gerencia-table operativa-pnnc-table">
+              <thead>
+                <tr>
+                  <th><button class="sort-header" type="button" data-pnnc-operativa-sort="stage">ETAPA<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-pnnc-operativa-sort="clients">CLIENTES<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-pnnc-operativa-sort="outOfManagement">CLIENTES FUERA DE GESTIÓN<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-pnnc-operativa-sort="participation">%PARTICIPACION<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                </tr>
+              </thead>
+              <tbody id="operativaPnncRows">
+                <tr><td colspan="4">Cargando información...</td></tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th>Summary</th>
+                  <th id="operativaPnncTotalClients"></th>
+                  <th id="operativaPnncTotalOut"></th>
+                  <th id="operativaPnncTotalParticipation"></th>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </article>
+        <article class="operativa-pnnc-card operativa-pnnc-card-scroll">
+          <div class="card-menu" aria-hidden="true">&#8942;</div>
+          <h3>(GER) Operaciones insolvencia 2</h3>
+          <div class="gerencia-table-wrap operativa-pnnc-second-wrap">
+            <table class="gerencia-table operativa-pnnc-table operativa-pnnc-second-table">
+              <thead>
+                <tr>
+                  <th><button class="sort-header" type="button" data-pnnc-operativa2-sort="stage">ETAPA<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-pnnc-operativa2-sort="negotiations">NEGOCIACIONES<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-pnnc-operativa2-sort="outOfManagement">FUERA DE GESTIÓN<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                </tr>
+              </thead>
+              <tbody id="operativaPnncSecondRows">
+                <tr><td colspan="3">Cargando información...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+        <article class="operativa-pnnc-card operativa-pnnc-detail-card">
+          <div class="card-menu" aria-hidden="true">&#8942;</div>
+          <div class="gerencia-table-wrap operativa-pnnc-detail-wrap">
+            <table class="gerencia-table operativa-pnnc-detail-table">
+              <thead>
+                <tr>
+                  <th><button class="sort-header" type="button" data-pnnc-operativa-detail-sort="name">Nombre<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-pnnc-operativa-detail-sort="stage">Etapas<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-pnnc-operativa-detail-sort="responsible">Responsable<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-pnnc-operativa-detail-sort="total">Total<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-pnnc-operativa-detail-sort="daysOutOfManagement">Días Fuera de Gestión<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                </tr>
+              </thead>
+              <tbody id="operativaPnncDetailRows">
+                <tr><td colspan="5">Cargando información...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+        <article class="lp-compliance-card">
+          <h3>(GER) Porcentaje de cumplimiento PNNC y LP en 2025.</h3>
+          <div id="pnncLpCompliance2025" class="lp-compliance-value">0.0%</div>
+        </article>
+        <div class="lp-task-grid">
+          <article class="lp-task-card">
+            <h3>(LP) Gestiónes mensuales LP operativa</h3>
+            <div class="gerencia-table-wrap lp-task-table-wrap">
+              <table class="gerencia-table lp-task-table lp-monthly-table">
+                <thead>
+                  <tr>
+                    <th><button class="sort-header" type="button" data-lp-monthly-sort="month">Meses<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-monthly-sort="totalClients">Total de Clientes<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-monthly-sort="totalTasks">Total de Tareas<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-monthly-sort="completed">Tareas Completas<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-monthly-sort="pending">Tareas Pendientes<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-monthly-sort="lateOpen">Tareas Fuera de Tiempo Sin Completar<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-monthly-sort="lateClosed">Tareas Fuera de Tiempo<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-monthly-sort="percentage">Porcentaje<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  </tr>
+                </thead>
+                <tbody id="lpMonthlyTaskRows">
+                  <tr><td colspan="8">Cargando información...</td></tr>
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th>Total (Sum)</th>
+                    <th id="lpMonthlyTotalClients"></th>
+                    <th id="lpMonthlyTotalTasks"></th>
+                    <th id="lpMonthlyTotalCompleted"></th>
+                    <th id="lpMonthlyTotalPending"></th>
+                    <th id="lpMonthlyTotalLateOpen"></th>
+                    <th id="lpMonthlyTotalLateClosed"></th>
+                    <th id="lpMonthlyTotalPercentage"></th>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </article>
+          <article class="lp-task-card">
+            <h3>(LP) Control de gestión semanal lp operativa</h3>
+            <div class="gerencia-table-wrap lp-task-table-wrap">
+              <table class="gerencia-table lp-task-table lp-weekly-table">
+                <thead>
+                  <tr>
+                    <th><button class="sort-header" type="button" data-lp-weekly-sort="week">Semanas<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-weekly-sort="totalTasks">Total de Tareas<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-weekly-sort="completed">Tareas Completadas<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-weekly-sort="pending">Tareas Pendientes<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-weekly-sort="lateOpen">Tareas Fuera de Tiempo Sin Completar<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-weekly-sort="lateClosed">Tareas Completas Fuera de Tiempo<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-weekly-sort="percentage">Porcentaje<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  </tr>
+                </thead>
+                <tbody id="lpWeeklyTaskRows">
+                  <tr><td colspan="7">Cargando información...</td></tr>
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th>Total (Sum)</th>
+                    <th id="lpWeeklyTotalTasks"></th>
+                    <th id="lpWeeklyTotalCompleted"></th>
+                    <th id="lpWeeklyTotalPending"></th>
+                    <th id="lpWeeklyTotalLateOpen"></th>
+                    <th id="lpWeeklyTotalLateClosed"></th>
+                    <th id="lpWeeklyTotalPercentage"></th>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </article>
+        </div>
+        <div class="lp-task-grid lp-extra-grid">
+          <article class="lp-task-card">
+            <h3>(LP) Gestiónes Embargos</h3>
+            <div class="gerencia-table-wrap lp-task-table-wrap">
+              <table class="gerencia-table lp-task-table lp-monthly-table">
+                <thead>
+                  <tr>
+                    <th><button class="sort-header" type="button" data-lp-embargos-sort="month">Meses<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-embargos-sort="totalClients">Total de Clientes<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-embargos-sort="totalTasks">Total de Tareas<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-embargos-sort="completed">Tareas Completadas<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-embargos-sort="pending">Tareas Pendientes<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-embargos-sort="lateOpen">Tareas Sin Cerrar Fuera de Tiempo<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-embargos-sort="lateClosed">Completas Fuera de Tiempo<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-embargos-sort="percentage">Porcentaje<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  </tr>
+                </thead>
+                <tbody id="lpEmbargosTaskRows">
+                  <tr><td colspan="8">Cargando información...</td></tr>
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th>Total (Sum)</th>
+                    <th id="lpEmbargosTotalClients"></th>
+                    <th id="lpEmbargosTotalTasks"></th>
+                    <th id="lpEmbargosTotalCompleted"></th>
+                    <th id="lpEmbargosTotalPending"></th>
+                    <th id="lpEmbargosTotalLateOpen"></th>
+                    <th id="lpEmbargosTotalLateClosed"></th>
+                    <th id="lpEmbargosTotalPercentage"></th>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </article>
+          <article class="lp-task-card">
+            <h3>(LP) Gestiónes Libranza</h3>
+            <div class="gerencia-table-wrap lp-task-table-wrap">
+              <table class="gerencia-table lp-task-table lp-monthly-table">
+                <thead>
+                  <tr>
+                    <th><button class="sort-header" type="button" data-lp-libranza-sort="month">Meses<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-libranza-sort="totalClients">Total de Clientes<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-libranza-sort="totalTasks">Total de Tareas<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-libranza-sort="completed">Tareas Completadas<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-libranza-sort="pending">Tareas Pendientes<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-libranza-sort="lateOpen">Tareas Sin Cerrar Fuera de Tiempo<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-libranza-sort="lateClosed">Completas Fuera de Tiempo<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-lp-libranza-sort="percentage">Porcentaje<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  </tr>
+                </thead>
+                <tbody id="lpLibranzaTaskRows">
+                  <tr><td colspan="8">Cargando información...</td></tr>
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th>Total (Sum)</th>
+                    <th id="lpLibranzaTotalClients"></th>
+                    <th id="lpLibranzaTotalTasks"></th>
+                    <th id="lpLibranzaTotalCompleted"></th>
+                    <th id="lpLibranzaTotalPending"></th>
+                    <th id="lpLibranzaTotalLateOpen"></th>
+                    <th id="lpLibranzaTotalLateClosed"></th>
+                    <th id="lpLibranzaTotalPercentage"></th>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </article>
+          <article class="lp-task-card ins-detail-card">
+            <h3>(INS) Tabla reporte embargos bitrix</h3>
+            <div class="gerencia-table-wrap lp-task-table-wrap ins-detail-wrap">
+              <table class="gerencia-table ins-detail-table">
+                <thead>
+                  <tr>
+                    <th><button class="sort-header" type="button" data-ins-embargos-sort="name">Nombre<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-ins-embargos-sort="stage">ETAPA<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-ins-embargos-sort="responsible">Responsable<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-ins-embargos-sort="total">Total<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-ins-embargos-sort="daysOutOfManagement">Días Fuera de Gestión<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  </tr>
+                </thead>
+                <tbody id="insEmbargosRows">
+                  <tr><td colspan="5">Cargando información...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+          <article class="lp-task-card ins-detail-card">
+            <h3>(INS) Tabla reporte libranza bitrix</h3>
+            <div class="gerencia-table-wrap lp-task-table-wrap ins-detail-wrap">
+              <table class="gerencia-table ins-detail-table">
+                <thead>
+                  <tr>
+                    <th><button class="sort-header" type="button" data-ins-libranza-sort="name">Nombre<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-ins-libranza-sort="stage">ETAPA<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-ins-libranza-sort="responsible">Responsable<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-ins-libranza-sort="total">Total<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-ins-libranza-sort="daysOutOfManagement">Días Fuera de Gestión<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  </tr>
+                </thead>
+                <tbody id="insLibranzaRows">
+                  <tr><td colspan="5">Cargando información...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+          <article class="lp-task-card insolvencia-process-card">
+            <h3 id="pnnc2025ProcessesTableTitle">(GER) Procesos iniciados y finalizados insolvencia</h3>
+            <div class="gerencia-table-wrap">
+              <table class="gerencia-table operativa-rch-table">
+                <thead>
+                  <tr>
+                    <th><button class="sort-header" type="button" data-pnnc-2025-process-sort="month">Meses<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-pnnc-2025-process-sort="started">Casos Iniciados<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                    <th><button class="sort-header" type="button" data-pnnc-2025-process-sort="finished">Casos Finalizados<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  </tr>
+                </thead>
+                <tbody id="pnnc2025ProcessRows">
+                  <tr><td colspan="3">Cargando información...</td></tr>
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <th>Summary</th>
+                    <th id="pnnc2025ProcessTotalStarted"></th>
+                    <th id="pnnc2025ProcessTotalFinished"></th>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </article>
+          <article class="lp-task-card insolvencia-process-card insolvencia-process-chart-card">
+            <h3 id="pnnc2025ProcessesChartTitle">(GER) Gráfica procesos iniciados y finalizados insolvencia</h3>
+            <div class="chart-legend">
+              <button class="legend-series active" type="button" data-pnnc-2025-process-chart-series="started"><i class="legend-meta"></i>Casos Iniciados</button>
+              <button class="legend-series active" type="button" data-pnnc-2025-process-chart-series="finished"><i class="legend-radicado"></i>Casos Finalizados</button>
+              <button class="legend-chip" type="button" data-pnnc-2025-process-chart-action="all">All</button>
+              <button class="legend-chip" type="button" data-pnnc-2025-process-chart-action="invert">Inv</button>
+            </div>
+            <div id="pnnc2025ProcessChart" class="gerencia-line-chart"></div>
+          </article>
+        </div>
+      </section>
+
+      <h2 class="gerencia-section-title">Informe seguros</h2>
+      <section class="seguros-grid">
+        <article class="seguros-card seguros-kpi-card">
+          <h3>(SEG) Porcentaje cumplimiento</h3>
+          <div id="insuranceComplianceValue" class="seguros-kpi-value">0.0%</div>
+        </article>
+        <article class="seguros-card">
+          <h3>(KPI SEG) Cumplimiento mensual</h3>
+          <div class="gerencia-table-wrap seguros-table-wrap">
+            <table class="gerencia-table seguros-table">
+              <thead>
+                <tr>
+                  <th><button class="sort-header" type="button" data-insurance-kpi-sort="monthNumber">Meses<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-kpi-sort="callCompliance">% Cumplimiento llamadas<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-kpi-sort="salesCompliance">% Cumplimiento ventas<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-kpi-sort="totalCompliance">% Cumplimiento total<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                </tr>
+              </thead>
+              <tbody id="insuranceKpiRows">
+                <tr><td colspan="4">Cargando información...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+        <article class="seguros-card">
+          <h3>(KPI SEG) Cumplimiento comercial</h3>
+          <div class="gerencia-table-wrap seguros-table-wrap">
+            <table class="gerencia-table seguros-table">
+              <thead>
+                <tr>
+                  <th><button class="sort-header" type="button" data-insurance-commercial-sort="monthNumber">Meses<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-commercial-sort="monthlyTarget">Meta mensual<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-commercial-sort="totalSales">Venta total<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-commercial-sort="compliance">% Cumplimiento<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                </tr>
+              </thead>
+              <tbody id="insuranceCommercialRows">
+                <tr><td colspan="4">Cargando información...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+      <section class="seguros-grid seguros-two-grid">
+        <article class="seguros-card">
+          <h3>(SEG) Llamadas por mes</h3>
+          <div class="gerencia-table-wrap seguros-table-wrap">
+            <table class="gerencia-table seguros-table seguros-calls-table">
+              <thead>
+                <tr>
+                  <th><button class="sort-header" type="button" data-insurance-calls-sort="monthNumber">Meses<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-calls-sort="monthlyTarget">Meta mensual<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-calls-sort="outgoingCalls"># Llamadas Salientes<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-calls-sort="effectiveCalls">Llamadas efectivas<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-calls-sort="rejectedCalls">Llamadas rechazadas<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-calls-sort="compliance">% Cumplimiento<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                </tr>
+              </thead>
+              <tbody id="insuranceCallsRows">
+                <tr><td colspan="6">Cargando información...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+        <article class="seguros-card">
+          <h3>(SEG) Cotizaciones mensuales</h3>
+          <div class="gerencia-table-wrap seguros-table-wrap">
+            <table class="gerencia-table seguros-table seguros-quotes-table">
+              <thead>
+                <tr>
+                  <th><button class="sort-header" type="button" data-insurance-quotes-sort="monthNumber">Meses<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-quotes-sort="monthlyTarget">Meta mensual<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-quotes-sort="generatedQuotes">Cotizaciones generadas<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-quotes-sort="compliance">% Cumplimiento<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                </tr>
+              </thead>
+              <tbody id="insuranceQuotesRows">
+                <tr><td colspan="4">Cargando información...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+      <section class="seguros-stack">
+        <article class="seguros-card seguros-wide-card">
+          <h3>(SEG) Negociaciones fuera de tiempo</h3>
+          <div class="gerencia-table-wrap seguros-table-wrap seguros-out-summary-wrap">
+            <table class="gerencia-table seguros-table seguros-out-summary-table">
+              <thead>
+                <tr>
+                  <th><button class="sort-header" type="button" data-insurance-out-sort="stage">Etapa<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-out-sort="totalNegotiations">Total negociaciones<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-out-sort="outOfTime">Fuera de tiempo<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                </tr>
+              </thead>
+              <tbody id="insuranceOutRows">
+                <tr><td colspan="3">Cargando información...</td></tr>
+              </tbody>
+              <tfoot>
+                <tr>
+                  <th>Summary</th>
+                  <th id="insuranceOutTotalNegotiations">0</th>
+                  <th id="insuranceOutTotalLate">0</th>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </article>
+        <article class="seguros-card seguros-wide-card seguros-detail-card">
+          <h3>(SEG) Negociaciones fuera de tiempo al detalle</h3>
+          <label class="pnnc-search-label seguros-search-label">
+            Search
+            <input id="insuranceOutDetailSearch" type="search" autocomplete="off">
+          </label>
+          <div class="gerencia-table-wrap seguros-table-wrap seguros-out-detail-wrap">
+            <table class="gerencia-table seguros-table seguros-out-detail-table">
+              <thead>
+                <tr>
+                  <th><button class="sort-header" type="button" data-insurance-out-detail-sort="id">Id<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-out-detail-sort="name">Nombre<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-out-detail-sort="stage">Etapa<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                  <th><button class="sort-header" type="button" data-insurance-out-detail-sort="daysOutOfManagement">Días fuera de gestión<span class="sort-indicator" aria-hidden="true"></span></button></th>
+                </tr>
+              </thead>
+              <tbody id="insuranceOutDetailRows">
+                <tr><td colspan="4">Cargando información...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <h2 class="gerencia-section-title">Informe Servicio al Cliente</h2>
+      <section class="customer-service-panel">
+        <span class="operativa-rch-year">2026</span>
+        <div class="customer-service-grid">
+          <article class="customer-service-card">
+            <h3>(GER) Porcentaje General Servicio al Cliente 2026</h3>
+            <strong id="customerServiceCompliance">0.0%</strong>
+          </article>
+          <article class="customer-service-card">
+            <h3>(SC) Total PQRF's Recibidas 2026</h3>
+            <strong id="customerServiceReceived">0</strong>
+          </article>
+        </div>
+        <div class="customer-service-chart-grid">
+          <article class="customer-service-chart-card">
+            <span class="card-menu" aria-hidden="true">⋮</span>
+            <h3>(GER) Total de Requerimientos 2026</h3>
+            <div id="customerServiceRequirementLegend" class="bank-legend customer-service-legend"></div>
+            <div id="customerServiceRequirementChart" class="customer-service-donut-chart">
+              <div class="chart-empty">Cargando información...</div>
+            </div>
+          </article>
+          <article class="customer-service-chart-card">
+            <span class="card-menu" aria-hidden="true">⋮</span>
+            <h3>(SC) PQRF's por Mes 2026</h3>
+            <div id="customerServiceMonthlyLegend" class="chart-legend customer-service-legend">
+              <button class="legend-toggle active" type="button" data-customer-service-monthly-series="received"><i class="legend-started"></i>PQRFS Recibidos</button>
+              <button class="legend-chip" type="button" data-customer-service-monthly-action="all">All</button>
+              <button class="legend-chip" type="button" data-customer-service-monthly-action="invert">Inv</button>
+            </div>
+            <div id="customerServiceMonthlyChart" class="customer-service-bar-chart">
+              <div class="chart-empty">Cargando información...</div>
+            </div>
+          </article>
+        </div>
+        <div class="customer-service-chart-grid customer-service-response-grid">
+          <article class="customer-service-chart-card customer-service-response-card">
+            <span class="card-menu" aria-hidden="true">⋮</span>
+            <h3>(GER) Promedio de Días Respuesta PQRF'S 2026</h3>
+            <div class="gerencia-table-wrap customer-service-response-table-wrap">
+              <table class="gerencia-table customer-service-response-table">
+                <thead id="customerServiceResponseHead">
+                  <tr><th>Requerimiento</th></tr>
+                </thead>
+                <tbody id="customerServiceResponseRows">
+                  <tr><td>Cargando información...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+          <article class="customer-service-chart-card customer-service-response-card">
+            <span class="card-menu" aria-hidden="true">⋮</span>
+            <h3>(GER) Gráfica Promedio de Días Respuesta PQRF'S 2026</h3>
+            <div id="customerServiceResponseLegend" class="bank-legend customer-service-legend"></div>
+            <div id="customerServiceResponseChart" class="customer-service-response-chart">
+              <div class="chart-empty">Cargando información...</div>
+            </div>
+          </article>
+        </div>
+        <h3 class="customer-service-subtitle">Desistimientos</h3>
+        <div class="customer-service-chart-grid customer-service-withdrawal-grid">
+          <article class="customer-service-chart-card customer-service-withdrawal-card">
+            <span class="card-menu" aria-hidden="true">⋮</span>
+            <h3>(SC) Desistimientos insolvencia</h3>
+            <div class="gerencia-table-wrap customer-service-withdrawal-table-wrap">
+              <table class="gerencia-table customer-service-withdrawal-summary-table">
+                <thead id="customerServiceInsolvencyWithdrawalHead">
+                  <tr><th>Metric</th></tr>
+                </thead>
+                <tbody id="customerServiceInsolvencyWithdrawalRows">
+                  <tr><td>Cargando información...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+          <article class="customer-service-chart-card customer-service-withdrawal-card">
+            <span class="card-menu" aria-hidden="true">⋮</span>
+            <h3>(SC) Detalle desistimientos Insolvencia</h3>
+            <div class="gerencia-table-wrap customer-service-withdrawal-detail-wrap">
+              <table class="gerencia-table customer-service-withdrawal-detail-table">
+                <thead>
+                  <tr>
+                    <th>Meses</th>
+                    <th>ID</th>
+                    <th>CAUSAL DE DESISTIMIENTO (DEF)</th>
+                    <th>Lider de proceso</th>
+                    <th>Valor de la devolucion</th>
+                  </tr>
+                </thead>
+                <tbody id="customerServiceInsolvencyWithdrawalDetailRows">
+                  <tr><td colspan="5">Cargando información...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+        <div class="customer-service-chart-grid customer-service-withdrawal-grid">
+          <article class="customer-service-chart-card customer-service-withdrawal-card">
+            <span class="card-menu" aria-hidden="true">⋮</span>
+            <h3>(SC) Desistimientos RCH</h3>
+            <div class="gerencia-table-wrap customer-service-withdrawal-table-wrap">
+              <table class="gerencia-table customer-service-withdrawal-summary-table">
+                <thead id="customerServiceRchWithdrawalHead">
+                  <tr><th>Metric</th></tr>
+                </thead>
+                <tbody id="customerServiceRchWithdrawalRows">
+                  <tr><td>Cargando información...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+          <article class="customer-service-chart-card customer-service-withdrawal-card">
+            <span class="card-menu" aria-hidden="true">⋮</span>
+            <h3>(SC) Detalle desistimientos RCH</h3>
+            <div class="gerencia-table-wrap customer-service-withdrawal-detail-wrap">
+              <table class="gerencia-table customer-service-withdrawal-detail-table">
+                <thead>
+                  <tr>
+                    <th>Meses</th>
+                    <th>ID</th>
+                    <th>CAUSAL DE DESISTIMIENTO (DEF)</th>
+                    <th>Lider de proceso</th>
+                    <th>Valor de la devolucion</th>
+                  </tr>
+                </thead>
+                <tbody id="customerServiceRchWithdrawalDetailRows">
+                  <tr><td colspan="5">Cargando información...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </div>
+      </section>
+
+    </section>
+
     <section id="detalle" class="table-panel">
       <div class="panel-title">
         <div>
@@ -138,7 +950,7 @@
     </section>
   </main>
 
-  <script src="/reporte.js?v=20260806-user-visibility"></script>
-  <script src="/auth-session.js?v=20260806-user-visibility"></script>
+  <script src="/reporte.js?v=20260806-merged-management-permissions"></script>
+  <script src="/auth-session.js?v=20260806-gerencia-menu"></script>
 </body>
 </html>

@@ -22,17 +22,24 @@ public static class KnownBitrixCorrections
         CancellationToken cancellationToken)
     {
         const string sql = """
-            UPDATE bitrix.users
-            SET email = 'ma.galeano@avanzarsoluciones.com',
-                updated_at = now()
-            WHERE bitrix_id = '18434'
-              AND email IS DISTINCT FROM 'ma.galeano@avanzarsoluciones.com';
+            DO $$
+            BEGIN
+                IF to_regclass('bitrix.users') IS NOT NULL THEN
+                    UPDATE bitrix.users
+                    SET email = 'ma.galeano@avanzarsoluciones.com',
+                        updated_at = now()
+                    WHERE bitrix_id = '18434'
+                      AND email IS DISTINCT FROM 'ma.galeano@avanzarsoluciones.com';
+                END IF;
 
-            UPDATE bitrix.departments
-            SET head_bitrix_id = '18434',
-                updated_at = now()
-            WHERE id = 1324
-              AND head_bitrix_id IS DISTINCT FROM '18434';
+                IF to_regclass('bitrix.departments') IS NOT NULL THEN
+                    UPDATE bitrix.departments
+                    SET head_bitrix_id = '18434',
+                        updated_at = now()
+                    WHERE id = 1324
+                      AND head_bitrix_id IS DISTINCT FROM '18434';
+                END IF;
+            END $$;
             """;
 
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);

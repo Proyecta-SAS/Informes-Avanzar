@@ -33,6 +33,7 @@ builder.Services.AddScoped<IBitrixSynchronizer, BitrixSynchronizer>();
 builder.Services.AddScoped<IBitrixUserSyncService, BitrixUserSyncService>();
 builder.Services.AddScoped<IBitrixStageSyncService, BitrixStageSyncService>();
 builder.Services.AddScoped<IBitrixDealSyncService, BitrixDealSyncService>();
+builder.Services.AddScoped<IBitrixActivitySyncService, BitrixActivitySyncService>();
 builder.Services.AddScoped<IBitrixMassiveSyncService, BitrixMassiveSyncService>();
 
 var app = builder.Build();
@@ -161,7 +162,7 @@ app.MapGet("/api/auth/me", async (HttpContext context, IReportAccessService repo
 {
     var user = (PanelUser)context.Items["PanelUser"]!;
     var reportCodes = user.RoleCode == "admin"
-        ? new[] { "informe_general_comercial", "fuerza_comercial_diego", "rch_comercial", "rch_operativa", "pnnc_comercial", "pnnc_operativa" }
+        ? new[] { "informe_general_comercial", "fuerza_comercial_diego", "rch_comercial", "rch_operativa", "pnnc_comercial", "pnnc_operativa", "informe_gerencia_2026_2027" }
         : await reportAccess.GetAccessibleReportCodesAsync(user.Id, cancellationToken);
     var permissions = await PanelAuthentication.GetPermissionCodesAsync(user.Id, dataSource, cancellationToken);
     var blockAccess = user.RoleCode == "admin"
@@ -276,6 +277,13 @@ app.MapGet("/api/data/stages", async (
     CancellationToken cancellationToken) =>
 {
     return await BitrixDataQueries.GetStagesAsync(pipeline ?? "all", dataSource, cancellationToken);
+});
+
+app.MapGet("/api/data/pipelines", async (
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return Results.Ok(await BitrixDataQueries.GetPipelinesAsync(dataSource, cancellationToken));
 });
 
 var adminApi = app.MapGroup("/api/admin");
@@ -460,6 +468,276 @@ app.MapGet("/api/reports/fuerza-comercial-diego/jerarquia-filtros", async (
     NpgsqlDataSource dataSource,
     CancellationToken cancellationToken) =>
     Results.Ok(await BitrixDataQueries.GetCommercialFilterHierarchyAsync(dataSource, cancellationToken)));
+
+app.MapGet("/api/reports/gerencia/comercial-cumplimiento", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    var selectedYear = year is >= 2000 and <= 2100 ? year.Value : DateTime.UtcNow.Year;
+    return Results.Ok(await BitrixDataQueries.GetManagementCommercialComplianceAsync(
+        selectedYear,
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/comercial-cumplimiento-mensual", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    var selectedYear = year is >= 2000 and <= 2100 ? year.Value : DateTime.UtcNow.Year;
+    return Results.Ok(await BitrixDataQueries.GetManagementCommercialMonthlyComplianceAsync(
+        selectedYear,
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/posible-cierre", async (
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return Results.Ok(await BitrixDataQueries.GetManagementPossibleCloseAsync(
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/detalle-pnnc", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    var selectedYear = year is >= 2000 and <= 2100 ? year.Value : DateTime.UtcNow.Year;
+    return Results.Ok(await BitrixDataQueries.GetManagementPnncDetailComplianceAsync(
+        selectedYear,
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/promedio-rch", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    var selectedYear = year is >= 2000 and <= 2100 ? year.Value : DateTime.UtcNow.Year;
+    return Results.Ok(await BitrixDataQueries.GetManagementRchAccumulatedAverageAsync(
+        selectedYear,
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/rch-operativa-procesos", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    var selectedYear = year is >= 2000 and <= 2100 ? year.Value : DateTime.UtcNow.Year;
+    return Results.Ok(await BitrixDataQueries.GetManagementRchOperationalProcessesAsync(
+        selectedYear,
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/rch-aprobados-banco", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    var selectedYear = year is >= 2000 and <= 2100 ? year.Value : DateTime.UtcNow.Year;
+    return Results.Ok(await BitrixDataQueries.GetManagementRchApprovedByBankAsync(
+        selectedYear,
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/pnnc-operativa-procesos-2025", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    var selectedYear = year is >= 2000 and <= 2100 ? year.Value : 2025;
+    return Results.Ok(await BitrixDataQueries.GetManagementPnncOperationalProcesses2025Async(
+        selectedYear,
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/pnnc-operativa-gestion", async (
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return Results.Ok(await BitrixDataQueries.GetManagementPnncOperationalManagementAsync(
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/pnnc-operativa-insolvencia-2", async (
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return Results.Ok(await BitrixDataQueries.GetManagementPnncOperationalInsolvencyTwoAsync(
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/pnnc-operativa-detalle", async (
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return Results.Ok(await BitrixDataQueries.GetManagementPnncOperationalDetailAsync(
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/pnnc-lp-compliance-2025", async (
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return Results.Ok(await BitrixDataQueries.GetManagementPnncLpCompliance2025Async(
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/lp-monthly-tasks", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    var selectedYear = year is >= 2000 and <= 2100 ? year.Value : 2025;
+    return Results.Ok(await BitrixDataQueries.GetManagementLpMonthlyTasksAsync(
+        selectedYear,
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/lp-weekly-tasks", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    var selectedYear = year is >= 2000 and <= 2100 ? year.Value : 2025;
+    return Results.Ok(await BitrixDataQueries.GetManagementLpWeeklyTasksAsync(
+        selectedYear,
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/lp-embargos-tasks", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    var selectedYear = year is >= 2000 and <= 2100 ? year.Value : 2025;
+    return Results.Ok(await BitrixDataQueries.GetManagementLpSpecialMonthlyTasksAsync(
+        selectedYear,
+        "941",
+        "INS Embargos",
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/lp-libranza-tasks", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    var selectedYear = year is >= 2000 and <= 2100 ? year.Value : 2025;
+    return Results.Ok(await BitrixDataQueries.GetManagementLpSpecialMonthlyTasksAsync(
+        selectedYear,
+        "941",
+        "INS Libranza",
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/ins-embargos-detail", async (
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return Results.Ok(await BitrixDataQueries.GetManagementInsEmbargosDetailAsync(
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/ins-libranza-detail", async (
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return Results.Ok(await BitrixDataQueries.GetManagementInsLibranzaDetailAsync(
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/seguros-cumplimiento", async (
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return Results.Ok(await BitrixDataQueries.GetManagementInsuranceComplianceAsync(
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/seguros-operaciones-mensuales", async (
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return Results.Ok(await BitrixDataQueries.GetManagementInsuranceMonthlyOperationsAsync(
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/seguros-fuera-tiempo", async (
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return Results.Ok(await BitrixDataQueries.GetManagementInsuranceOutOfTimeAsync(
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/servicio-cliente-resumen", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return Results.Ok(await BitrixDataQueries.GetManagementCustomerServiceSummaryAsync(
+        year ?? 2026,
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/servicio-cliente-graficas", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return Results.Ok(await BitrixDataQueries.GetManagementCustomerServiceChartsAsync(
+        year ?? 2026,
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/servicio-cliente-promedio-respuesta", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return Results.Ok(await BitrixDataQueries.GetManagementCustomerServiceResponseAverageAsync(
+        year ?? 2026,
+        dataSource,
+        cancellationToken));
+});
+
+app.MapGet("/api/reports/gerencia/servicio-cliente-desistimientos", async (
+    int? year,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    return Results.Ok(await BitrixDataQueries.GetManagementCustomerServiceWithdrawalsAsync(
+        year ?? 2026,
+        dataSource,
+        cancellationToken));
+});
 
 app.MapGet("/api/reports/catalog", () => Results.Ok(new[]
 {
