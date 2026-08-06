@@ -60,8 +60,10 @@ const renderAreas = (query = "") => {
   const content = areas.map((area) => {
     const areaMatch = `${area.title} ${area.description}`.toLocaleLowerCase("es-CO").includes(normalized);
     const allowed = new Set(homeSession.accessibleReportCodes ?? []);
-    const reports = area.reports.filter((report) => report.upcoming || allowed.has(reportCodeFromHref(report.href)))
+    const canSeePlaceholders = homeSession.roleCode === "admin";
+    const reports = area.reports.filter((report) => (report.upcoming && canSeePlaceholders) || allowed.has(reportCodeFromHref(report.href)))
       .filter((report) => areaMatch || `${report.title} ${report.description} ${report.badge}`.toLocaleLowerCase("es-CO").includes(normalized));
+    if (!reports.length && !canSeePlaceholders) return "";
     if (!reports.length && normalized && !areaMatch) return "";
     visibleReports += reports.filter((report) => !report.upcoming).length;
     return `<article id="${area.id}" class="home-area-card ${area.tone}">

@@ -59,8 +59,10 @@ const renderReports = (query = "") => {
   const content = reportAreas.map((area) => {
     const areaMatches = area.title.toLocaleLowerCase("es-CO").includes(normalized);
     const allowed = new Set(reportsSession.accessibleReportCodes ?? []);
-    const reports = area.reports.filter((report) => report.upcoming || allowed.has(report.id)).filter((report) => areaMatches
+    const canSeePlaceholders = reportsSession.roleCode === "admin";
+    const reports = area.reports.filter((report) => (report.upcoming && canSeePlaceholders) || allowed.has(report.id)).filter((report) => areaMatches
       || `${report.title} ${report.badge} ${report.description}`.toLocaleLowerCase("es-CO").includes(normalized));
+    if (!reports.length && !canSeePlaceholders) return "";
     if (!reports.length && normalized && !areaMatches) return "";
     visibleReports += reports.filter((report) => !report.upcoming).length;
     return `<article id="${area.id}" class="catalog-area-card ${area.tone}">

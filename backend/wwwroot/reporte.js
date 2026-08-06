@@ -835,7 +835,9 @@ const load = async () => {
   if (["fuerza_comercial_diego", "informe_general_comercial"].includes(reportId)) {
     const isGeneralCommercial = reportId === "informe_general_comercial";
     const session = await fetch("/api/auth/me").then((response) => response.json());
-    teamScope = session.teamScope ?? null;
+    teamScope = session.roleCode === "admin"
+      ? null
+      : (session.teamScope ?? { departmentNames: [], memberNames: [] });
     if (isGeneralCommercial) {
       generalBlockAccess = { configured: Boolean(session.generalCommercialBlocksConfigured), codes: new Set(session.generalCommercialBlockCodes ?? []) };
     }

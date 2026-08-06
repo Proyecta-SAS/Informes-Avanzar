@@ -1,5 +1,6 @@
 const sessionMenu = document.querySelector(".sidebar .menu");
 if (sessionMenu) {
+  sessionMenu.style.visibility = "hidden";
   const currentPath = location.pathname;
   const currentReport = new URLSearchParams(location.search).get("id") ?? "";
   const isCurrent = (path, report = "") => currentPath === path && (!report || currentReport === report);
@@ -105,8 +106,13 @@ if (sessionMenu) {
       const required = item.dataset.requiredPermission.split(" ");
       if (session.roleCode !== "admin" && !required.some((code) => permissions.has(code))) item.remove();
     });
+    if (session.roleCode !== "admin") {
+      sessionMenu.querySelectorAll(".sidebar-coming, .sidebar-area-empty").forEach((item) => item.remove());
+    }
     sessionMenu.querySelectorAll(".sidebar-group").forEach((group) => {
       if (!group.querySelector(".sidebar-group-items a, .sidebar-coming, .sidebar-empty")) group.remove();
     });
-  }).catch(() => {});
+  }).catch(() => {}).finally(() => {
+    sessionMenu.style.visibility = "visible";
+  });
 }

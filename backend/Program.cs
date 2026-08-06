@@ -79,6 +79,39 @@ app.Use(async (context, next) =>
         }
     }
 
+    if (panelUser is not null && panelUser.RoleCode != "admin" && path.StartsWith("/api/"))
+    {
+        string[] requiredReportCodes = path switch
+        {
+            _ when path.StartsWith("/api/reports/fuerza-comercial-diego/") =>
+                ["fuerza_comercial_diego", "informe_general_comercial"],
+            _ when path.StartsWith("/api/data/")
+                && !string.IsNullOrWhiteSpace(context.Request.Query["pipeline"].ToString()) =>
+                [context.Request.Query["pipeline"].ToString()],
+            _ => []
+        };
+
+        if (requiredReportCodes.Length > 0)
+        {
+            var reportAccess = context.RequestServices.GetRequiredService<IReportAccessService>();
+            var hasReportAccess = false;
+            foreach (var reportCode in requiredReportCodes)
+            {
+                if (await reportAccess.UserCanAccessReportAsync(panelUser.Id, reportCode, context.RequestAborted))
+                {
+                    hasReportAccess = true;
+                    break;
+                }
+            }
+
+            if (!hasReportAccess)
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return;
+            }
+        }
+    }
+
     if (panelUser is not null && panelUser.RoleCode != "admin")
     {
         string[] requiredPermissions = path switch
@@ -138,7 +171,7 @@ app.MapGet("/api/auth/me", async (HttpContext context, IReportAccessService repo
         ? null
         : await OrganizationQueries.GetUserTeamScopeAsync(user.Id, dataSource, cancellationToken);
     var isSuperAdmin = string.Equals(user.Email, superAdminEmail, StringComparison.OrdinalIgnoreCase);
-    return Results.Ok(new { user.Id, user.Email, user.FullName, user.RoleCode, isSuperAdmin, accessibleReportCodes = reportCodes, permissions, teamScope, generalCommercialBlocksConfigured = blockAccess.Configured, generalCommercialBlockCodes = blockAccess.Blocks });
+    return Results.Ok(new { user.Id, user.Email, user.FullName, user.RoleCode, isSuperAdmin, accessibleReportCodes = reportCodes, permissions, teamScope, generalCommercialBlocksConfigured = user.RoleCode != "admin" || blockAccess.Configured, generalCommercialBlockCodes = blockAccess.Blocks });
 });
 app.MapGet("/api/organization/commercial", async (NpgsqlDataSource dataSource, CancellationToken cancellationToken) => Results.Ok(await OrganizationQueries.GetCommercialStructureAsync(dataSource, cancellationToken)));
 app.MapPut("/api/organization/commercial/{departmentId}/settings", async (string departmentId, JsonElement body, NpgsqlDataSource dataSource, CancellationToken cancellationToken) => { var role=body.TryGetProperty("roleLabel",out var roleProperty)?roleProperty.GetString()??"viewer":"viewer";var email=body.TryGetProperty("email",out var emailProperty)?emailProperty.GetString():null;var reports=body.TryGetProperty("visibleReports",out var reportsProperty)&&reportsProperty.ValueKind==JsonValueKind.Array?reportsProperty.EnumerateArray().Select(item=>item.GetString()).Where(item=>!string.IsNullOrWhiteSpace(item)).Cast<string>().ToArray():Array.Empty<string>();var blocks=body.TryGetProperty("visibleBlocks",out var blocksProperty)&&blocksProperty.ValueKind==JsonValueKind.Array?blocksProperty.EnumerateArray().Select(item=>item.GetString()).Where(item=>!string.IsNullOrWhiteSpace(item)).Cast<string>().ToArray():Array.Empty<string>();await OrganizationQueries.SetSettingsAsync(departmentId,email,role,reports,blocks,dataSource,cancellationToken);return Results.NoContent(); });
