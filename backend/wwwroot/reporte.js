@@ -401,6 +401,92 @@ const renderDataTable = (headers, rows, className = "") => `
     </table>
   </div>`;
 
+const parseTableNumber = (text = "") => {
+  const raw = text.trim();
+  if (!raw || /^(n\/?a|—|-)$/i.test(raw)) return null;
+  const isPercent = raw.includes("%");
+  let normalized = raw.replace(/[^\d,.-]/g, "");
+  if (!normalized || normalized === "-") return null;
+  if (isPercent) normalized = normalized.replace(/\./g, "").replace(",", ".");
+  else if (normalized.includes(",") && normalized.includes(".")) normalized = normalized.replace(/[.,]/g, "");
+  else if (/^-?\d+[.,]\d{1,2}$/.test(normalized)) normalized = normalized.replace(",", ".");
+  else normalized = normalized.replace(/[.,]/g, "");
+  const value = Number(normalized);
+  return Number.isFinite(value) ? { value, isPercent } : null;
+};
+
+const tableLeafHeaders = (table, columnCount) => {
+  const rows = [...table.tHead?.rows ?? []];
+  const labels = Array(columnCount).fill("");
+  rows.forEach((row) => [...row.cells].forEach((cell) => {
+    const start = cell.cellIndex;
+    const span = Math.max(1, cell.colSpan || 1);
+    if (span === 1 || row === rows.at(-1)) labels[start] = cell.textContent.trim();
+  }));
+  if (rows.length > 1 && rows.at(-1).cells.length === columnCount - 1) {
+    labels[0] = rows[0].cells[0]?.textContent.trim() || labels[0];
+    [...rows.at(-1).cells].forEach((cell, index) => { labels[index + 1] = cell.textContent.trim(); });
+  }
+  return labels.map((label, index) => label || `Columna ${index + 1}`);
+};
+
+const decorateTableTotals = (root = document) => {
+  root.querySelectorAll("table").forEach((table) => {
+    const bodyRows = [...table.tBodies].flatMap((body) => [...body.rows]).filter((row) => !row.hidden);
+    if (!bodyRows.length) return;
+    const columnCount = Math.max(...bodyRows.map((row) => row.cells.length));
+    if (columnCount < 2) return;
+    const headers = tableLeafHeaders(table, columnCount);
+    const totals = Array(columnCount).fill(0);
+    const numericCounts = Array(columnCount).fill(0);
+    const percentColumns = Array(columnCount).fill(false);
+
+    bodyRows.forEach((row) => [...row.cells].forEach((cell, index) => {
+      if (cell.hidden) return;
+      const parsed = parseTableNumber(cell.textContent);
+      if (!parsed) return;
+      totals[index] += parsed.value;
+      numericCounts[index] += 1;
+      percentColumns[index] ||= parsed.isPercent || /%|tasa|cumplimiento/i.test(headers[index]);
+    }));
+
+    const numericIndexes = numericCounts.map((count, index) => count ? index : -1).filter((index) => index > 0);
+    if (!numericIndexes.length) return;
+
+    let footer = table.querySelector("tfoot[data-auto-totals]");
+    if (!table.tFoot) {
+      footer = document.createElement("tfoot");
+      footer.dataset.autoTotals = "true";
+      table.appendChild(footer);
+    }
+    if (footer) {
+      footer.innerHTML = `<tr>${Array.from({ length: columnCount }, (_, index) => {
+        if (index === 0) return "<th>Total</th>";
+        if (!numericCounts[index]) return "<td>—</td>";
+        if (percentColumns[index]) {
+          const average = totals[index] / numericCounts[index];
+          return `<td>${average.toLocaleString("es-CO", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</td>`;
+        }
+        return `<td>${formatNumber.format(totals[index])}</td>`;
+      }).join("")}</tr>`;
+    }
+
+    const wrap = table.closest(".radicated-table-wrap, .synced-table-wrap") || table.parentElement;
+    if (!wrap || wrap.previousElementSibling?.classList.contains("radicated-total")) return;
+    let summary = wrap.previousElementSibling;
+    if (!summary?.classList.contains("table-total-summary")) {
+      summary = document.createElement("div");
+      summary.className = "table-total-summary";
+      wrap.before(summary);
+    }
+    const preferred = [...numericIndexes].reverse().find((index) => /total|valor|monto|recaudo|radicado|alcanzado|cartera|comisi/i.test(headers[index])) ?? numericIndexes.at(-1);
+    const value = percentColumns[preferred]
+      ? `${(totals[preferred] / numericCounts[preferred]).toLocaleString("es-CO", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
+      : formatNumber.format(totals[preferred]);
+    summary.innerHTML = `<span>${percentColumns[preferred] ? "Promedio" : "Total"} ${headers[preferred]}</span><strong>${value}</strong>`;
+  });
+};
+
 const renderPipelineTable = (items, mode) => {
   const sortedItems = [...items].sort((left, right) => right.cases - left.cases);
   const maxCases = Math.max(...sortedItems.map((item) => item.cases), 1);
@@ -520,6 +606,7 @@ const replaceBlockPreview = (title, content, count) => {
   block.querySelector(".diego-block-title em").textContent = `${count} registros`;
   const preview = block.querySelector(".block-table, .block-bars, .block-funnel, .block-donut, .management-placeholder, .management-kpi-grid, .radicated-table-wrap, .empty-block");
   if (preview) preview.outerHTML = content;
+  decorateTableTotals(block);
 };
 
 const commercialGoals = {
