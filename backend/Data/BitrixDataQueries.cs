@@ -46,9 +46,19 @@ public static class BitrixDataQueries
         CancellationToken cancellationToken)
     {
         const string sql = """
+            WITH recovered_stale_runs AS (
+                UPDATE bitrix.sync_runs
+                SET status = 'failed',
+                    finished_at = now(),
+                    error_message = 'Sync interrumpida o sin cierre automatico.'
+                WHERE status = 'running'
+                  AND updated_at < now() - interval '2 hours'
+                RETURNING id
+            )
             SELECT entity_type, mode, status, records_read, records_written, started_at, created_at
             FROM bitrix.sync_runs
             WHERE status = 'running'
+              AND updated_at >= now() - interval '2 hours'
             ORDER BY started_at DESC NULLS LAST, created_at DESC
             LIMIT 1;
             """;

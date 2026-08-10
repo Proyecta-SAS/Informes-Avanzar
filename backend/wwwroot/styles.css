@@ -1187,6 +1187,13 @@ tbody tr:hover {
   scrollbar-width: thin;
 }
 
+/* `display:flex` must never revive a filter panel that belongs to another
+   report. Otherwise two drawers overlap and the visible toggle controls the
+   hidden panel instead of the active one. */
+.report-has-filter-drawer .report-filter-drawer[hidden] {
+  display: none !important;
+}
+
 .report-has-filter-drawer .filter-panel-toggle {
   display: flex;
   flex: 0 0 auto;
@@ -4442,4 +4449,232 @@ td strong {
   .operativa-rch-grid { grid-template-columns: 1fr; }
   .operativa-rch-panel { padding: 12px; }
   .gerencia-kpi-card strong { margin-top: 80px; }
+}
+
+/* Alineación visual del Informe de Gerencia con el Informe General */
+.gerencia-report .gerencia-dashboard { box-sizing: border-box; padding-right: 350px; transition: padding-right .22s ease; }
+.gerencia-report.filter-panel-collapsed .gerencia-dashboard { padding-right: 76px; }
+.gerencia-report .gerencia-overview { margin-right: 0; margin-bottom: 22px; }
+.gerencia-report .gerencia-filters .month-filter-options { right: 0; width: 100%; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+.gerencia-report .gerencia-section-title,
+.gerencia-report .operativa-rch-section > h2,
+.gerencia-report .operativa-pnnc-section > h2 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 26px 0 14px;
+  border: 1px solid #dbe3ed;
+  border-radius: 16px;
+  background: #fff;
+  color: var(--navy);
+  padding: 15px 18px;
+  box-shadow: 0 8px 24px rgba(31, 55, 91, .06);
+  font-size: 20px;
+}
+
+.gerencia-report .gerencia-section-title::before,
+.gerencia-report .operativa-rch-section > h2::before,
+.gerencia-report .operativa-pnnc-section > h2::before {
+  content: "◇";
+  display: grid;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  place-items: center;
+  border-radius: 11px;
+  background: linear-gradient(145deg, #6f1641, #bf1838);
+  color: #fff;
+  font-size: 17px;
+  box-shadow: 0 8px 18px rgba(169, 22, 50, .2);
+}
+
+.gerencia-report .gerencia-dashboard article,
+.gerencia-report .operativa-rch-panel,
+.gerencia-report .customer-service-panel {
+  border: 1px solid #dbe3ed;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 8px 24px rgba(31, 55, 91, .07);
+  overflow: hidden;
+}
+
+.gerencia-report .gerencia-kpi-card,
+.gerencia-report .gerencia-table-card,
+.gerencia-report .gerencia-chart-card,
+.gerencia-report .gerencia-wide-card,
+.gerencia-report .gerencia-detail-table-card,
+.gerencia-report .gerencia-rch-average-card { padding: 20px; }
+
+.gerencia-report .gerencia-kpi-card,
+.gerencia-report .gerencia-table-card { min-height: 300px; }
+.gerencia-report .gerencia-chart-card { min-height: 390px; }
+.gerencia-report .gerencia-kpi-card strong { margin-top: 72px; color: #17263b; font-size: clamp(3.6rem, 6vw, 6rem); font-weight: 600; letter-spacing: -.05em; }
+.gerencia-report .gerencia-kpi-card p { margin-top: 24px; }
+.gerencia-report .gerencia-table-card h3,
+.gerencia-report .gerencia-detail-table-card h3 { padding: 0 0 14px; }
+.gerencia-report .gerencia-wide-card h3 { margin-bottom: 18px; }
+
+.gerencia-report .gerencia-panel-grid,
+.gerencia-report .gerencia-chart-grid,
+.gerencia-report .gerencia-detail-grid,
+.gerencia-report .operativa-rch-grid,
+.gerencia-report .operativa-rch-approved-grid,
+.gerencia-report .lp-task-grid,
+.gerencia-report .lp-extra-grid,
+.gerencia-report .seguros-grid,
+.gerencia-report .seguros-two-grid,
+.gerencia-report .customer-service-grid,
+.gerencia-report .customer-service-chart-grid,
+.gerencia-report .customer-service-response-grid,
+.gerencia-report .customer-service-withdrawal-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+
+.gerencia-report .gerencia-kpi-card { min-height: 220px; }
+.gerencia-report .gerencia-kpi-card strong { margin-top: 34px; font-size: clamp(3.2rem, 5vw, 5rem); }
+.gerencia-report .gerencia-kpi-card p { margin-top: 18px; }
+
+.gerencia-report .gerencia-table thead th,
+.gerencia-report .possible-close-table thead th,
+.gerencia-report .approved-rch-table thead th { background: #f1f5f8; color: #33445d; }
+.gerencia-report .gerencia-table tbody tr:nth-child(even),
+.gerencia-report .possible-close-table tbody tr:nth-child(even),
+.gerencia-report .approved-rch-table tbody tr:nth-child(even) { background: #f8fafc; }
+.gerencia-report .gerencia-table tbody tr:hover,
+.gerencia-report .possible-close-table tbody tr:hover,
+.gerencia-report .approved-rch-table tbody tr:hover { background: #eef4f8; }
+
+@media (max-width: 1050px) {
+  .gerencia-report .gerencia-dashboard,
+  .gerencia-report.filter-panel-collapsed .gerencia-dashboard { padding-right: 76px; }
+}
+
+@media (max-width: 700px) {
+  .gerencia-report .gerencia-dashboard,
+  .gerencia-report.filter-panel-collapsed .gerencia-dashboard { padding-right: 0; }
+  .gerencia-report .gerencia-section-title,
+  .gerencia-report .operativa-rch-section > h2,
+  .gerencia-report .operativa-pnnc-section > h2 { font-size: 17px; padding: 12px; }
+}
+
+/* Secciones operativas del Informe Gerencia: continuidad visual y vacíos útiles */
+.gerencia-report .operativa-rch-panel {
+  display: grid;
+  gap: 16px;
+  padding: 20px;
+  background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
+}
+
+.gerencia-report .operativa-rch-year {
+  width: fit-content;
+  min-height: 32px;
+  margin: 0;
+  border: 1px solid #d7e1ec;
+  border-radius: 999px;
+  background: #eef4f9;
+  padding: 5px 12px;
+  color: #415671;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .03em;
+}
+
+.gerencia-report .operativa-rch-year::before {
+  content: "Periodo ";
+  margin-right: 4px;
+  color: #7b8da4;
+  font-weight: 800;
+}
+
+.gerencia-report .operativa-rch-table-card,
+.gerencia-report .operativa-rch-chart-card,
+.gerencia-report .operativa-rch-bank-card,
+.gerencia-report .operativa-rch-approved-card,
+.gerencia-report .operativa-rch-approved-chart-card {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  border: 1px solid #dbe3ed;
+  border-radius: 14px;
+  background: #fff;
+  padding: 20px;
+  box-shadow: 0 6px 18px rgba(31, 55, 91, .055);
+  overflow: hidden;
+}
+
+.gerencia-report .operativa-rch-table-card h3,
+.gerencia-report .operativa-rch-chart-card h3,
+.gerencia-report .operativa-rch-bank-card h3,
+.gerencia-report .operativa-rch-approved-card h3,
+.gerencia-report .operativa-rch-approved-chart-card h3 {
+  margin: 0 0 14px;
+  color: #17263b;
+  font-size: 15px;
+  line-height: 1.35;
+}
+
+.gerencia-report .operativa-rch-chart-card .chart-legend,
+.gerencia-report .operativa-rch-bank-card .bank-legend {
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.gerencia-report .operativa-rch-bank-card { margin-top: 0; }
+.gerencia-report .operativa-rch-approved-grid { margin-top: 0; padding: 0; }
+.gerencia-report .approved-table-wrap { overflow-x: auto; padding-left: 0; }
+.gerencia-report .approved-rch-table { width: 100%; min-width: 0; max-width: none; }
+.gerencia-report .approved-rch-table col:nth-child(1) { width: 28%; }
+.gerencia-report .approved-rch-table col:nth-child(2) { width: 34%; }
+.gerencia-report .approved-rch-table col:nth-child(3) { width: 38%; }
+.gerencia-report .approved-rch-table th,
+.gerencia-report .approved-rch-table td { white-space: normal; }
+
+.gerencia-report .gerencia-line-chart:has(.chart-empty),
+.gerencia-report .gerencia-average-chart:has(.chart-empty),
+.gerencia-report .operativa-bank-chart:has(.chart-empty) {
+  display: grid;
+  min-height: 150px;
+  place-items: center;
+}
+
+.gerencia-report .chart-empty {
+  display: grid;
+  width: min(100%, 420px);
+  min-height: 112px;
+  place-items: center;
+  border: 1px dashed #ccd8e6;
+  border-radius: 13px;
+  background: #f7f9fc;
+  color: #71839a;
+  padding: 18px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.gerencia-report .chart-empty::before {
+  content: "◇";
+  display: grid;
+  width: 34px;
+  height: 34px;
+  margin: 0 auto 8px;
+  place-items: center;
+  border-radius: 10px;
+  background: #edf2f7;
+  color: #9b2743;
+  font-size: 16px;
+}
+
+.gerencia-report .operativa-rch-chart-card:has(.chart-empty),
+.gerencia-report .operativa-rch-bank-card:has(.chart-empty),
+.gerencia-report .operativa-rch-approved-chart-card:has(.chart-empty) {
+  min-height: 0;
+}
+
+@media (max-width: 700px) {
+  .gerencia-report .operativa-rch-panel { padding: 12px; }
+  .gerencia-report .operativa-rch-table-card,
+  .gerencia-report .operativa-rch-chart-card,
+  .gerencia-report .operativa-rch-bank-card,
+  .gerencia-report .operativa-rch-approved-card,
+  .gerencia-report .operativa-rch-approved-chart-card { padding: 14px; }
 }

@@ -126,7 +126,10 @@ public sealed class BitrixDealSyncService(
 
             if (firstPage.Total is not null)
             {
-                foreach (var chunk in GetDealListPageStarts(firstPage.Next, firstPage.Total.Value).Chunk(50))
+                // Requests with 50 deal-list commands and UF_* fields regularly exceed
+                // Bitrix's 60-second gateway limit. Smaller batches keep the complete
+                // custom-field payload while allowing long pipelines to finish.
+                foreach (var chunk in GetDealListPageStarts(firstPage.Next, firstPage.Total.Value).Chunk(10))
                 {
                     foreach (var page in await FetchDealListPageBatchAsync(
                         pipeline.CategoryId,

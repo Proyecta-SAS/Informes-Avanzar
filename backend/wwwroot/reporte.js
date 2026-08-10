@@ -3882,7 +3882,10 @@ const load = async () => {
     renderDiegoDashboard();
     await loadDiegoFilterHierarchy();
     document.getElementById("clearDiegoFilters").addEventListener("click", clearDiegoFilters);
-    const filterPanel = document.querySelector(".diego-filters");
+    // There is also a reusable standard filter panel in the document. Scope
+    // the lookup to the active commercial dashboard so the toggle changes the
+    // drawer the user can actually see.
+    const filterPanel = document.querySelector("#diegoDashboard .diego-filters");
     const filterToggle = document.getElementById("toggleDiegoFilters");
     setupFilterDrawer(filterPanel, filterToggle);
     document.getElementById("diegoYear").addEventListener("change", async () => {
@@ -3895,11 +3898,22 @@ const load = async () => {
     return;
   }
   if (reportId === "informe_gerencia_2026_2027") {
+    document.body.classList.add("gerencia-report");
+    document.querySelector(".compact-hero").hidden = true;
     document.getElementById("standardSummary").hidden = true;
     document.getElementById("standardVisuals").hidden = true;
     document.getElementById("detalle").hidden = true;
     document.getElementById("diegoDashboard").hidden = true;
     document.getElementById("gerenciaDashboard").hidden = false;
+    setupFilterDrawer(document.querySelector(".gerencia-filters"), document.getElementById("toggleGerenciaFilters"));
+    document.getElementById("clearGerenciaFilters").addEventListener("click", () => {
+      document.getElementById("gerenciaYear").value = "2026";
+      document.getElementById("gerenciaMonthAll").checked = true;
+      document.querySelectorAll("[data-gerencia-month-filter]").forEach((checkbox) => { checkbox.checked = false; });
+      document.getElementById("gerenciaMonthDropdown").removeAttribute("open");
+      syncGerenciaMonthAllState();
+      document.getElementById("gerenciaYear").dispatchEvent(new Event("change"));
+    });
     document.querySelector(".menu").innerHTML = `
       <p>GENERAL</p>
       <a href="/"><span></span>Inicio</a>
@@ -4079,5 +4093,3 @@ const updateReportView = async () => {
 document.getElementById("refreshReportButton").addEventListener("click", updateReportView);
 
 load();
-
-

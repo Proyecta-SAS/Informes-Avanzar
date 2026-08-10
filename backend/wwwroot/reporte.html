@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard</title>
-  <link rel="stylesheet" href="/styles.css?v=20260810-filter-drawer-layout">
+  <link rel="stylesheet" href="/styles.css?v=20260810-gerencia-operativa-v4">
 </head>
 <body>
   <aside class="sidebar">
@@ -139,32 +139,51 @@
     </section>
 
     <section id="gerenciaDashboard" class="gerencia-dashboard" hidden>
-      <section class="gerencia-filters" aria-label="Filtros del informe de gerencia">
+      <section class="diego-overview gerencia-overview" aria-label="Resumen ejecutivo de gerencia">
         <div>
-          <span class="filter-title">Filtros del informe</span>
-          <p>Indicadores ejecutivos comerciales por periodo.</p>
+          <span class="diego-overview-kicker">Panel gerencial · Información consolidada</span>
+          <h2>Informe Gerencia 2026 y 2027</h2>
+          <p>Seguimiento ejecutivo de cumplimiento, operaciones, seguros y servicio al cliente en una vista unificada.</p>
         </div>
-        <label>Año<select id="gerenciaYear"><option>2026</option><option>2027</option></select></label>
-        <div class="month-filter-group" id="gerenciaMonthGroup">
-          <span class="month-filter-label">Meses</span>
-          <details class="month-multiselect" id="gerenciaMonthDropdown">
-            <summary><span id="gerenciaMonthSummary">Todos</span></summary>
-            <div class="month-filter-options">
-              <label class="month-filter-option all"><input type="checkbox" id="gerenciaMonthAll" checked> Todos</label>
-              <label class="month-filter-option"><input type="checkbox" value="01 ENE" data-gerencia-month-filter> Enero</label>
-              <label class="month-filter-option"><input type="checkbox" value="02 FEB" data-gerencia-month-filter> Febrero</label>
-              <label class="month-filter-option"><input type="checkbox" value="03 MAR" data-gerencia-month-filter> Marzo</label>
-              <label class="month-filter-option"><input type="checkbox" value="04 ABR" data-gerencia-month-filter> Abril</label>
-              <label class="month-filter-option"><input type="checkbox" value="05 MAY" data-gerencia-month-filter> Mayo</label>
-              <label class="month-filter-option"><input type="checkbox" value="06 JUN" data-gerencia-month-filter> Junio</label>
-              <label class="month-filter-option"><input type="checkbox" value="07 JUL" data-gerencia-month-filter> Julio</label>
-              <label class="month-filter-option"><input type="checkbox" value="08 AGO" data-gerencia-month-filter> Agosto</label>
-              <label class="month-filter-option"><input type="checkbox" value="09 SEP" data-gerencia-month-filter> Septiembre</label>
-              <label class="month-filter-option"><input type="checkbox" value="10 OCT" data-gerencia-month-filter> Octubre</label>
-              <label class="month-filter-option"><input type="checkbox" value="11 NOV" data-gerencia-month-filter> Noviembre</label>
-              <label class="month-filter-option"><input type="checkbox" value="12 DIC" data-gerencia-month-filter> Diciembre</label>
+        <div class="diego-overview-status"><i></i><span>Datos sincronizados</span></div>
+      </section>
+
+      <section class="gerencia-filters report-filter-drawer" aria-label="Filtros del informe de gerencia">
+        <button id="toggleGerenciaFilters" class="filter-panel-toggle" type="button" aria-expanded="true" aria-controls="gerenciaFilterContent">
+          <span aria-hidden="true">›</span><b>Ocultar filtros</b>
+        </button>
+        <div id="gerenciaFilterContent" class="filter-panel-content">
+          <div class="filter-panel-heading">
+            <div>
+              <span class="filter-title">Filtros del informe</span>
+              <p>Indicadores ejecutivos por periodo.</p>
             </div>
-          </details>
+            <button id="clearGerenciaFilters" class="clear-report-filters" type="button"><span>↺</span> Limpiar filtros</button>
+          </div>
+          <div class="filter-controls">
+            <label>Año<select id="gerenciaYear"><option>2026</option><option>2027</option></select></label>
+            <div class="month-filter-group" id="gerenciaMonthGroup">
+              <span class="month-filter-label">Meses</span>
+              <details class="month-multiselect" id="gerenciaMonthDropdown">
+                <summary><span id="gerenciaMonthSummary">Todos</span></summary>
+                <div class="month-filter-options">
+                  <label class="month-filter-option all"><input type="checkbox" id="gerenciaMonthAll" checked> Todos</label>
+                  <label class="month-filter-option"><input type="checkbox" value="01 ENE" data-gerencia-month-filter> Enero</label>
+                  <label class="month-filter-option"><input type="checkbox" value="02 FEB" data-gerencia-month-filter> Febrero</label>
+                  <label class="month-filter-option"><input type="checkbox" value="03 MAR" data-gerencia-month-filter> Marzo</label>
+                  <label class="month-filter-option"><input type="checkbox" value="04 ABR" data-gerencia-month-filter> Abril</label>
+                  <label class="month-filter-option"><input type="checkbox" value="05 MAY" data-gerencia-month-filter> Mayo</label>
+                  <label class="month-filter-option"><input type="checkbox" value="06 JUN" data-gerencia-month-filter> Junio</label>
+                  <label class="month-filter-option"><input type="checkbox" value="07 JUL" data-gerencia-month-filter> Julio</label>
+                  <label class="month-filter-option"><input type="checkbox" value="08 AGO" data-gerencia-month-filter> Agosto</label>
+                  <label class="month-filter-option"><input type="checkbox" value="09 SEP" data-gerencia-month-filter> Septiembre</label>
+                  <label class="month-filter-option"><input type="checkbox" value="10 OCT" data-gerencia-month-filter> Octubre</label>
+                  <label class="month-filter-option"><input type="checkbox" value="11 NOV" data-gerencia-month-filter> Noviembre</label>
+                  <label class="month-filter-option"><input type="checkbox" value="12 DIC" data-gerencia-month-filter> Diciembre</label>
+                </div>
+              </details>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -975,7 +994,7 @@
     </section>
   </main>
 
-  <script src="/reporte.js?v=20260810-all-report-filters"></script>
+  <script src="/reporte.js?v=20260810-filter-drawer-v3"></script>
   <script src="/auth-session.js?v=20260806-gerencia-menu"></script>
 </body>
 </html>
