@@ -4,7 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard</title>
+<<<<<<< Updated upstream
   <link rel="stylesheet" href="/styles.css?v=20260806-merged-management-permissions">
+=======
+  <link rel="stylesheet" href="/styles.css?v=20260810-all-report-filters">
+>>>>>>> Stashed changes
 </head>
 <body>
   <aside class="sidebar">
@@ -45,6 +49,26 @@
         <p id="reportArea">Ãrea</p>
         <em>Power BI style</em>
       </aside>
+    </section>
+
+    <section id="standardFilters" class="diego-filters report-filter-drawer" aria-label="Filtros del informe" hidden>
+      <button id="toggleStandardFilters" class="filter-panel-toggle" type="button" aria-expanded="true" aria-controls="standardFilterContent">
+        <span aria-hidden="true">›</span><b>Ocultar filtros</b>
+      </button>
+      <div id="standardFilterContent" class="filter-panel-content">
+        <div class="filter-panel-heading">
+          <div>
+            <span class="filter-title">Filtros del informe</span>
+            <p>Encuentra negocios por etapa y responsable.</p>
+          </div>
+          <button id="clearStandardFilters" class="clear-report-filters" type="button"><span>↺</span> Limpiar filtros</button>
+        </div>
+        <div class="filter-controls">
+          <label>Buscar negocio<input id="standardDealSearch" type="search" placeholder="ID o nombre"></label>
+          <label>Etapa<select id="standardStageFilter"><option value="all">Todas</option></select></label>
+          <label>Responsable<select id="standardOwnerFilter"><option value="all">Todos</option></select></label>
+        </div>
+      </div>
     </section>
 
     <section id="standardSummary" class="cards compact-cards">
@@ -91,22 +115,27 @@
         <div class="diego-overview-status"><i></i><span>Datos sincronizados</span></div>
       </section>
 
-      <section class="diego-filters" aria-label="Filtros del informe">
-        <div class="filter-panel-heading">
-          <div>
-            <span class="filter-title">Filtros del informe</span>
-            <p>Refine los indicadores de fuerza comercial.</p>
+      <section class="diego-filters report-filter-drawer" aria-label="Filtros del informe">
+        <button id="toggleDiegoFilters" class="filter-panel-toggle" type="button" aria-expanded="true" aria-controls="diegoFilterContent">
+          <span aria-hidden="true">›</span><b>Ocultar filtros</b>
+        </button>
+        <div id="diegoFilterContent" class="filter-panel-content">
+          <div class="filter-panel-heading">
+            <div>
+              <span class="filter-title">Filtros del informe</span>
+              <p>Refine los indicadores de fuerza comercial.</p>
+            </div>
+            <button id="clearDiegoFilters" class="clear-report-filters" type="button"><span>↺</span> Limpiar filtros</button>
           </div>
-          <button id="clearDiegoFilters" class="clear-report-filters" type="button"><span>↺</span> Limpiar filtros</button>
-        </div>
-        <div class="filter-controls">
-          <label id="diegoYearFilter">Año<select id="diegoYear"><option>2026</option><option>2025</option></select></label>
-          <label id="diegoMonthFilter">Mes<select id="diegoMonth"><option value="all">Todos</option><option value="01">Enero</option><option value="02">Febrero</option><option value="03">Marzo</option><option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option><option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option><option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option></select></label>
-          <label>Línea comercial<select id="diegoLine"><option value="all">Todas</option><option value="rch">RCH</option><option value="pnnc">PNNC</option></select></label>
-          <label>Asesor<select id="diegoAdvisor"><option value="all">Todos</option></select></label>
-          <label>Líder<select id="diegoLeader"><option value="all">Todos</option></select></label>
-          <label>Coordinador<select id="diegoCoordinator"><option value="all">Todos</option></select></label>
-          <label id="pendingLeaderFilter" hidden>Pendiente líder comercial<select id="diegoPendingLeader"><option value="all">Todos</option><option value="pending">Pendiente</option><option value="resolved">Sin pendiente</option></select></label>
+          <div class="filter-controls">
+            <label id="diegoYearFilter">Año<select id="diegoYear"><option>2026</option><option>2025</option></select></label>
+            <label id="diegoMonthFilter">Mes<select id="diegoMonth"><option value="all">Todos</option><option value="01">Enero</option><option value="02">Febrero</option><option value="03">Marzo</option><option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option><option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option><option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option></select></label>
+            <label>Línea comercial<select id="diegoLine"><option value="all">Todas</option><option value="rch">RCH</option><option value="pnnc">PNNC</option></select></label>
+            <label>Asesor<select id="diegoAdvisor"><option value="all">Todos</option></select></label>
+            <label>Líder<select id="diegoLeader"><option value="all">Todos</option></select></label>
+            <label>Coordinador<select id="diegoCoordinator"><option value="all">Todos</option></select></label>
+            <label id="pendingLeaderFilter" hidden>Pendiente líder comercial<select id="diegoPendingLeader"><option value="all">Todos</option><option value="pending">Pendiente</option><option value="resolved">Sin pendiente</option></select></label>
+          </div>
         </div>
       </section>
 
@@ -950,7 +979,12 @@
     </section>
   </main>
 
+<<<<<<< Updated upstream
   <script src="/reporte.js?v=20260806-merged-management-permissions"></script>
   <script src="/auth-session.js?v=20260806-gerencia-menu"></script>
+=======
+  <script src="/reporte.js?v=20260810-all-report-filters"></script>
+  <script src="/auth-session.js?v=20260806-user-visibility"></script>
+>>>>>>> Stashed changes
 </body>
 </html>

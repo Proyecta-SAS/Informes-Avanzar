@@ -3703,6 +3703,106 @@ const setText = (id, value) => {
 };
 
 const formatNumber = new Intl.NumberFormat("es-CO");
+let standardDeals = [];
+
+const normalizeFilterValue = (value) => String(value ?? "")
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase()
+  .trim();
+
+const setupFilterDrawer = (panel, toggle) => {
+  document.body.classList.add("report-has-filter-drawer");
+  const setCollapsed = (collapsed) => {
+    panel.classList.toggle("is-collapsed", collapsed);
+    document.body.classList.toggle("filter-panel-collapsed", collapsed);
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    toggle.querySelector("b").textContent = collapsed ? "Mostrar filtros" : "Ocultar filtros";
+    toggle.title = collapsed ? "Mostrar filtros" : "Ocultar filtros";
+  };
+  setCollapsed(false);
+  toggle.addEventListener("click", () => setCollapsed(!panel.classList.contains("is-collapsed")));
+};
+
+const fillStandardFilter = (select, values, allLabel) => {
+  select.innerHTML = `<option value="all">${allLabel}</option>`;
+  [...new Set(values.filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right, "es", { sensitivity: "base" }))
+    .forEach((value) => select.add(new Option(value, value)));
+};
+
+const renderStandardDistributions = (deals) => {
+  const countBy = (selector) => deals.reduce((counts, deal) => {
+    const label = selector(deal) || "Sin asignar";
+    counts.set(label, (counts.get(label) ?? 0) + 1);
+    return counts;
+  }, new Map());
+  const stages = [...countBy((deal) => deal.stageName ?? deal.stageId).entries()]
+    .sort((left, right) => right[1] - left[1]);
+  const owners = [...countBy((deal) => deal.responsibleName).entries()]
+    .sort((left, right) => right[1] - left[1]);
+  const maxStage = Math.max(...stages.map(([, count]) => count), 1);
+
+  document.getElementById("stageBars").innerHTML = stages.map(([stageName, dealsCount]) => `
+    <div class="stage-row">
+      <span>${stageName}</span>
+      <div><i style="width:${Math.max(8, (dealsCount / maxStage) * 100)}%"></i></div>
+      <b>${dealsCount}</b>
+    </div>
+  `).join("");
+  document.getElementById("ownerList").innerHTML = owners.map(([responsibleName, dealsCount]) => `
+    <div class="owner-row"><span>${responsibleName}</span><b>${dealsCount}</b></div>
+  `).join("");
+};
+
+const applyStandardFilters = () => {
+  const search = normalizeFilterValue(document.getElementById("standardDealSearch").value);
+  const stage = document.getElementById("standardStageFilter").value;
+  const owner = document.getElementById("standardOwnerFilter").value;
+  const filtered = standardDeals.filter((deal) => {
+    const searchable = normalizeFilterValue(`${deal.bitrixId} ${deal.title}`);
+    const dealStage = deal.stageName ?? deal.stageId ?? "";
+    const dealOwner = deal.responsibleName ?? "";
+    return (!search || searchable.includes(search))
+      && (stage === "all" || dealStage === stage)
+      && (owner === "all" || dealOwner === owner);
+  });
+
+  document.getElementById("dealRows").innerHTML = filtered.map((deal) => `
+    <tr>
+      <td>${deal.bitrixId}</td>
+      <td><strong>${deal.title}</strong></td>
+      <td>${deal.stageName ?? deal.stageId ?? ""}</td>
+      <td>${deal.responsibleName ?? ""}</td>
+      <td>${deal.opportunity ?? ""}</td>
+      <td>${deal.currencyId ?? ""}</td>
+    </tr>
+  `).join("");
+  setText("summaryDeals", formatNumber.format(filtered.length));
+  setText("summaryStages", formatNumber.format(new Set(filtered.map((deal) => deal.stageName ?? deal.stageId).filter(Boolean)).size));
+  setText("summaryUsers", formatNumber.format(new Set(filtered.map((deal) => deal.responsibleName).filter(Boolean)).size));
+  renderStandardDistributions(filtered);
+};
+
+const setupStandardFilters = () => {
+  const panel = document.getElementById("standardFilters");
+  panel.hidden = false;
+  fillStandardFilter(document.getElementById("standardStageFilter"), standardDeals.map((deal) => deal.stageName ?? deal.stageId), "Todas");
+  fillStandardFilter(document.getElementById("standardOwnerFilter"), standardDeals.map((deal) => deal.responsibleName), "Todos");
+  if (!panel.dataset.ready) {
+    ["standardStageFilter", "standardOwnerFilter"].forEach((id) => document.getElementById(id).addEventListener("change", applyStandardFilters));
+    document.getElementById("standardDealSearch").addEventListener("input", applyStandardFilters);
+    document.getElementById("clearStandardFilters").addEventListener("click", () => {
+      document.getElementById("standardDealSearch").value = "";
+      document.getElementById("standardStageFilter").value = "all";
+      document.getElementById("standardOwnerFilter").value = "all";
+      applyStandardFilters();
+    });
+    setupFilterDrawer(panel, document.getElementById("toggleStandardFilters"));
+    panel.dataset.ready = "true";
+  }
+  applyStandardFilters();
+};
 
 const loadSummary = async () => {
   const response = await fetch(`/api/data/sync-summary?pipeline=${reportId}`);
@@ -3716,21 +3816,8 @@ const loadSummary = async () => {
 
 const loadDeals = async () => {
   const response = await fetch(`/api/data/deals?pipeline=${reportId}`);
-  const deals = await response.json();
-
-  document.getElementById("dealRows").innerHTML = deals.map((deal) => `
-    <tr>
-      <td>${deal.bitrixId}</td>
-      <td><strong>${deal.title}</strong></td>
-      <td>${deal.stageName ?? deal.stageId ?? ""}</td>
-      <td>${deal.responsibleName ?? ""}</td>
-      <td>${deal.opportunity ?? ""}</td>
-      <td>${deal.currencyId ?? ""}</td>
-    </tr>
-  `).join("");
-
-  await loadStageDistribution();
-  await loadResponsibleDistribution();
+  standardDeals = await response.json();
+  setupStandardFilters();
 };
 
 const loadStageDistribution = async () => {
@@ -3795,6 +3882,9 @@ const load = async () => {
     renderDiegoDashboard();
     await loadDiegoFilterHierarchy();
     document.getElementById("clearDiegoFilters").addEventListener("click", clearDiegoFilters);
+    const filterPanel = document.querySelector(".diego-filters");
+    const filterToggle = document.getElementById("toggleDiegoFilters");
+    setupFilterDrawer(filterPanel, filterToggle);
     document.getElementById("diegoYear").addEventListener("change", async () => {
       await Promise.all([loadDiegoRadicatedValues(), loadDiegoDashboardData(), loadDiegoPortfolioCollections(), loadDiegoLeadershipAndCommissions()]);
       setupDiegoFilters();
