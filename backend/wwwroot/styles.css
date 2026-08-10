@@ -1191,6 +1191,58 @@ tbody tr:hover {
   display: none !important;
 }
 
+.table-total-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 14px 0 10px;
+  padding: 13px 18px;
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #f1f5fa 0%, #f7f9fc 100%);
+  color: #61738e;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.table-total-summary strong {
+  color: #bd1935;
+  font-size: clamp(17px, 1.4vw, 23px);
+  letter-spacing: 0;
+  text-align: right;
+}
+
+.radicated-table tfoot[data-auto-totals] th,
+.radicated-table tfoot[data-auto-totals] td {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  padding: 11px 14px;
+  border-top: 2px solid #cbd7e5;
+  background: #eef3f8;
+  color: #17253a;
+  font-weight: 800;
+}
+
+.radicated-table tfoot[data-auto-totals] td {
+  text-align: right;
+}
+
+@media (max-width: 720px) {
+  .table-total-summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .table-total-summary strong {
+    text-align: left;
+  }
+}
+
 .report-has-filter-drawer .filter-panel-toggle {
   display: flex;
   flex: 0 0 auto;

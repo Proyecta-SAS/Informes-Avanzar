@@ -361,6 +361,7 @@ const loadDiegoRadicatedValues = async () => {
           `).join("")}</tbody>
         </table>
       </div>`;
+    decorateTableTotals(container);
   } catch (error) {
     container.innerHTML = `<div class="empty-block error"><strong>No fue posible cargar los valores radicados</strong><span>${error.message}</span></div>`;
   }
@@ -967,6 +968,7 @@ const applyDiegoFilters = () => {
 
     const badge = block.querySelector(".diego-block-title em");
     if (badge) badge.textContent = `${visibleRows} registros`;
+    decorateTableTotals(block);
   });
 };
 
@@ -4011,7 +4013,12 @@ const load = async () => {
       document.getElementById("pendingLeaderFilter").hidden = false;
     }
     renderDiegoDashboard();
-    await loadDiegoFilterHierarchy();
+    try {
+      await loadDiegoFilterHierarchy();
+    } catch (error) {
+      console.warn("La jerarquía comercial aún no está disponible; el informe continuará cargando sus tablas.", error);
+      commercialHierarchy = [];
+    }
     document.getElementById("clearDiegoFilters").addEventListener("click", clearDiegoFilters);
     // There is also a reusable standard filter panel in the document. Scope
     // the lookup to the active commercial dashboard so the toggle changes the
@@ -4221,4 +4228,16 @@ const updateReportView = async () => {
 
 document.getElementById("refreshReportButton").addEventListener("click", updateReportView);
 
-load();
+let totalsDecorationFrame = 0;
+const scheduleAllTableTotals = () => {
+  cancelAnimationFrame(totalsDecorationFrame);
+  totalsDecorationFrame = requestAnimationFrame(() => decorateTableTotals(document.querySelector("main") ?? document));
+};
+const reportTotalsObserver = new MutationObserver((mutations) => {
+  if (mutations.some((mutation) => [...mutation.addedNodes].some((node) => node.nodeType === Node.ELEMENT_NODE && (node.matches?.("table, tbody, tr") || node.querySelector?.("table"))))) {
+    scheduleAllTableTotals();
+  }
+});
+reportTotalsObserver.observe(document.querySelector("main") ?? document.body, { childList: true, subtree: true });
+
+load().finally(scheduleAllTableTotals);
