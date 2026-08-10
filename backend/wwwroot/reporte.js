@@ -3942,8 +3942,6 @@ const load = async () => {
     return;
   }
   if (reportId === "informe_gerencia_2026_2027") {
-    document.body.classList.add("gerencia-report");
-    document.querySelector(".compact-hero").hidden = true;
     document.getElementById("standardSummary").hidden = true;
     document.getElementById("standardVisuals").hidden = true;
     document.getElementById("detalle").hidden = true;
