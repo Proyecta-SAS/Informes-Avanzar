@@ -1243,6 +1243,266 @@ tbody tr:hover {
   }
 }
 
+/* Gerencia: composición ejecutiva y filtro lateral adaptable */
+.report-has-filter-drawer .gerencia-dashboard {
+  width: auto;
+  max-width: none;
+  margin: 22px 370px 42px 28px;
+  transition: margin-right .22s ease;
+}
+
+.report-has-filter-drawer.filter-panel-collapsed .gerencia-dashboard {
+  margin-right: 92px;
+}
+
+.gerencia-dashboard .gerencia-section-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 34px 0 16px;
+  color: #14233a;
+  font-size: clamp(21px, 2vw, 28px);
+}
+
+.gerencia-dashboard .gerencia-section-title::before {
+  content: "";
+  width: 5px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #50113f, #c51d38);
+}
+
+.gerencia-dashboard .gerencia-panel-grid,
+.gerencia-dashboard .gerencia-chart-grid,
+.gerencia-dashboard .gerencia-detail-grid,
+.gerencia-dashboard .operativa-rch-grid {
+  gap: 18px;
+}
+
+.gerencia-dashboard .gerencia-kpi-card,
+.gerencia-dashboard .gerencia-table-card,
+.gerencia-dashboard .gerencia-chart-card,
+.gerencia-dashboard .gerencia-wide-card,
+.gerencia-dashboard .gerencia-detail-table-card,
+.gerencia-dashboard .gerencia-rch-average-card,
+.gerencia-dashboard .operativa-rch-panel {
+  overflow: hidden;
+  border: 1px solid #dce5f0;
+  border-radius: 18px;
+  background: #fff;
+  padding: 20px;
+  box-shadow: 0 10px 28px rgba(31, 55, 91, .07);
+}
+
+.gerencia-dashboard .gerencia-kpi-card {
+  min-height: 310px;
+  background:
+    radial-gradient(circle at 92% 8%, rgba(197, 29, 56, .1), transparent 34%),
+    linear-gradient(145deg, #fff, #f8fafc);
+}
+
+.gerencia-dashboard .gerencia-kpi-card strong {
+  margin-top: 70px;
+  color: #17253a;
+  font-size: clamp(54px, 6vw, 92px);
+  font-weight: 750;
+}
+
+.gerencia-dashboard .gerencia-table-card {
+  padding: 20px;
+}
+
+.gerencia-dashboard .gerencia-table-card h3 {
+  padding: 0 0 14px;
+}
+
+.gerencia-dashboard .gerencia-table-wrap {
+  overflow: auto;
+  border: 1px solid #e1e8f1;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.gerencia-dashboard .gerencia-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.gerencia-dashboard .gerencia-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f1f5f9;
+  color: #34465f;
+  font-size: 12px;
+}
+
+.gerencia-dashboard .gerencia-table th,
+.gerencia-dashboard .gerencia-table td {
+  padding: 12px 13px;
+}
+
+.gerencia-dashboard .gerencia-table tbody tr:nth-child(odd) {
+  background: #f8fafc;
+}
+
+.gerencia-dashboard .gerencia-table tbody tr:hover {
+  background: #fff6f8;
+}
+
+.report-has-filter-drawer .gerencia-filters {
+  grid-template-columns: 1fr;
+  align-items: stretch;
+  gap: 12px;
+  border-radius: 18px;
+  padding: 12px;
+}
+
+.report-has-filter-drawer .gerencia-filters .filter-controls {
+  grid-template-columns: 1fr;
+}
+
+.report-has-filter-drawer .gerencia-filters select,
+.report-has-filter-drawer .gerencia-filters .month-multiselect summary {
+  min-height: 44px;
+  border-radius: 10px;
+  background: #fbfcfe;
+}
+
+.report-has-filter-drawer .gerencia-filters .month-filter-options {
+  max-height: min(390px, 48vh);
+  overflow-y: auto;
+}
+
+.gerencia-sync-status {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: #edf2f7;
+  color: #64748b;
+  padding: 6px 9px;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.gerencia-sync-status::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.gerencia-sync-status.is-loading { color: #476b98; background: #edf5ff; }
+.gerencia-sync-status.is-ready { color: #237358; background: #eaf8f1; }
+.gerencia-sync-status.has-warning { color: #9b5c0b; background: #fff5dd; }
+
+.table-column-sort {
+  display: inline-flex;
+  width: 100%;
+  min-width: max-content;
+  min-height: 30px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  padding: 3px 5px;
+  font: inherit;
+  font-weight: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+
+.table-column-sort:hover,
+.table-column-sort:focus-visible {
+  background: rgba(77, 115, 159, .1);
+  color: #163f72;
+  outline: none;
+}
+
+.table-column-sort i {
+  position: relative;
+  width: 10px;
+  height: 15px;
+  flex: 0 0 auto;
+  color: #8fa0b5;
+}
+
+.table-column-sort i::before,
+.table-column-sort i::after {
+  content: "";
+  position: absolute;
+  left: 1px;
+  border-right: 4px solid transparent;
+  border-left: 4px solid transparent;
+}
+
+.table-column-sort i::before {
+  top: 1px;
+  border-bottom: 5px solid currentColor;
+}
+
+.table-column-sort i::after {
+  bottom: 1px;
+  border-top: 5px solid currentColor;
+}
+
+.table-column-sort[data-direction="desc"] i::before,
+.table-column-sort[data-direction="asc"] i::after {
+  opacity: .25;
+}
+
+.table-column-sort[data-direction="desc"] i::after,
+.table-column-sort[data-direction="asc"] i::before {
+  color: #b41835;
+}
+
+@media (max-width: 1180px) {
+  .report-has-filter-drawer .gerencia-dashboard {
+    margin-right: 92px;
+  }
+
+  .gerencia-dashboard .gerencia-panel-grid,
+  .gerencia-dashboard .gerencia-chart-grid,
+  .gerencia-dashboard .gerencia-detail-grid,
+  .gerencia-dashboard .operativa-rch-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .report-has-filter-drawer .gerencia-dashboard,
+  .report-has-filter-drawer.filter-panel-collapsed .gerencia-dashboard {
+    width: auto;
+    margin: 14px 12px 34px;
+  }
+
+  .gerencia-dashboard .gerencia-kpi-card,
+  .gerencia-dashboard .gerencia-table-card,
+  .gerencia-dashboard .gerencia-chart-card,
+  .gerencia-dashboard .gerencia-wide-card,
+  .gerencia-dashboard .gerencia-detail-table-card,
+  .gerencia-dashboard .gerencia-rch-average-card,
+  .gerencia-dashboard .operativa-rch-panel {
+    border-radius: 14px;
+    padding: 14px;
+  }
+
+  .gerencia-dashboard .gerencia-kpi-card strong {
+    margin-top: 34px;
+    font-size: clamp(46px, 18vw, 72px);
+  }
+}
+
 .report-has-filter-drawer .filter-panel-toggle {
   display: flex;
   flex: 0 0 auto;

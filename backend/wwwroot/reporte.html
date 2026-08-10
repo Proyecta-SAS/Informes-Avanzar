@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard</title>
-  <link rel="stylesheet" href="/styles.css?v=20260810-table-totals-v9">
+  <link rel="stylesheet" href="/styles.css?v=20260810-column-sorting-v11">
 </head>
 <body>
   <aside class="sidebar">
@@ -148,6 +148,7 @@
             <div>
               <span class="filter-title">Filtros del informe</span>
               <p>Indicadores ejecutivos por periodo.</p>
+              <span id="gerenciaSyncStatus" class="gerencia-sync-status" role="status">Preparando datos…</span>
             </div>
             <button id="clearGerenciaFilters" class="clear-report-filters" type="button"><span>↺</span> Limpiar filtros</button>
           </div>
@@ -985,7 +986,7 @@
     </section>
   </main>
 
-  <script src="/reporte.js?v=20260810-table-totals-v8"></script>
+  <script src="/reporte.js?v=20260810-column-sorting-v11"></script>
   <script src="/auth-session.js?v=20260806-gerencia-menu"></script>
 </body>
 </html>

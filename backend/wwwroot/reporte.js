@@ -88,7 +88,6 @@ const generalManagementSection = {
   title: "Indicadores gerenciales",
   description: "Metas, acumulados, posibles cierres y cumplimiento por línea comercial.",
   blocks: [
-    ["Resumen gerencial comercial", "Indicadores acumulados y metas del periodo.", "management-kpis"],
     ["Posible cierre general", "Monto proyectado por etapa para 1116, PNNC y RCH.", "management-close"],
     ["Detalle cumplimiento PNNC 2025", "Meta y cumplimiento mensual consolidado de PNNC y LP-2445.", "management-compliance"],
     ["Detalle cumplimiento RCH 2026", "Meta, valor alcanzado y porcentaje mensual de RCH Operativa.", "management-compliance"],
@@ -113,7 +112,6 @@ const generalBlockCodes = {
   "Etapas Comercial PNNC": "stages_pnnc_commercial",
   "Etapas Operativa PNNC": "stages_pnnc_operativa",
   "Posible cierre PNC": "possible_close_pnnc",
-  "Resumen gerencial comercial": "management_summary",
   "Posible cierre general": "management_possible_close",
   "Detalle cumplimiento PNNC 2025": "management_compliance_pnnc",
   "Detalle cumplimiento RCH 2026": "management_compliance_rch",
@@ -431,12 +429,73 @@ const tableLeafHeaders = (table, columnCount) => {
   return labels.map((label, index) => label || `Columna ${index + 1}`);
 };
 
+const enableTableSorting = (table, columnCount) => {
+  if (!table.tHead || table.dataset.sortableReady === "true") return;
+  const headerRows = [...table.tHead.rows];
+  const lastHeaderRow = headerRows.at(-1);
+
+  headerRows.forEach((row) => {
+    let logicalIndex = row === lastHeaderRow && row.cells.length < columnCount
+      ? Math.max(0, columnCount - row.cells.length - (headerRows[0].cells.at(-1)?.rowSpan > 1 ? 1 : 0))
+      : 0;
+    [...row.cells].forEach((header) => {
+      const columnIndex = logicalIndex;
+      logicalIndex += Math.max(1, header.colSpan || 1);
+      if (header.colSpan > 1 || header.querySelector("button") || columnIndex >= columnCount) return;
+      const label = header.textContent.trim();
+      if (!label) return;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "table-column-sort";
+      button.dataset.column = String(columnIndex);
+      button.dataset.direction = "none";
+      button.setAttribute("aria-label", `Ordenar ${label} de mayor a menor`);
+      button.innerHTML = `<span>${label}</span><i aria-hidden="true"></i>`;
+      header.textContent = "";
+      header.appendChild(button);
+    });
+  });
+
+  table.tHead.addEventListener("click", (event) => {
+    const button = event.target.closest(".table-column-sort");
+    if (!button) return;
+    const columnIndex = Number(button.dataset.column);
+    const direction = button.dataset.direction === "desc" ? "asc" : "desc";
+    table.querySelectorAll(".table-column-sort").forEach((candidate) => {
+      candidate.dataset.direction = "none";
+      candidate.removeAttribute("aria-sort");
+    });
+    button.dataset.direction = direction;
+    button.setAttribute("aria-sort", direction === "desc" ? "descending" : "ascending");
+    button.setAttribute("aria-label", `Ordenar ${button.querySelector("span").textContent} de ${direction === "desc" ? "menor a mayor" : "mayor a menor"}`);
+
+    [...table.tBodies].forEach((body) => {
+      const rows = [...body.rows];
+      rows.sort((leftRow, rightRow) => {
+        const leftText = leftRow.cells[columnIndex]?.textContent.trim() ?? "";
+        const rightText = rightRow.cells[columnIndex]?.textContent.trim() ?? "";
+        const leftNumber = parseTableNumber(leftText)?.value;
+        const rightNumber = parseTableNumber(rightText)?.value;
+        let comparison;
+        if (leftNumber != null && rightNumber != null) comparison = leftNumber - rightNumber;
+        else if (leftNumber != null) comparison = -1;
+        else if (rightNumber != null) comparison = 1;
+        else comparison = leftText.localeCompare(rightText, "es", { numeric: true, sensitivity: "base" });
+        return direction === "desc" ? -comparison : comparison;
+      });
+      rows.forEach((row) => body.appendChild(row));
+    });
+  });
+  table.dataset.sortableReady = "true";
+};
+
 const decorateTableTotals = (root = document) => {
   root.querySelectorAll("table").forEach((table) => {
     const bodyRows = [...table.tBodies].flatMap((body) => [...body.rows]).filter((row) => !row.hidden);
     if (!bodyRows.length) return;
     const columnCount = Math.max(...bodyRows.map((row) => row.cells.length));
     if (columnCount < 2) return;
+    enableTableSorting(table, columnCount);
     const headers = tableLeafHeaders(table, columnCount);
     const totals = Array(columnCount).fill(0);
     const numericCounts = Array(columnCount).fill(0);
@@ -682,7 +741,6 @@ const renderPipelineCompliance = (items, pipeline, monthlyGoals) => {
 const renderGeneralManagement = () => {
   if (reportId !== "informe_general_comercial" || !generalRadicatedData || !generalDashboardData) return;
   const items = generalRadicatedData.items ?? [];
-  replaceBlockPreview("Resumen gerencial comercial", renderManagementKpis(generalRadicatedData), items.length);
   const closeItems = generalDashboardData.possibleCloseGeneral ?? [];
   replaceBlockPreview("Posible cierre general", closeItems.length ? renderGeneralPossibleClose(closeItems) : `<div class="empty-block"><strong>Sin posibles cierres</strong><span>No hay negocios en las etapas configuradas.</span></div>`, closeItems.length);
   [["Detalle cumplimiento PNNC 2025", "PNNC"], ["Detalle cumplimiento RCH 2026", "RCH"], ["Detalle cumplimiento 1116 2026", "1116"]].forEach(([title, pipeline]) => {
@@ -3506,12 +3564,13 @@ const renderCustomerServiceResponseAverage = () => {
 };
 
 const loadCustomerServiceResponseAverage = async () => {
+  const year = document.getElementById("gerenciaYear")?.value ?? "2026";
   const body = document.getElementById("customerServiceResponseRows");
   const chart = document.getElementById("customerServiceResponseChart");
   if (!body || !chart) return;
 
   try {
-    const response = await fetch("/api/reports/gerencia/servicio-cliente-promedio-respuesta?year=2026");
+    const response = await fetch(`/api/reports/gerencia/servicio-cliente-promedio-respuesta?year=${encodeURIComponent(year)}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     customerServiceResponseRows = data.rows ?? [];
@@ -3609,11 +3668,12 @@ const renderCustomerServiceWithdrawals = () => {
 };
 
 const loadCustomerServiceWithdrawals = async () => {
+  const year = document.getElementById("gerenciaYear")?.value ?? "2026";
   const anyTarget = document.getElementById("customerServiceInsolvencyWithdrawalRows");
   if (!anyTarget) return;
 
   try {
-    const response = await fetch("/api/reports/gerencia/servicio-cliente-desistimientos?year=2026");
+    const response = await fetch(`/api/reports/gerencia/servicio-cliente-desistimientos?year=${encodeURIComponent(year)}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     customerServiceWithdrawals = await response.json();
     renderCustomerServiceWithdrawals();
@@ -3635,12 +3695,13 @@ const renderCustomerServiceCharts = () => {
 };
 
 const loadCustomerServiceCharts = async () => {
+  const year = document.getElementById("gerenciaYear")?.value ?? "2026";
   const requirementContainer = document.getElementById("customerServiceRequirementChart");
   const monthlyContainer = document.getElementById("customerServiceMonthlyChart");
   if (!requirementContainer || !monthlyContainer) return;
 
   try {
-    const response = await fetch("/api/reports/gerencia/servicio-cliente-gráficas?year=2026");
+    const response = await fetch(`/api/reports/gerencia/servicio-cliente-graficas?year=${encodeURIComponent(year)}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     customerServiceRequirements = data.requirements ?? [];
@@ -3741,12 +3802,13 @@ const renderCustomerServiceSummary = () => {
 };
 
 const loadCustomerServiceSummary = async () => {
+  const year = document.getElementById("gerenciaYear")?.value ?? "2026";
   const complianceTarget = document.getElementById("customerServiceCompliance");
   const receivedTarget = document.getElementById("customerServiceReceived");
   if (!complianceTarget || !receivedTarget) return;
 
   try {
-    const response = await fetch("/api/reports/gerencia/servicio-cliente-resumen?year=2026");
+    const response = await fetch(`/api/reports/gerencia/servicio-cliente-resumen?year=${encodeURIComponent(year)}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     customerServiceSummary = {
@@ -3829,6 +3891,26 @@ const renderDiegoDashboard = () => {
       </div>
     </section>
   `).join("");
+};
+
+const loadGerenciaReportData = async () => {
+  const status = document.getElementById("gerenciaSyncStatus");
+  if (status) {
+    status.className = "gerencia-sync-status is-loading";
+    status.textContent = "Actualizando información…";
+  }
+  const loaders = [loadGerenciaCompliance, loadGerenciaMonthlyCompliance, loadGerenciaPossibleClose, loadPnncDetailCompliance, loadRchAccumulatedAverage, loadOperativaRchProcesses, loadOperativaRchApprovedByBank, loadPnnc2025Processes, loadOperativaPnncManagement, loadOperativaPnncSecond, loadOperativaPnncDetail, loadPnncLpCompliance2025, loadLpMonthlyTasks, loadLpWeeklyTasks, loadLpEmbargosTasks, loadLpLibranzaTasks, loadInsEmbargosDetail, loadInsLibranzaDetail, loadInsuranceCompliance, loadInsuranceOperations, loadInsuranceOutOfTime, loadCustomerServiceSummary, loadCustomerServiceCharts, loadCustomerServiceResponseAverage, loadCustomerServiceWithdrawals];
+  await Promise.allSettled(loaders.map((loader) => loader()));
+  const hasVisibleErrors = /No fue posible|HTTP 5\d\d/i.test(document.getElementById("gerenciaDashboard")?.innerText ?? "");
+  const hasCommercialData = gerenciaMonthlyRows.length > 0;
+  if (status) {
+    status.className = `gerencia-sync-status ${hasVisibleErrors || !hasCommercialData ? "has-warning" : "is-ready"}`;
+    status.textContent = hasVisibleErrors
+      ? "Carga parcial · revisa los módulos señalados"
+      : !hasCommercialData
+        ? `Sin datos comerciales sincronizados para ${document.getElementById("gerenciaYear")?.value ?? "el periodo"}`
+      : `Datos actualizados · ${new Date().toLocaleTimeString("es-CO", { hour: "2-digit", minute: "2-digit" })}`;
+  }
 };
 
 const setText = (id, value) => {
@@ -4199,9 +4281,9 @@ const load = async () => {
     document.getElementById("operativaPnncSearch").addEventListener("input", renderOperativaPnncManagement);
     document.getElementById("gerenciaMonthGroup")?.addEventListener("change", handleGerenciaMonthFilterChange);
     document.getElementById("gerenciaYear").addEventListener("change", async () => {
-      await Promise.all([loadGerenciaCompliance(), loadGerenciaMonthlyCompliance(), loadGerenciaPossibleClose(), loadPnncDetailCompliance(), loadRchAccumulatedAverage(), loadOperativaRchProcesses(), loadOperativaRchApprovedByBank(), loadPnnc2025Processes(), loadOperativaPnncManagement(), loadOperativaPnncSecond(), loadOperativaPnncDetail(), loadPnncLpCompliance2025(), loadLpMonthlyTasks(), loadLpWeeklyTasks(), loadLpEmbargosTasks(), loadLpLibranzaTasks(), loadInsEmbargosDetail(), loadInsLibranzaDetail(), loadInsuranceCompliance(), loadInsuranceOperations(), loadInsuranceOutOfTime(), loadCustomerServiceSummary(), loadCustomerServiceCharts(), loadCustomerServiceResponseAverage(), loadCustomerServiceWithdrawals()]);
+      await loadGerenciaReportData();
     });
-    await Promise.all([loadGerenciaCompliance(), loadGerenciaMonthlyCompliance(), loadGerenciaPossibleClose(), loadPnncDetailCompliance(), loadRchAccumulatedAverage(), loadOperativaRchProcesses(), loadOperativaRchApprovedByBank(), loadPnnc2025Processes(), loadOperativaPnncManagement(), loadOperativaPnncSecond(), loadOperativaPnncDetail(), loadPnncLpCompliance2025(), loadLpMonthlyTasks(), loadLpWeeklyTasks(), loadLpEmbargosTasks(), loadLpLibranzaTasks(), loadInsEmbargosDetail(), loadInsLibranzaDetail(), loadInsuranceCompliance(), loadInsuranceOperations(), loadInsuranceOutOfTime(), loadCustomerServiceSummary(), loadCustomerServiceCharts(), loadCustomerServiceResponseAverage(), loadCustomerServiceWithdrawals()]);
+    await loadGerenciaReportData();
     return;
   }
   await loadSummary();
@@ -4214,7 +4296,7 @@ const updateReportView = async () => {
     if (["fuerza_comercial_diego", "informe_general_comercial"].includes(reportId)) {
       await Promise.all([loadDiegoRadicatedValues(), loadDiegoDashboardData()]);
     } else if (reportId === "informe_gerencia_2026_2027") {
-      await Promise.all([loadGerenciaCompliance(), loadGerenciaMonthlyCompliance(), loadGerenciaPossibleClose(), loadPnncDetailCompliance(), loadRchAccumulatedAverage(), loadOperativaRchProcesses(), loadOperativaRchApprovedByBank(), loadPnnc2025Processes(), loadOperativaPnncManagement(), loadOperativaPnncSecond(), loadOperativaPnncDetail(), loadPnncLpCompliance2025(), loadLpMonthlyTasks(), loadLpWeeklyTasks(), loadLpEmbargosTasks(), loadLpLibranzaTasks(), loadInsEmbargosDetail(), loadInsLibranzaDetail(), loadInsuranceCompliance(), loadInsuranceOperations(), loadInsuranceOutOfTime(), loadCustomerServiceSummary(), loadCustomerServiceCharts(), loadCustomerServiceResponseAverage(), loadCustomerServiceWithdrawals()]);
+      await loadGerenciaReportData();
     } else {
       await loadSummary();
       await loadDeals();
