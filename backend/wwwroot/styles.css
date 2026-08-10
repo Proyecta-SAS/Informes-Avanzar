@@ -4627,6 +4627,11 @@ td strong {
 .gerencia-report .approved-rch-table col:nth-child(3) { width: 38%; }
 .gerencia-report .approved-rch-table th,
 .gerencia-report .approved-rch-table td { white-space: normal; }
+.gerencia-report .approved-rch-table th {
+  position: static;
+  top: auto;
+  z-index: auto;
+}
 
 .gerencia-report .gerencia-line-chart:has(.chart-empty),
 .gerencia-report .gerencia-average-chart:has(.chart-empty),

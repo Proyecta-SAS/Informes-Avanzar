@@ -787,6 +787,44 @@ const applyDiegoFilters = () => {
   const selectedLine = document.getElementById("diegoLine").value;
   const selectedMonth = document.getElementById("diegoMonth").value;
   const selectedPendingLeader = document.getElementById("diegoPendingLeader").value;
+  const selectedHierarchy = hierarchySelection();
+  const hierarchyIndexes = {
+    advisors: new Set(),
+    leaders: new Set(),
+    coordinators: new Set(),
+    advisorLeader: new Set(),
+    advisorCoordinator: new Set(),
+    leaderCoordinator: new Set(),
+    complete: new Set()
+  };
+  const relatedHierarchy = commercialHierarchy.filter((item) => matchesHierarchySelection(item, selectedHierarchy));
+  relatedHierarchy.forEach((item) => {
+    const advisor = normalizeFilterText(item.advisor ?? "");
+    const leader = normalizeFilterText(item.leader ?? "");
+    const coordinator = normalizeFilterText(item.coordinator ?? "");
+    if (advisor) hierarchyIndexes.advisors.add(advisor);
+    if (leader) hierarchyIndexes.leaders.add(leader);
+    if (coordinator) hierarchyIndexes.coordinators.add(coordinator);
+    if (advisor && leader) hierarchyIndexes.advisorLeader.add(`${advisor}\u0001${leader}`);
+    if (advisor && coordinator) hierarchyIndexes.advisorCoordinator.add(`${advisor}\u0001${coordinator}`);
+    if (leader && coordinator) hierarchyIndexes.leaderCoordinator.add(`${leader}\u0001${coordinator}`);
+    if (advisor && leader && coordinator) hierarchyIndexes.complete.add(`${advisor}\u0001${leader}\u0001${coordinator}`);
+  });
+
+  const belongsToSelectedHierarchy = (advisorValue, leaderValue, coordinatorValue) => {
+    const advisor = normalizeFilterText(advisorValue ?? "");
+    const leader = normalizeFilterText(leaderValue ?? "");
+    const coordinator = normalizeFilterText(coordinatorValue ?? "");
+    if (!advisor && !leader && !coordinator) return true;
+    if (!commercialHierarchy.length) return true;
+    if (advisor && leader && coordinator) return hierarchyIndexes.complete.has(`${advisor}\u0001${leader}\u0001${coordinator}`);
+    if (advisor && leader) return hierarchyIndexes.advisorLeader.has(`${advisor}\u0001${leader}`);
+    if (advisor && coordinator) return hierarchyIndexes.advisorCoordinator.has(`${advisor}\u0001${coordinator}`);
+    if (leader && coordinator) return hierarchyIndexes.leaderCoordinator.has(`${leader}\u0001${coordinator}`);
+    if (advisor) return hierarchyIndexes.advisors.has(advisor);
+    if (leader) return hierarchyIndexes.leaders.has(leader);
+    return hierarchyIndexes.coordinators.has(coordinator);
+  };
 
   document.querySelectorAll(".diego-block").forEach((block) => {
     const title = normalizeFilterText(block.querySelector("h3")?.textContent ?? "");
@@ -822,7 +860,6 @@ const applyDiegoFilters = () => {
         }
         return normalizeFilterText(cellValue) === normalizeFilterText(selected);
       });
-      const selectedHierarchy = hierarchySelection();
       const advisorIndex = headers.indexOf("Asesor");
       const leaderIndex = headers.indexOf("Líder");
       const coordinatorIndex = headers.indexOf("Coordinador");
@@ -830,13 +867,7 @@ const applyDiegoFilters = () => {
       const rowLeader = row.dataset.leader ? decodeURIComponent(row.dataset.leader) : (leaderIndex >= 0 ? row.children[leaderIndex]?.textContent.trim() : (title.includes("líder") ? row.dataset.group : null));
       const rowCoordinator = row.dataset.coordinator ? decodeURIComponent(row.dataset.coordinator) : (coordinatorIndex >= 0 ? row.children[coordinatorIndex]?.textContent.trim() : (title.includes("coordinador") ? row.dataset.group : null));
       const hasHierarchyIdentity = rowAdvisor || rowLeader || rowCoordinator;
-      const matchesRelatedTeam = !hasHierarchyIdentity || !commercialHierarchy.length || commercialHierarchy.some((item) => {
-        if (!matchesHierarchySelection(item, selectedHierarchy)) return false;
-        if (rowAdvisor && normalizeFilterText(item.advisor ?? "") !== normalizeFilterText(rowAdvisor)) return false;
-        if (rowLeader && normalizeFilterText(item.leader ?? "") !== normalizeFilterText(rowLeader)) return false;
-        if (rowCoordinator && normalizeFilterText(item.coordinator ?? "") !== normalizeFilterText(rowCoordinator)) return false;
-        return true;
-      });
+      const matchesRelatedTeam = !hasHierarchyIdentity || belongsToSelectedHierarchy(rowAdvisor, rowLeader, rowCoordinator);
       const stageIndex = headers.findIndex((header) => normalizeFilterText(header).startsWith("etapa"));
       const stageValue = stageIndex >= 0 ? normalizeFilterText(row.children[stageIndex]?.textContent ?? "") : "";
       const isPendingLeader = stageValue.includes("lider") || stageValue.includes("líder");
@@ -858,8 +889,21 @@ const setupDiegoFilters = () => {
   const afterCoordinator = hierarchySelection();
   fillFilterOptions("diegoLeader", uniqueHierarchyValues("leader", afterCoordinator, "leader"));
   const afterLeader = hierarchySelection();
-  const hierarchyAdvisors = uniqueHierarchyValues("advisor", afterLeader, "advisor");
-  fillFilterOptions("diegoAdvisor", hierarchyAdvisors.length ? hierarchyAdvisors : collectColumnValues("Asesor"));
+  const advisorSelect = document.getElementById("diegoAdvisor");
+  const hasAdvisorScope = afterLeader.line !== "all"
+    || afterLeader.coordinator !== "all"
+    || afterLeader.leader !== "all";
+  // Rendering more than a thousand native options blocks the production UI.
+  // Advisors are therefore loaded after choosing a line, coordinator or leader;
+  // the hierarchy still returns every related advisor without truncation.
+  const hierarchyAdvisors = hasAdvisorScope
+    ? uniqueHierarchyValues("advisor", afterLeader, "advisor")
+    : [];
+  fillFilterOptions("diegoAdvisor", hierarchyAdvisors);
+  advisorSelect.disabled = !hasAdvisorScope;
+  advisorSelect.title = hasAdvisorScope
+    ? "Filtrar por asesor"
+    : "Seleccione primero una línea, un coordinador o un líder";
   ["diegoMonth", "diegoLine", "diegoAdvisor", "diegoLeader", "diegoCoordinator", "diegoPendingLeader"].forEach((id) => {
     const select = document.getElementById(id);
     if (select.dataset.bound === "true") return;
