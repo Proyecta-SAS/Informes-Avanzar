@@ -170,6 +170,10 @@ public static class BitrixDataQueries
                             WHEN '2025' THEN '37036'
                             WHEN '2026' THEN '39138'
                         END
+                        OR (
+                            NULLIF(s.custom_fields ->> 'UF_CRM_1737653376', '') IS NULL
+                            AND EXTRACT(YEAR FROM COALESCE(s.bitrix_created_at, d.bitrix_created_at, d.created_at)) = @yearNumber
+                        )
                     )
             )
             SELECT month, pipeline, advisor, COALESCE(SUM(amount), 0) AS total_achieved
@@ -187,6 +191,7 @@ public static class BitrixDataQueries
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue("year", year.ToString(CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("yearNumber", year);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
         while (await reader.ReadAsync(cancellationToken))
@@ -620,18 +625,18 @@ public static class BitrixDataQueries
                         WHEN pipeline.category_id = 28 THEN 'PNNC'
                     END AS commercial_line,
                     CASE
-                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '22560' THEN '01 ENE'
-                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '22562' THEN '02 FEB'
-                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39144' THEN '03 MAR'
-                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39146' THEN '04 ABR'
-                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39148' THEN '05 MAY'
-                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39150' THEN '06 JUN'
-                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39152' THEN '07 JUL'
-                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39154' THEN '08 AGO'
-                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39156' THEN '09 SEP'
-                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39158' THEN '10 OCT'
-                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39160' THEN '11 NOV'
-                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39162' THEN '12 DIC'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '22560' OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%ENERO%' THEN '01 ENE'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '22562' OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%FEBRERO%' THEN '02 FEB'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39144' OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%MARZO%' THEN '03 MAR'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39146' OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%ABRIL%' THEN '04 ABR'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39148' OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%MAYO%' THEN '05 MAY'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39150' OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%JUNIO%' THEN '06 JUN'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39152' OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%JULIO%' THEN '07 JUL'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39154' OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%AGOSTO%' THEN '08 AGO'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39156' OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%SEPTIEMBRE%' THEN '09 SEP'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39158' OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%OCTUBRE%' THEN '10 OCT'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39160' OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%NOVIEMBRE%' THEN '11 NOV'
+                        WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39162' OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%DICIEMBRE%' THEN '12 DIC'
                     END AS month,
                     COALESCE(d.opportunity, 0) AS amount
                 FROM bitrix.deals d
@@ -647,6 +652,10 @@ public static class BitrixDataQueries
                         OR snapshot.custom_fields ->> 'UF_CRM_1737653376' = CASE @yearText
                             WHEN '2024' THEN '37206' WHEN '2025' THEN '37036' WHEN '2026' THEN '39138'
                         END
+                        OR (
+                            NULLIF(snapshot.custom_fields ->> 'UF_CRM_1737653376', '') IS NULL
+                            AND EXTRACT(YEAR FROM COALESCE(snapshot.bitrix_created_at, d.bitrix_created_at, d.created_at)) = @yearNumber
+                        )
                     )
             )
             SELECT
@@ -737,6 +746,7 @@ public static class BitrixDataQueries
         await using (var command = new NpgsqlCommand(leadershipSql, connection))
         {
             command.Parameters.AddWithValue("yearText", year.ToString(CultureInfo.InvariantCulture));
+            command.Parameters.AddWithValue("yearNumber", year);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {

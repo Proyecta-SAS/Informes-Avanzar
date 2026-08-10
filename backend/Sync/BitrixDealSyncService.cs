@@ -794,10 +794,12 @@ public sealed class BitrixDealSyncService(
                 bitrix_created_at = EXCLUDED.bitrix_created_at,
                 bitrix_updated_at = EXCLUDED.bitrix_updated_at,
                 core_data = EXCLUDED.core_data,
-                custom_fields = CASE
-                    WHEN EXCLUDED.custom_fields = '{}'::jsonb THEN bitrix.entity_snapshots.custom_fields
-                    ELSE EXCLUDED.custom_fields
-                END,
+                -- Pipeline-specific Bitrix responses can omit custom fields that
+                -- were returned by an earlier/full synchronization.  Merge the
+                -- payloads so a partial response updates the fields it contains
+                -- without erasing report-critical values such as radication year.
+                custom_fields = COALESCE(bitrix.entity_snapshots.custom_fields, '{}'::jsonb)
+                    || COALESCE(EXCLUDED.custom_fields, '{}'::jsonb),
                 raw_payload_id = EXCLUDED.raw_payload_id,
                 is_deleted = false,
                 deleted_detected_at = null;
