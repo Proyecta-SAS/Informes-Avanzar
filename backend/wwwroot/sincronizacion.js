@@ -11,7 +11,7 @@ const escapeHtml = (value) => String(value ?? "")
   .replaceAll("'", "&#039;");
 
 const setSyncButtonsDisabled = (disabled) => {
-  document.querySelectorAll("#incrementalButton, #massiveButton, #stageButton, [data-pipeline-sync], [data-pipeline-incremental]").forEach((button) => {
+  document.querySelectorAll("#commercialQuickButton, #incrementalButton, #massiveButton, #stageButton, [data-pipeline-sync], [data-pipeline-incremental]").forEach((button) => {
     const hasNoStage = button.id === "stageButton" && !document.getElementById("stageSelect")?.value;
     button.disabled = disabled || hasNoStage;
   });
@@ -192,6 +192,10 @@ const runSync = async (url) => {
 
 document.getElementById("massiveButton").addEventListener("click", async () => {
   await runSync("/api/bitrix/sync/massive");
+});
+
+document.getElementById("commercialQuickButton").addEventListener("click", async () => {
+  await runSync("/api/bitrix/sync/reports/comercial/quick");
 });
 
 document.getElementById("incrementalButton").addEventListener("click", async () => {

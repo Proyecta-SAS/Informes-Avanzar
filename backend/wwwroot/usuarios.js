@@ -1,6 +1,6 @@
 let adminKey = sessionStorage.getItem("adminAccessKey") ?? "";
 let accessData = null;
-let selectedCommercialRole = "viewer";
+let selectedCommercialRole = "leader";
 
 const api = async (url, options = {}) => {
   const response = await fetch(url, {
@@ -18,11 +18,12 @@ const roleOptions = (selectedId = "") => `<option value="">Sin rol</option>${acc
 
 const renderUsers = (query = "") => {
   const normalized = query.trim().toLocaleLowerCase("es-CO");
-  const users = accessData.users.filter((user) => `${user.fullName} ${user.email}`.toLocaleLowerCase("es-CO").includes(normalized));
+  const users = accessData.users.filter((user) => `${user.fullName} ${user.email} ${user.bitrixUserId ?? ""}`.toLocaleLowerCase("es-CO").includes(normalized));
   document.getElementById("accessUserRows").innerHTML = users.map((user) => `
     <tr>
       <td><div class="access-person"><span>${user.fullName.charAt(0).toUpperCase()}</span><strong>${user.fullName}</strong></div></td>
       <td>${user.email}</td>
+      <td><code>${user.bitrixUserId ?? "Sin ID"}</code></td>
       <td><em class="user-status ${user.status}">${user.status === "active" ? "Activo" : user.status}</em></td>
       <td><select class="user-role-select" data-user-id="${user.id}">${roleOptions(user.roleIds[0] ?? "")}</select></td>
       <td><div class="user-actions"><button class="button-secondary edit-user" data-user-id="${user.id}" type="button">Editar</button><button class="button-danger delete-user" data-user-id="${user.id}" type="button">Eliminar</button></div></td>
@@ -48,7 +49,7 @@ const renderReportMatrix = () => {
 };
 
 const renderCommercialAccess = () => {
-  const commercialReports = accessData.reports.filter((report) => ["informe_general_comercial", "fuerza_comercial_diego", "rch_comercial"].includes(report.code));
+  const commercialReports = accessData.reports.filter((report) => ["informe_general_comercial"].includes(report.code));
   document.getElementById("commercialAccessMatrix").innerHTML = `
     <div class="commercial-access-grid" style="--commercial-report-count:${commercialReports.length}">
       <div class="commercial-grid-head user-column">Comercial</div>
@@ -82,7 +83,7 @@ document.getElementById("userSearch").addEventListener("input", (event) => rende
 
 document.getElementById("createUserForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  await api("/api/admin/users", { method: "POST", body: JSON.stringify({ fullName: document.getElementById("newUserName").value, email: document.getElementById("newUserEmail").value, password: document.getElementById("newUserPassword").value, roleId: document.getElementById("newUserRole").value || null }) });
+  await api("/api/admin/users", { method: "POST", body: JSON.stringify({ fullName: document.getElementById("newUserName").value, email: document.getElementById("newUserEmail").value, bitrixUserId: document.getElementById("newUserBitrixId").value, password: document.getElementById("newUserPassword").value, roleId: document.getElementById("newUserRole").value || null }) });
   event.target.reset();
   document.getElementById("createUserPanel").hidden = true;
   await loadAccess();
@@ -95,6 +96,7 @@ document.getElementById("accessUserRows").addEventListener("click", async (event
     document.getElementById("editUserId").value = user.id;
     document.getElementById("editUserName").value = user.fullName;
     document.getElementById("editUserEmail").value = user.email;
+    document.getElementById("editUserBitrixId").value = user.bitrixUserId ?? "";
     document.getElementById("editUserStatus").value = user.status;
     document.getElementById("editUserRole").innerHTML = roleOptions(user.roleIds[0] ?? "");
     document.getElementById("editUserPassword").value = "";
@@ -114,6 +116,7 @@ document.getElementById("editUserForm").addEventListener("submit", async (event)
   await api(`/api/admin/users/${userId}`, { method: "PUT", body: JSON.stringify({
     fullName: document.getElementById("editUserName").value,
     email: document.getElementById("editUserEmail").value,
+    bitrixUserId: document.getElementById("editUserBitrixId").value,
     status: document.getElementById("editUserStatus").value,
     roleId: document.getElementById("editUserRole").value || null
   }) });
@@ -157,10 +160,10 @@ document.getElementById("roleAssignmentForm").addEventListener("submit", async (
   const userId = document.getElementById("roleAssignmentUser").value;
   const state = document.getElementById("roleAssignmentState");
   if (!userId) { state.textContent = "Selecciona un usuario."; return; }
-  const systemRoleCode = ["coordinator", "leader"].includes(selectedCommercialRole) ? "report_manager" : "report_viewer";
+  const systemRoleCode = ["director", "coordinator", "leader"].includes(selectedCommercialRole) ? "report_manager" : "report_viewer";
   const systemRole = accessData.roles.find((role) => role.code === systemRoleCode);
   const enabledReports = new Set([...event.target.querySelectorAll('input[type="checkbox"]:checked')].map((input) => input.value));
-  const commercialReports = accessData.reports.filter((report) => ["informe_general_comercial", "fuerza_comercial_diego", "rch_comercial"].includes(report.code));
+  const commercialReports = accessData.reports.filter((report) => ["informe_general_comercial"].includes(report.code));
   state.textContent = "Aplicando configuración…";
   await api(`/api/admin/users/${userId}/role`, { method: "PUT", body: JSON.stringify({ roleId: systemRole?.id ?? null }) });
   await Promise.all(commercialReports.map((report) => api(`/api/admin/reports/${report.id}/users/${userId}`, { method: "PUT", body: JSON.stringify({ enabled: enabledReports.has(report.code), accessLevel: "viewer" }) })));

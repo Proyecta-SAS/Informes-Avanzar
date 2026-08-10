@@ -163,18 +163,7 @@ public static class BitrixDataQueries
                     (
                         p.category_id IN (10, 28, 32, 248)
                     )
-                    AND (
-                        s.custom_fields ->> 'UF_CRM_1737653376' = @year
-                        OR s.custom_fields ->> 'UF_CRM_1737653376' = CASE @year
-                            WHEN '2024' THEN '37206'
-                            WHEN '2025' THEN '37036'
-                            WHEN '2026' THEN '39138'
-                        END
-                        OR (
-                            NULLIF(s.custom_fields ->> 'UF_CRM_1737653376', '') IS NULL
-                            AND EXTRACT(YEAR FROM COALESCE(s.bitrix_created_at, d.bitrix_created_at, d.created_at)) = @yearNumber
-                        )
-                    )
+                    AND s.custom_fields ->> 'UF_CRM_1737653376' = @year
             )
             SELECT month, pipeline, advisor, COALESCE(SUM(amount), 0) AS total_achieved
             FROM radicated
@@ -647,16 +636,7 @@ public static class BitrixDataQueries
                     AND snapshot.bitrix_id = d.bitrix_id
                     AND snapshot.is_deleted = false
                 WHERE pipeline.category_id IN (10, 28)
-                    AND (
-                        snapshot.custom_fields ->> 'UF_CRM_1737653376' = @yearText
-                        OR snapshot.custom_fields ->> 'UF_CRM_1737653376' = CASE @yearText
-                            WHEN '2024' THEN '37206' WHEN '2025' THEN '37036' WHEN '2026' THEN '39138'
-                        END
-                        OR (
-                            NULLIF(snapshot.custom_fields ->> 'UF_CRM_1737653376', '') IS NULL
-                            AND EXTRACT(YEAR FROM COALESCE(snapshot.bitrix_created_at, d.bitrix_created_at, d.created_at)) = @yearNumber
-                        )
-                    )
+                    AND snapshot.custom_fields ->> 'UF_CRM_1737653376' = @yearText
             )
             SELECT
                 radicated.month,

@@ -6,7 +6,9 @@ using InformesAvanzar.Api.Data;
 using InformesAvanzar.Api.Reports;
 using InformesAvanzar.Api.Sync;
 using Npgsql;
+using NpgsqlTypes;
 using System.Security.Cryptography;
+using System.Diagnostics;
 
 EnvFileLoader.LoadNearest(".env");
 
@@ -18,6 +20,8 @@ builder.Services.Configure<BitrixOptions>(builder.Configuration.GetSection("Bitr
 builder.Services.PostConfigure<BitrixOptions>(options =>
 {
     options.WebhookUrl = builder.Configuration["BITRIX_WEBHOOK_URL"] ?? options.WebhookUrl;
+    options.OutgoingWebhookToken = builder.Configuration["BITRIX_OUTGOING_WEBHOOK_TOKEN"] ?? options.OutgoingWebhookToken;
+    options.WebhookAllowedPipelineDomains = builder.Configuration["BITRIX_WEBHOOK_ALLOWED_PIPELINE_DOMAINS"] ?? options.WebhookAllowedPipelineDomains;
 });
 builder.Services.AddHttpClient<IBitrixClient, BitrixClient>();
 
@@ -35,6 +39,7 @@ builder.Services.AddScoped<IBitrixStageSyncService, BitrixStageSyncService>();
 builder.Services.AddScoped<IBitrixDealSyncService, BitrixDealSyncService>();
 builder.Services.AddScoped<IBitrixActivitySyncService, BitrixActivitySyncService>();
 builder.Services.AddScoped<IBitrixMassiveSyncService, BitrixMassiveSyncService>();
+builder.Services.AddScoped<IBitrixWebhookPendingSyncService, BitrixWebhookPendingSyncService>();
 
 var app = builder.Build();
 
@@ -43,7 +48,7 @@ var superAdminEmail = app.Configuration["SUPERADMIN_EMAIL"] ?? "superadmin@avanz
 app.Use(async (context, next) =>
 {
     var path = context.Request.Path.Value ?? "/";
-    var isPublic = path is "/login.html" or "/login.js" or "/health" or "/health/db" || path.StartsWith("/assets/") || path == "/styles.css" || path == "/api/auth/login";
+    var isPublic = path is "/login.html" or "/login.js" or "/health" or "/health/db" or "/api/bitrix/webhooks/deals" || path.StartsWith("/assets/") || path == "/styles.css" || path == "/api/auth/login";
     var panelUser = PanelAuthentication.ValidateToken(context.Request.Cookies[PanelAuthentication.CookieName], panelSigningKey);
     if (panelUser is not null)
     {
@@ -828,9 +833,89 @@ app.MapGet("/api/bitrix/config", (Microsoft.Extensions.Options.IOptions<BitrixOp
     return Results.Ok(new
     {
         configured = !string.IsNullOrWhiteSpace(webhookUrl),
+        outgoingWebhookConfigured = !string.IsNullOrWhiteSpace(options.Value.OutgoingWebhookToken),
         webhookHost = TryGetHost(webhookUrl),
         scopes = options.Value.Scopes
     });
+});
+
+app.MapPost("/api/bitrix/webhooks/deals", async (
+    HttpRequest request,
+    Microsoft.Extensions.Options.IOptions<BitrixOptions> options,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    var configuredToken = options.Value.OutgoingWebhookToken;
+    if (!string.IsNullOrWhiteSpace(configuredToken))
+    {
+        var providedToken = request.Query["token"].FirstOrDefault()
+            ?? request.Headers["X-Bitrix-Webhook-Token"].FirstOrDefault();
+        if (!string.Equals(providedToken, configuredToken, StringComparison.Ordinal))
+        {
+            return Results.Unauthorized();
+        }
+    }
+
+    var form = request.HasFormContentType
+        ? await request.ReadFormAsync(cancellationToken)
+        : null;
+    var dealId = form?["data[FIELDS][ID]"].FirstOrDefault()
+        ?? form?["data[ID]"].FirstOrDefault()
+        ?? form?["FIELDS[ID]"].FirstOrDefault()
+        ?? form?["ID"].FirstOrDefault()
+        ?? request.Query["data[FIELDS][ID]"].FirstOrDefault()
+        ?? request.Query["data[ID]"].FirstOrDefault()
+        ?? request.Query["FIELDS[ID]"].FirstOrDefault()
+        ?? request.Query["ID"].FirstOrDefault();
+
+    if (string.IsNullOrWhiteSpace(dealId))
+    {
+        return Results.BadRequest(new { message = "No se encontro el ID de la negociacion en el webhook." });
+    }
+
+    var eventName = form?["event"].FirstOrDefault()
+        ?? request.Query["event"].FirstOrDefault()
+        ?? "ONCRMDEALUPDATE";
+    var portalDomain = form?["auth[domain]"].FirstOrDefault()
+        ?? request.Query["auth[domain]"].FirstOrDefault();
+
+    const string sql = """
+        INSERT INTO bitrix.outgoing_webhook_events (
+            entity_type,
+            bitrix_id,
+            event_name,
+            portal_domain,
+            payload,
+            status
+        )
+        VALUES (
+            'deal',
+            @bitrixId,
+            @eventName,
+            @portalDomain,
+            @payload,
+            'pending'
+        )
+        ON CONFLICT (entity_type, bitrix_id) DO UPDATE
+        SET event_name = EXCLUDED.event_name,
+            portal_domain = COALESCE(EXCLUDED.portal_domain, bitrix.outgoing_webhook_events.portal_domain),
+            payload = EXCLUDED.payload,
+            status = 'pending',
+            event_count = bitrix.outgoing_webhook_events.event_count + 1,
+            last_seen_at = now(),
+            processed_at = NULL,
+            last_error = NULL;
+        """;
+
+    await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+    await using var command = new NpgsqlCommand(sql, connection);
+    command.Parameters.AddWithValue("bitrixId", dealId);
+    command.Parameters.AddWithValue("eventName", eventName);
+    command.Parameters.AddWithValue("portalDomain", (object?)portalDomain ?? DBNull.Value);
+    command.Parameters.Add("payload", NpgsqlDbType.Jsonb).Value = "{}";
+    await command.ExecuteNonQueryAsync(cancellationToken);
+
+    return Results.Ok(new { status = "queued", bitrixId = dealId });
 });
 
 app.MapGet("/api/bitrix/test/users", async (
@@ -990,6 +1075,147 @@ app.MapPost("/api/bitrix/sync/deals/{pipelineSlug}/incremental", async (
     return Results.Ok(result);
 });
 
+app.MapPost("/api/bitrix/sync/webhook-pending", async (
+    int? limit,
+    IBitrixWebhookPendingSyncService webhookPendingSyncService,
+    CancellationToken cancellationToken) =>
+{
+    var result = await webhookPendingSyncService.ProcessPendingDealChangesAsync(limit ?? 500, cancellationToken);
+    return Results.Ok(result);
+});
+
+app.MapPost("/api/bitrix/sync/reports/comercial/quick", async (
+    string? pipeline,
+    bool backfill,
+    IServiceScopeFactory scopeFactory,
+    CancellationToken cancellationToken) =>
+{
+    var allowedPipelines = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "rch_comercial", "pnnc_comercial" };
+    var reportPipelines = string.IsNullOrWhiteSpace(pipeline)
+        ? allowedPipelines.ToArray()
+        : allowedPipelines.Contains(pipeline)
+            ? new[] { pipeline }
+            : Array.Empty<string>();
+    if (reportPipelines.Length == 0)
+    {
+        return Results.BadRequest(new { message = "Pipeline no permitida para sincronizacion comercial rapida." });
+    }
+
+    var quickFields = new[]
+    {
+        "ID",
+        "TITLE",
+        "CATEGORY_ID",
+        "STAGE_ID",
+        "ASSIGNED_BY_ID",
+        "OPPORTUNITY",
+        "CURRENCY_ID",
+        "DATE_CREATE",
+        "DATE_MODIFY",
+        "CLOSED",
+        "UF_CRM_1676419915",
+        "UF_CRM_1737653376"
+    };
+    var filters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["=UF_CRM_1737653376"] = "2026"
+    };
+    var stopwatch = Stopwatch.StartNew();
+
+    var results = new List<SyncResult>();
+    foreach (var pipelineSlug in reportPipelines)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var dealSyncService = scope.ServiceProvider.GetRequiredService<IBitrixDealSyncService>();
+
+        try
+        {
+            results.Add(await dealSyncService.SyncPipelineDealsAsync(
+                pipelineSlug,
+                null,
+                cancellationToken,
+                backfill ? SyncMode.Full : SyncMode.Incremental,
+                fieldEqualsFilters: filters,
+                selectFields: quickFields,
+                reconcileMissing: false,
+                entityTypeSuffix: "quick"));
+        }
+        catch (Exception exception)
+        {
+            results.Add(new SyncResult(
+                Guid.Empty,
+                $"deal:{pipelineSlug}:quick",
+                "incremental",
+                "failed",
+                0,
+                0,
+                exception.Message));
+        }
+    }
+
+    stopwatch.Stop();
+    return Results.Ok(new
+    {
+        report = "comercial-quick",
+        backfill,
+        elapsedSeconds = Math.Round(stopwatch.Elapsed.TotalSeconds, 2),
+        recordsRead = results.Sum(result => result.RecordsRead),
+        recordsWritten = results.Sum(result => result.RecordsWritten),
+        results
+    });
+});
+
+app.MapPost("/api/bitrix/sync/reports/operativa/radicados", async (
+    string pipeline,
+    string stageId,
+    IBitrixDealSyncService dealSyncService,
+    CancellationToken cancellationToken) =>
+{
+    var allowedPipelines = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "rch_operativa",
+        "pnnc_operativa",
+        "1116_operativa",
+        "lp_operativa_2445"
+    };
+    if (!allowedPipelines.Contains(pipeline) || string.IsNullOrWhiteSpace(stageId))
+    {
+        return Results.BadRequest(new { message = "Pipeline o etapa no permitida para sincronizacion operativa de radicados." });
+    }
+
+    var fields = new[]
+    {
+        "ID",
+        "TITLE",
+        "CATEGORY_ID",
+        "STAGE_ID",
+        "ASSIGNED_BY_ID",
+        "OPPORTUNITY",
+        "CURRENCY_ID",
+        "DATE_CREATE",
+        "DATE_MODIFY",
+        "CLOSED",
+        "UF_CRM_1676419915",
+        "UF_CRM_1737653376"
+    };
+    var filters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["=UF_CRM_1737653376"] = "2026"
+    };
+
+    var result = await dealSyncService.SyncPipelineDealsAsync(
+        pipeline,
+        stageId,
+        cancellationToken,
+        SyncMode.Full,
+        fieldEqualsFilters: filters,
+        selectFields: fields,
+        reconcileMissing: false,
+        entityTypeSuffix: $"radicados:{stageId}");
+
+    return Results.Ok(result);
+});
+
 app.MapPost("/api/bitrix/sync/massive", (
     IServiceScopeFactory scopeFactory) =>
 {
@@ -1069,12 +1295,36 @@ await PanelAuthentication.EnsureSuperAdminAsync(
 var jobMode = builder.Configuration["BITRIX_SYNC_MODE"];
 if (!string.IsNullOrWhiteSpace(jobMode))
 {
-    var mode = jobMode.Trim().ToLowerInvariant() switch
+    var normalizedJobMode = jobMode.Trim().ToLowerInvariant();
+    if (normalizedJobMode == "webhook-pending")
+    {
+        var limit = builder.Configuration.GetValue<int?>("BITRIX_WEBHOOK_PENDING_LIMIT") ?? 500;
+        app.Logger.LogInformation("Starting Bitrix webhook pending job with limit {Limit}.", limit);
+        await using var webhookScope = app.Services.CreateAsyncScope();
+        var pendingSyncService = webhookScope.ServiceProvider.GetRequiredService<IBitrixWebhookPendingSyncService>();
+        var result = await pendingSyncService.ProcessPendingDealChangesAsync(limit, CancellationToken.None);
+
+        app.Logger.LogInformation(
+            "Bitrix webhook pending job result: {Status}, read {RecordsRead}, wrote {RecordsWritten}, error {ErrorMessage}",
+            result.Status,
+            result.RecordsRead,
+            result.RecordsWritten,
+            result.ErrorMessage);
+
+        if (!string.Equals(result.Status, "succeeded", StringComparison.OrdinalIgnoreCase))
+        {
+            Environment.ExitCode = 1;
+        }
+
+        return;
+    }
+
+    var mode = normalizedJobMode switch
     {
         "full" => SyncMode.Full,
         "incremental" => SyncMode.Incremental,
         _ => throw new InvalidOperationException(
-            "BITRIX_SYNC_MODE must be either 'full' or 'incremental'.")
+            "BITRIX_SYNC_MODE must be 'full', 'incremental' or 'webhook-pending'.")
     };
 
     app.Logger.LogInformation("Starting Bitrix synchronization job in {Mode} mode.", mode);

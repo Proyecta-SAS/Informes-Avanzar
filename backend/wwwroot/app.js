@@ -7,9 +7,6 @@ const areas = [
     tone: "violet",
     reports: [
       { title: "Informe General Comercial", description: "Radicación, negociaciones, comisiones, cartera, embudos y etapas en una sola vista.", href: "/reporte.html?id=informe_general_comercial", badge: "Informe general" },
-      { title: "Fuerza Comercial", description: "Radicación, cartera, comisiones, embudos y liderazgo.", href: "/reporte.html?id=fuerza_comercial_diego", badge: "Informe ejecutivo" },
-      { title: "RCH Comercial", description: "Negociaciones y avance de la pipeline comercial RCH.", href: "/reporte.html?id=rch_comercial", badge: "Pipeline" },
-      { title: "PNNC Comercial", description: "Prospectos, seguimiento y conversión comercial PNNC.", href: "/reporte.html?id=pnnc_comercial", badge: "Comercial" },
       { title: "Marketing", description: "Espacio para campañas, generación de demanda y métricas de marketing.", badge: "Próximamente", upcoming: true }
     ]
   },
@@ -55,11 +52,15 @@ const areas = [
 
 let homeSession = { roleCode: "", accessibleReportCodes: [], permissions: [] };
 const reportCodeFromHref = (href) => new URL(href, location.origin).searchParams.get("id");
+const isCommercialScoped = () => ["coordinator", "leader"].includes(homeSession.commercialRole);
 
 const renderAreas = (query = "") => {
   const normalized = query.trim().toLocaleLowerCase("es-CO");
   let visibleReports = 0;
-  const content = areas.map((area) => {
+  const visibleAreas = isCommercialScoped()
+    ? areas.filter((area) => area.id === "comercial")
+    : areas;
+  const content = visibleAreas.map((area) => {
     const areaMatch = `${area.title} ${area.description}`.toLocaleLowerCase("es-CO").includes(normalized);
     const allowed = new Set(homeSession.accessibleReportCodes ?? []);
     const canSeePlaceholders = homeSession.roleCode === "admin";
@@ -97,7 +98,7 @@ fetch("/api/auth/me").then((response) => response.json()).then((session) => {
   const permissions = new Set(session.permissions ?? []);
   document.querySelectorAll("[data-required-permission]").forEach((item) => {
     const required = item.dataset.requiredPermission.split(" ");
-    if (session.roleCode !== "admin" && !required.some((code) => permissions.has(code))) item.remove();
+    if (isCommercialScoped() || (session.roleCode !== "admin" && !required.some((code) => permissions.has(code)))) item.remove();
   });
   document.querySelectorAll("[data-admin-only]").forEach((item) => item.hidden = session.roleCode !== "admin");
   document.querySelector(".home-avatar").textContent = session.fullName?.charAt(0).toUpperCase() ?? "U";
