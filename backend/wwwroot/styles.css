@@ -1171,6 +1171,9 @@ tbody tr:hover {
 
 .report-has-filter-drawer .report-filter-drawer {
   position: fixed;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   top: 92px;
   right: 20px;
   z-index: 80;
@@ -1186,6 +1189,8 @@ tbody tr:hover {
 
 .report-has-filter-drawer .filter-panel-toggle {
   display: flex;
+  flex: 0 0 auto;
+  order: 0;
   width: 100%;
   min-height: 42px;
   align-items: center;
@@ -1215,6 +1220,11 @@ tbody tr:hover {
   box-shadow: 0 2px 8px rgba(31, 55, 91, .1);
   transform: rotate(180deg);
   transition: transform .22s ease;
+}
+
+.report-has-filter-drawer .report-filter-drawer .filter-panel-content {
+  order: 1;
+  width: 100%;
 }
 
 .report-has-filter-drawer .filter-panel-toggle:focus-visible { outline: 3px solid rgba(169, 22, 50, .16); outline-offset: 2px; }
