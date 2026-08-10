@@ -436,7 +436,7 @@ const enableTableSorting = (table, columnCount) => {
 
   headerRows.forEach((row) => {
     let logicalIndex = row === lastHeaderRow && row.cells.length < columnCount
-      ? Math.max(0, columnCount - row.cells.length - (headerRows[0].cells.at(-1)?.rowSpan > 1 ? 1 : 0))
+      ? Math.max(0, columnCount - row.cells.length - (headerRows[0].cells[headerRows[0].cells.length - 1]?.rowSpan > 1 ? 1 : 0))
       : 0;
     [...row.cells].forEach((header) => {
       const columnIndex = logicalIndex;
