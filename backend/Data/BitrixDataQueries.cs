@@ -260,8 +260,52 @@ public static class BitrixDataQueries
             SELECT
                 COALESCE(NULLIF(u.full_name, ''), d.assigned_by_bitrix_id, 'Sin asesor') AS advisor,
                 COUNT(*) AS negotiations,
-                COUNT(*) FILTER (WHERE p.category_id IN (8, 26)) AS commercial_cases,
-                COUNT(*) FILTER (WHERE p.category_id IN (10, 28)) AS radicated_cases,
+                COUNT(*) FILTER (
+                    WHERE p.category_id IN (8, 26)
+                      AND (
+                          snapshot.custom_fields ->> 'UF_CRM_1737654190' = @yearText
+                          OR snapshot.custom_fields ->> 'UF_CRM_1737654190' = CASE @yearText
+                              WHEN '2025' THEN '37058'
+                              WHEN '2026' THEN '37060'
+                              WHEN '2027' THEN '37062'
+                              WHEN '2028' THEN '37064'
+                              WHEN '2029' THEN '37066'
+                              WHEN '2030' THEN '37068'
+                              WHEN '2031' THEN '37070'
+                              WHEN '2032' THEN '37072'
+                              WHEN '2033' THEN '37074'
+                              WHEN '2034' THEN '37076'
+                              WHEN '2035' THEN '37078'
+                          END
+                      )
+                      AND (
+                          snapshot.custom_fields ->> 'UF_CRM_1648503084848' IN (
+                              '16810', '16812', '39202', '39204', '39206', '39208',
+                              '39210', '39212', '39214', '39216', '39218', '39220'
+                          )
+                          OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1648503084848', ''))
+                              ~ '(ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|SEPTIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)'
+                      )
+                ) AS commercial_cases,
+                COUNT(*) FILTER (
+                    WHERE p.category_id IN (10, 28)
+                      AND (
+                          snapshot.custom_fields ->> 'UF_CRM_1737653376' = @yearText
+                          OR snapshot.custom_fields ->> 'UF_CRM_1737653376' = CASE @yearText
+                              WHEN '2024' THEN '37206'
+                              WHEN '2025' THEN '37036'
+                              WHEN '2026' THEN '39138'
+                          END
+                      )
+                      AND (
+                          snapshot.custom_fields ->> 'UF_CRM_1676419915' IN (
+                              '22560', '22562', '39144', '39146', '39148', '39150',
+                              '39152', '39154', '39156', '39158', '39160', '39162'
+                          )
+                          OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', ''))
+                              ~ '(ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|SEPTIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)'
+                      )
+                ) AS radicated_cases,
                 COALESCE(SUM(d.opportunity), 0) AS total_value
             FROM bitrix.deals d
             JOIN bitrix.pipelines p ON p.id = d.pipeline_id
@@ -274,6 +318,7 @@ public static class BitrixDataQueries
                 ON u.connection_id = d.connection_id
                 AND u.bitrix_id = d.assigned_by_bitrix_id
             WHERE p.category_id IN (8, 10, 26, 28)
+              AND EXTRACT(YEAR FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @yearNumber
             GROUP BY 1
             ORDER BY advisor;
             """;
@@ -406,6 +451,8 @@ public static class BitrixDataQueries
 
         await using (var command = new NpgsqlCommand(advisorSql, connection))
         {
+            command.Parameters.AddWithValue("yearText", year.ToString(CultureInfo.InvariantCulture));
+            command.Parameters.AddWithValue("yearNumber", year);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {
