@@ -296,15 +296,42 @@ public static class BitrixDataQueries
 
         const string departmentSql = """
             SELECT
-                COALESCE(NULLIF(u.department, ''), 'Sin departamento') AS department,
+                COALESCE(NULLIF(organization.department, ''), 'Sin departamento') AS department,
                 COUNT(*) AS cases,
                 COALESCE(SUM(d.opportunity), 0) AS total_value
             FROM bitrix.deals d
             JOIN bitrix.pipelines p ON p.id = d.pipeline_id
+            JOIN bitrix.entity_snapshots snapshot
+                ON snapshot.connection_id = d.connection_id
+                AND snapshot.entity_type = 'deal'
+                AND snapshot.bitrix_id = d.bitrix_id
+                AND snapshot.is_deleted = false
             LEFT JOIN bitrix.users u
                 ON u.connection_id = d.connection_id
                 AND u.bitrix_id = d.assigned_by_bitrix_id
+            LEFT JOIN LATERAL (
+                SELECT STRING_AGG(DISTINCT department.name, ', ' ORDER BY department.name) AS department
+                FROM bitrix.raw_payloads payload
+                CROSS JOIN LATERAL jsonb_array_elements_text(
+                    CASE
+                        WHEN jsonb_typeof(payload.payload -> 'UF_DEPARTMENT') = 'array'
+                        THEN payload.payload -> 'UF_DEPARTMENT'
+                        ELSE '[]'::jsonb
+                    END
+                ) department_id
+                JOIN bitrix.departments department
+                    ON department.id::text = department_id.value
+                WHERE payload.id = u.raw_payload_id
+            ) organization ON true
             WHERE p.category_id IN (10, 28)
+              AND (
+                  snapshot.custom_fields ->> 'UF_CRM_1737653376' = @yearText
+                  OR snapshot.custom_fields ->> 'UF_CRM_1737653376' = CASE @yearText
+                      WHEN '2024' THEN '37206'
+                      WHEN '2025' THEN '37036'
+                      WHEN '2026' THEN '39138'
+                  END
+              )
             GROUP BY 1
             ORDER BY total_value DESC, department;
             """;
@@ -410,8 +437,9 @@ public static class BitrixDataQueries
         }
 
         await using (var command = new NpgsqlCommand(departmentSql, connection))
-        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
+            command.Parameters.AddWithValue("yearText", year.ToString(CultureInfo.InvariantCulture));
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {
                 departments.Add(new
@@ -643,7 +671,14 @@ public static class BitrixDataQueries
                     AND snapshot.bitrix_id = d.bitrix_id
                     AND snapshot.is_deleted = false
                 WHERE pipeline.category_id IN (10, 28)
-                    AND snapshot.custom_fields ->> 'UF_CRM_1737653376' = @yearText
+                    AND (
+                        snapshot.custom_fields ->> 'UF_CRM_1737653376' = @yearText
+                        OR snapshot.custom_fields ->> 'UF_CRM_1737653376' = CASE @yearText
+                            WHEN '2024' THEN '37206'
+                            WHEN '2025' THEN '37036'
+                            WHEN '2026' THEN '39138'
+                        END
+                    )
             )
             SELECT
                 radicated.month,
