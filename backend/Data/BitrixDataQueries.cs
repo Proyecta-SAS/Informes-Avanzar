@@ -163,7 +163,14 @@ public static class BitrixDataQueries
                     (
                         p.category_id IN (10, 28, 32, 248)
                     )
-                    AND s.custom_fields ->> 'UF_CRM_1737653376' = @year
+                    AND (
+                        s.custom_fields ->> 'UF_CRM_1737653376' = @year
+                        OR s.custom_fields ->> 'UF_CRM_1737653376' = CASE @year
+                            WHEN '2024' THEN '37206'
+                            WHEN '2025' THEN '37036'
+                            WHEN '2026' THEN '39138'
+                        END
+                    )
             )
             SELECT month, pipeline, advisor, COALESCE(SUM(amount), 0) AS total_achieved
             FROM radicated
