@@ -116,6 +116,20 @@ public sealed class BitrixDealSyncService(
             var categoryId = GetString(deal, "CATEGORY_ID")
                 ?? throw new InvalidOperationException($"Bitrix deal {bitrixId} has no CATEGORY_ID.");
             var pipeline = await GetPipelineByCategoryIdAsync(categoryId, cancellationToken);
+            if (pipeline is null)
+            {
+                // Outgoing webhooks are configured at the Bitrix portal level, so
+                // events can arrive for pipelines that this application does not
+                // synchronize. Treat those events as successfully ignored instead
+                // of retrying them as failures.
+                if (existingSyncRunId is null)
+                {
+                    await repository.FinishRunAsync(syncRunId, "succeeded", recordsRead, recordsWritten, null, CancellationToken.None);
+                }
+
+                return new SyncResult(syncRunId, "deal:webhook", "incremental", "succeeded", recordsRead, recordsWritten);
+            }
+
             if (!PipelineDomainIsAllowed(pipeline.Domain))
             {
                 if (existingSyncRunId is null)
@@ -655,7 +669,7 @@ public sealed class BitrixDealSyncService(
             reader.GetString(4));
     }
 
-    private async Task<PipelineRecord> GetPipelineByCategoryIdAsync(string categoryId, CancellationToken cancellationToken)
+    private async Task<PipelineRecord?> GetPipelineByCategoryIdAsync(string categoryId, CancellationToken cancellationToken)
     {
         if (!int.TryParse(categoryId, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedCategoryId))
         {
@@ -674,10 +688,7 @@ public sealed class BitrixDealSyncService(
         command.Parameters.AddWithValue("categoryId", parsedCategoryId);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
-        if (!await reader.ReadAsync(cancellationToken))
-        {
-            throw new InvalidOperationException($"Pipeline for Bitrix category '{categoryId}' does not exist or is inactive.");
-        }
+        if (!await reader.ReadAsync(cancellationToken)) return null;
 
         return new PipelineRecord(
             reader.GetGuid(0),
