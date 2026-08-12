@@ -89,10 +89,13 @@ public static class AdminAccessQueries
             FROM reporting.report_definitions rd
             LEFT JOIN reporting.report_access ra ON ra.report_definition_id = rd.id
             WHERE rd.deleted_at IS NULL
+              AND rd.code <> ALL(@hiddenReportCodes)
             GROUP BY rd.id
             ORDER BY rd.name;
             """;
         await using (var command = new NpgsqlCommand(reportsSql, connection))
+        {
+            command.Parameters.AddWithValue("hiddenReportCodes", new[] { "fuerza_comercial_diego", "rch_comercial", "pnnc_comercial", "marketing" });
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
             while (await reader.ReadAsync(cancellationToken))
@@ -101,6 +104,7 @@ public static class AdminAccessQueries
                     roleAccess = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(reader.GetString(3)),
                     userAccess = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(reader.GetString(4))
                 });
+        }
         }
 
         return new { users, roles, permissions, reports };

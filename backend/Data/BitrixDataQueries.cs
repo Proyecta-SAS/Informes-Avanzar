@@ -258,7 +258,12 @@ public static class BitrixDataQueries
     {
         const string advisorSql = """
             SELECT
-                COALESCE(NULLIF(u.full_name, ''), d.assigned_by_bitrix_id, 'Sin asesor') AS advisor,
+                COALESCE(
+                    NULLIF(TRIM(CONCAT_WS(' ', NULLIF(user_payload.payload ->> 'NAME', ''), NULLIF(user_payload.payload ->> 'LAST_NAME', ''))), ''),
+                    NULLIF(u.full_name, ''),
+                    d.assigned_by_bitrix_id,
+                    'Sin asesor'
+                ) AS advisor,
                 COUNT(*) AS negotiations,
                 COUNT(*) FILTER (
                     WHERE p.category_id IN (8, 26)
@@ -317,6 +322,8 @@ public static class BitrixDataQueries
             LEFT JOIN bitrix.users u
                 ON u.connection_id = d.connection_id
                 AND u.bitrix_id = d.assigned_by_bitrix_id
+            LEFT JOIN bitrix.raw_payloads user_payload
+                ON user_payload.id = u.raw_payload_id
             WHERE p.category_id IN (8, 10, 26, 28)
               AND EXTRACT(YEAR FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @yearNumber
             GROUP BY 1
@@ -349,6 +356,11 @@ public static class BitrixDataQueries
                     COALESCE(s.sort_order, 9999) AS original_sort_order
                 FROM bitrix.deals d
                 JOIN bitrix.pipelines p ON p.id = d.pipeline_id
+                JOIN bitrix.entity_snapshots snapshot
+                    ON snapshot.connection_id = d.connection_id
+                    AND snapshot.entity_type = 'deal'
+                    AND snapshot.bitrix_id = d.bitrix_id
+                    AND snapshot.is_deleted = false
                 LEFT JOIN bitrix.pipeline_stages s
                     ON s.pipeline_id = p.id
                     AND s.bitrix_stage_id = d.stage_id
@@ -363,7 +375,7 @@ public static class BitrixDataQueries
                                 THEN '01 RADICACIÓN POR VALIDAR'
                                 WHEN normalized_stage = 'DOCUMENTACION PENDIENTE COMERCIAL'
                                 THEN '02 DOCUMENTACIÓN PENDIENTE COMERCIAL'
-                                WHEN normalized_stage IN ('DOCUMENTACION SUBSANADA COMERCIAL', 'DOCUMENTACION SUBSANADA OPERATIVA')
+                                WHEN normalized_stage = 'DOCUMENTACION SUBSANADA COMERCIAL'
                                 THEN '03 DOCUMENTACIÓN SUBSANADA COMERCIAL'
                             END
                         WHEN slug = 'rch_operativa' THEN
@@ -386,7 +398,7 @@ public static class BitrixDataQueries
                             AND normalized_stage = 'DOCUMENTACION PENDIENTE COMERCIAL'
                         THEN 2
                         WHEN slug = 'pnnc_operativa'
-                            AND normalized_stage IN ('DOCUMENTACION SUBSANADA COMERCIAL', 'DOCUMENTACION SUBSANADA OPERATIVA')
+                            AND normalized_stage = 'DOCUMENTACION SUBSANADA COMERCIAL'
                         THEN 3
                         WHEN slug = 'rch_operativa'
                             AND normalized_stage = 'RADICACION POR VALIDAR'

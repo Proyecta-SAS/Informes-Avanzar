@@ -28,10 +28,6 @@ if (sessionMenu) {
       <button class="sidebar-group-toggle" type="button" aria-expanded="false"><span class="sidebar-group-icon commercial">${icons.commercial}</span><span>Comercial</span><b>⌄</b></button>
       <div class="sidebar-group-items">
         ${navLink("/reporte.html?id=informe_general_comercial", "report", "Informe general", "informe_general_comercial")}
-        ${navLink("/reporte.html?id=fuerza_comercial_diego", "report", "Fuerza Comercial", "fuerza_comercial_diego")}
-        ${navLink("/reporte.html?id=rch_comercial", "report", "RCH Comercial", "rch_comercial")}
-        ${navLink("/reporte.html?id=pnnc_comercial", "report", "PNNC Comercial", "pnnc_comercial")}
-        <span class="sidebar-coming">${icon("report")}<span>Marketing</span></span>
       </div>
     </div>
     <div class="sidebar-group" data-nav-group="operativa">

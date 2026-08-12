@@ -23,7 +23,10 @@ builder.Services.PostConfigure<BitrixOptions>(options =>
     options.OutgoingWebhookToken = builder.Configuration["BITRIX_OUTGOING_WEBHOOK_TOKEN"] ?? options.OutgoingWebhookToken;
     options.WebhookAllowedPipelineDomains = builder.Configuration["BITRIX_WEBHOOK_ALLOWED_PIPELINE_DOMAINS"] ?? options.WebhookAllowedPipelineDomains;
 });
-builder.Services.AddHttpClient<IBitrixClient, BitrixClient>();
+builder.Services.AddHttpClient<IBitrixClient, BitrixClient>(client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(10);
+});
 
 var connectionString = builder.Configuration.GetConnectionString("Default")
     ?? throw new InvalidOperationException("ConnectionStrings:Default is required.");

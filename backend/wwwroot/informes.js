@@ -6,11 +6,7 @@ const reportAreas = [
     tone: "violet",
     description: "Seguimiento de oportunidades, radicación y desempeño de la fuerza comercial.",
     reports: [
-      { id: "informe_general_comercial", title: "Informe General Comercial", badge: "Informe general", description: "Radicación, negociaciones, comisiones, cartera, embudos y etapas en una sola vista." },
-      { id: "fuerza_comercial_diego", title: "Fuerza Comercial", badge: "Informe ejecutivo", description: "Radicación, cartera, comisiones, embudos y liderazgo." },
-      { id: "rch_comercial", title: "RCH Comercial", badge: "Pipeline", description: "Negociaciones y avance de la pipeline comercial RCH." },
-      { id: "pnnc_comercial", title: "PNNC Comercial", badge: "Comercial", description: "Prospectos, seguimiento y conversión comercial PNNC." },
-      { id: "marketing", title: "Marketing", badge: "Próximamente", description: "Espacio para campañas, generación de demanda y métricas de marketing.", upcoming: true }
+      { id: "informe_general_comercial", title: "Informe General Comercial", badge: "Informe general", description: "Radicación, negociaciones, comisiones, cartera, embudos y etapas en una sola vista." }
     ]
   },
   {

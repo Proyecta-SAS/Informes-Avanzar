@@ -6,8 +6,7 @@ const areas = [
     description: "Seguimiento de oportunidades, radicación y desempeño de la fuerza comercial.",
     tone: "violet",
     reports: [
-      { title: "Informe General Comercial", description: "Radicación, negociaciones, comisiones, cartera, embudos y etapas en una sola vista.", href: "/reporte.html?id=informe_general_comercial", badge: "Informe general" },
-      { title: "Marketing", description: "Espacio para campañas, generación de demanda y métricas de marketing.", badge: "Próximamente", upcoming: true }
+      { title: "Informe General Comercial", description: "Radicación, negociaciones, comisiones, cartera, embudos y etapas en una sola vista.", href: "/reporte.html?id=informe_general_comercial", badge: "Informe general" }
     ]
   },
   {

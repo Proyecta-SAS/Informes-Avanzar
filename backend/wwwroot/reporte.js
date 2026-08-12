@@ -594,6 +594,8 @@ const renderMonthlyMatrix = (groupLabel, items, groupField) => {
 };
 
 const monthlyLeaderGoal = (month) => Number.parseInt(month, 10) >= 7 ? 70000000 : 60000000;
+const isCoordinatorGroupName = (value = "") => value.toLocaleUpperCase("es-CO").includes("EQ. COOR");
+const isLeaderGroupName = (value = "") => value.toLocaleUpperCase("es-CO").includes("EQ. LIDER");
 
 const renderPerformanceTable = (items, groupField, coordinatorMode = false) => {
   const grouped = new Map();
@@ -765,10 +767,6 @@ const loadDiegoDashboardData = async () => {
     "advisor-negotiations-table"
   ), data.advisors.length);
 
-  const departmentRows = data.departments.map((item) => `<tr><td>${item.department}</td><td>${formatNumber.format(item.cases)}</td><td>${currencyFormatter.format(item.totalValue)}</td></tr>`);
-  const departmentTable = renderDataTable(["Departamento", "Casos", "Valor alcanzado"], departmentRows);
-  ["Valores radicados por coordinador", "Valores radicados por líder", "Detalle de coordinadores", "Detalle de radicaciones por líder"]
-    .forEach((title) => replaceBlockPreview(title, departmentTable, data.departments.length));
 
   const pipelineBlocks = {
     rch_comercial_table: ["Etapas Comercial RCH"],
@@ -835,12 +833,14 @@ const loadDiegoLeadershipAndCommissions = async () => {
   }
   commercialHierarchy = data.relationships?.length ? data.relationships : (data.leadership ?? []);
 
-  const leaderCount = new Set(data.leadership.map((item) => item.leader).filter(Boolean)).size;
-  const coordinatorCount = new Set(data.leadership.map((item) => item.coordinator).filter(Boolean)).size;
-  replaceBlockPreview("Valores radicados por líder", renderMonthlyMatrix("Líder", data.leadership, "leader"), leaderCount);
-  replaceBlockPreview("Valores radicados por coordinador", renderMonthlyMatrix("Coordinador", data.leadership, "coordinator"), coordinatorCount);
-  const coordinatorPerformance = renderPerformanceTable(data.leadership, "coordinator", true);
-  const leaderPerformance = renderPerformanceTable(data.leadership, "leader");
+  const coordinatorItems = data.leadership.filter((item) => isCoordinatorGroupName(item.coordinator ?? ""));
+  const leaderItems = data.leadership.filter((item) => isLeaderGroupName(item.leader ?? ""));
+  const leaderCount = new Set(leaderItems.map((item) => item.leader).filter(Boolean)).size;
+  const coordinatorCount = new Set(coordinatorItems.map((item) => item.coordinator).filter(Boolean)).size;
+  replaceBlockPreview("Valores radicados por líder", renderMonthlyMatrix("Líder", leaderItems, "leader"), leaderCount);
+  replaceBlockPreview("Valores radicados por coordinador", renderMonthlyMatrix("Coordinador", coordinatorItems, "coordinator"), coordinatorCount);
+  const coordinatorPerformance = renderPerformanceTable(coordinatorItems, "coordinator", true);
+  const leaderPerformance = renderPerformanceTable(leaderItems, "leader");
   replaceBlockPreview("Detalle de coordinadores", coordinatorPerformance.html, coordinatorPerformance.count);
   replaceBlockPreview("Detalle de radicaciones por líder", leaderPerformance.html, leaderPerformance.count);
   replaceBlockPreview("Comisiones por asesor", data.commissions.length
@@ -4309,3 +4309,4 @@ const reportTotalsObserver = new MutationObserver((mutations) => {
 reportTotalsObserver.observe(document.querySelector("main") ?? document.body, { childList: true, subtree: true });
 
 load().finally(scheduleAllTableTotals);
+
