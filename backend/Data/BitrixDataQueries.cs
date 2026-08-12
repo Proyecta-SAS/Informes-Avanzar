@@ -12,7 +12,7 @@ public static class BitrixDataQueries
             VALUES
                 ('1116_comercial', '1116 Comercial', 30, 'comercial', 41, true),
                 ('1116_operativa', '1116 Operativa', 32, 'operaciones', 42, true),
-                ('lp_2445_operativa', 'LP-2445 Operativa', 248, 'operaciones', 43, true),
+                ('lp_operativa_2445', 'LP-2445 Operativa', 248, 'operaciones', 43, true),
                 ('informes_bi_builder', 'Informes BI Builder', 224, 'comercial', 44, true),
                 ('ins_libranza', 'INS Libranza', 107, 'operaciones', 50, true),
                 ('ins_embargos', 'INS Embargos', 109, 'operaciones', 52, true),
@@ -683,17 +683,27 @@ public static class BitrixDataQueries
                     connection_id,
                     bitrix_id,
                     full_name,
-                    MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. COOR%') AS coordinator,
-                    MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. LIDER%') AS leader
+                    (ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%EQ. COOR%'))[1] AS coordinator,
+                    (ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%EQ. LIDER%'))[1] AS leader,
+                    BOOL_OR(UPPER(TRIM(name)) LIKE '%COMERCIAL%') AS has_commercial_path
                 FROM hierarchy
                 GROUP BY connection_id, bitrix_id, full_name
+            ), people_by_name AS (
+                SELECT DISTINCT ON (full_name)
+                    full_name,
+                    coordinator,
+                    leader
+                FROM people
+                WHERE full_name IS NOT NULL AND full_name <> '' AND has_commercial_path
+                ORDER BY full_name, coordinator NULLS LAST, leader NULLS LAST
             ), radicated AS (
                 SELECT
-                    d.connection_id,
-                    d.assigned_by_bitrix_id,
+                    COALESCE(NULLIF(assigned_user.full_name, ''), d.assigned_by_bitrix_id) AS advisor,
                     CASE
                         WHEN pipeline.category_id = 10 THEN 'RCH'
                         WHEN pipeline.category_id = 28 THEN 'PNNC'
+                        WHEN pipeline.category_id = 32 THEN '1116'
+                        WHEN pipeline.category_id = 248 THEN 'LP-2445'
                     END AS commercial_line,
                     CASE
                         WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '22560' OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%ENERO%' THEN '01 ENE'
@@ -709,15 +719,18 @@ public static class BitrixDataQueries
                         WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39160' OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%NOVIEMBRE%' THEN '11 NOV'
                         WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '39162' OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%DICIEMBRE%' THEN '12 DIC'
                     END AS month,
-                    COALESCE(d.opportunity, 0) AS amount
+                    SUM(COALESCE(d.opportunity, 0)) AS amount
                 FROM bitrix.deals d
                 JOIN bitrix.pipelines pipeline ON pipeline.id = d.pipeline_id
+                LEFT JOIN bitrix.users assigned_user
+                    ON assigned_user.connection_id = d.connection_id
+                    AND assigned_user.bitrix_id = d.assigned_by_bitrix_id
                 JOIN bitrix.entity_snapshots snapshot
                     ON snapshot.connection_id = d.connection_id
                     AND snapshot.entity_type = 'deal'
                     AND snapshot.bitrix_id = d.bitrix_id
                     AND snapshot.is_deleted = false
-                WHERE pipeline.category_id IN (10, 28)
+                WHERE pipeline.category_id IN (10, 28, 32, 248)
                     AND (
                         snapshot.custom_fields ->> 'UF_CRM_1737653376' = @yearText
                         OR snapshot.custom_fields ->> 'UF_CRM_1737653376' = CASE @yearText
@@ -726,20 +739,20 @@ public static class BitrixDataQueries
                             WHEN '2026' THEN '39138'
                         END
                     )
+                GROUP BY 1, 2, 3
             )
             SELECT
                 radicated.month,
-                COALESCE(NULLIF(people.full_name, ''), radicated.assigned_by_bitrix_id, 'Sin asesor') AS advisor,
+                radicated.advisor,
                 COALESCE(people.leader, 'Sin líder') AS leader,
                 COALESCE(people.coordinator, 'Sin coordinador') AS coordinator,
                 radicated.commercial_line,
                 COALESCE(SUM(radicated.amount), 0) AS total_achieved
             FROM radicated
-            LEFT JOIN people
-                ON people.connection_id = radicated.connection_id
-                AND people.bitrix_id = radicated.assigned_by_bitrix_id
+            JOIN people_by_name people
+                ON people.full_name = radicated.advisor
             WHERE radicated.month IS NOT NULL
-            GROUP BY radicated.month, people.full_name, radicated.assigned_by_bitrix_id, people.leader, people.coordinator, radicated.commercial_line
+            GROUP BY radicated.month, radicated.advisor, people.leader, people.coordinator, radicated.commercial_line
             ORDER BY total_achieved DESC;
             """;
 
@@ -793,17 +806,17 @@ public static class BitrixDataQueries
             )
             SELECT
                 COALESCE(NULLIF(full_name, ''), bitrix_id, 'Sin asesor') AS advisor,
-                COALESCE(MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. LIDER%'), 'Sin líder') AS leader,
-                COALESCE(MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. COOR%'), 'Sin coordinador') AS coordinator,
+                COALESCE((ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%EQ. LIDER%'))[1], 'Sin líder') AS leader,
+                COALESCE((ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%EQ. COOR%'))[1], 'Sin coordinador') AS coordinator,
                 CASE
-                    WHEN BOOL_OR(UPPER(name) LIKE '%RCH%') THEN 'RCH'
-                    WHEN BOOL_OR(UPPER(name) LIKE '%PNNC%' OR UPPER(name) LIKE '%INSOLV%') THEN 'PNNC'
+                    WHEN BOOL_OR(UPPER(TRIM(name)) LIKE '%RCH%') THEN 'RCH'
+                    WHEN BOOL_OR(UPPER(TRIM(name)) LIKE '%PNNC%' OR UPPER(TRIM(name)) LIKE '%INSOLV%') THEN 'PNNC'
                     ELSE 'COMERCIAL'
                 END AS commercial_line
             FROM hierarchy
             GROUP BY connection_id, bitrix_id, full_name
-            HAVING MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. COOR%') IS NOT NULL
-                OR MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. LIDER%') IS NOT NULL
+            HAVING (ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%EQ. COOR%'))[1] IS NOT NULL
+                OR (ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%EQ. LIDER%'))[1] IS NOT NULL
             ORDER BY coordinator, leader, advisor;
             """;
 
@@ -896,17 +909,17 @@ public static class BitrixDataQueries
             )
             SELECT
                 COALESCE(NULLIF(full_name, ''), bitrix_id, 'Sin asesor') AS advisor,
-                COALESCE(MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. LIDER%'), 'Sin líder') AS leader,
-                COALESCE(MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. COOR%'), 'Sin coordinador') AS coordinator,
+                COALESCE((ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%EQ. LIDER%'))[1], 'Sin líder') AS leader,
+                COALESCE((ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%EQ. COOR%'))[1], 'Sin coordinador') AS coordinator,
                 CASE
-                    WHEN BOOL_OR(UPPER(name) LIKE '%RCH%') THEN 'RCH'
-                    WHEN BOOL_OR(UPPER(name) LIKE '%PNNC%' OR UPPER(name) LIKE '%INSOLV%') THEN 'PNNC'
+                    WHEN BOOL_OR(UPPER(TRIM(name)) LIKE '%RCH%') THEN 'RCH'
+                    WHEN BOOL_OR(UPPER(TRIM(name)) LIKE '%PNNC%' OR UPPER(TRIM(name)) LIKE '%INSOLV%') THEN 'PNNC'
                     ELSE 'COMERCIAL'
                 END AS commercial_line
             FROM hierarchy
             GROUP BY connection_id, bitrix_id, full_name
-            HAVING MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. COOR%') IS NOT NULL
-                OR MAX(name) FILTER (WHERE UPPER(name) LIKE '%EQ. LIDER%') IS NOT NULL
+            HAVING (ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%EQ. COOR%'))[1] IS NOT NULL
+                OR (ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%EQ. LIDER%'))[1] IS NOT NULL
             ORDER BY coordinator, leader, advisor;
             """;
 
@@ -4535,3 +4548,4 @@ public static class BitrixDataQueries
         public List<StageInventoryItem> Stages { get; } = [];
     }
 }
+
