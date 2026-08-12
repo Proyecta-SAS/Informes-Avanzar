@@ -324,19 +324,180 @@ public static class BitrixDataQueries
             """;
 
         const string stageSql = """
+            WITH desired_stages(slug, stage, sort_order) AS (
+                VALUES
+                    ('pnnc_operativa', '01 RADICACIÓN POR VALIDAR', 1),
+                    ('pnnc_operativa', '02 DOCUMENTACIÓN PENDIENTE COMERCIAL', 2),
+                    ('pnnc_operativa', '03 DOCUMENTACIÓN SUBSANADA COMERCIAL', 3),
+                    ('pnnc_comercial_table', '01 RECOPILANDO DOCUMENTOS', 1),
+                    ('pnnc_comercial_table', '02 ANTICIPO REALIZADO', 2),
+                    ('pnnc_comercial_table', '03 CUARENTENA', 3),
+                    ('rch_comercial_table', '01 CREACION DE DOCUMENTOS', 1),
+                    ('rch_comercial_table', '02 RECOPILANDO DOCUMENTOS', 2),
+                    ('rch_comercial_table', '03 REVISIÓN DE LÍDER', 3),
+                    ('rch_operativa', '01 RADICACIÓN POR VALIDAR', 1),
+                    ('rch_operativa', '02 DOCUMENTOS PENDIENTES', 2),
+                    ('rch_operativa', '03 DOCUMENTOS SUBSANADOS', 3)
+            ),
+            base AS (
+                SELECT
+                    p.slug,
+                    UPPER(TRANSLATE(COALESCE(s.name, d.stage_id, ''),
+                        'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) AS normalized_stage,
+                    COALESCE(s.name, d.stage_id, 'Sin etapa') AS original_stage,
+                    d.opportunity,
+                    COALESCE(s.sort_order, 9999) AS original_sort_order
+                FROM bitrix.deals d
+                JOIN bitrix.pipelines p ON p.id = d.pipeline_id
+                LEFT JOIN bitrix.pipeline_stages s
+                    ON s.pipeline_id = p.id
+                    AND s.bitrix_stage_id = d.stage_id
+            ),
+            classified AS (
+                SELECT
+                    slug,
+                    CASE
+                        WHEN slug = 'pnnc_operativa' THEN
+                            CASE
+                                WHEN normalized_stage = 'RADICACION POR VALIDAR'
+                                THEN '01 RADICACIÓN POR VALIDAR'
+                                WHEN normalized_stage = 'DOCUMENTACION PENDIENTE COMERCIAL'
+                                THEN '02 DOCUMENTACIÓN PENDIENTE COMERCIAL'
+                                WHEN normalized_stage IN ('DOCUMENTACION SUBSANADA COMERCIAL', 'DOCUMENTACION SUBSANADA OPERATIVA')
+                                THEN '03 DOCUMENTACIÓN SUBSANADA COMERCIAL'
+                            END
+                        WHEN slug = 'rch_operativa' THEN
+                            CASE
+                                WHEN normalized_stage = 'RADICACION POR VALIDAR'
+                                THEN '01 RADICACIÓN POR VALIDAR'
+                                WHEN normalized_stage = 'DOCUMENTOS PENDIENTES'
+                                THEN '02 DOCUMENTOS PENDIENTES'
+                                WHEN normalized_stage = 'DOCUMENTOS SUBSANADOS'
+                                THEN '03 DOCUMENTOS SUBSANADOS'
+                            END
+                        ELSE original_stage
+                    END AS stage,
+                    opportunity,
+                    CASE
+                        WHEN slug = 'pnnc_operativa'
+                            AND normalized_stage = 'RADICACION POR VALIDAR'
+                        THEN 1
+                        WHEN slug = 'pnnc_operativa'
+                            AND normalized_stage = 'DOCUMENTACION PENDIENTE COMERCIAL'
+                        THEN 2
+                        WHEN slug = 'pnnc_operativa'
+                            AND normalized_stage IN ('DOCUMENTACION SUBSANADA COMERCIAL', 'DOCUMENTACION SUBSANADA OPERATIVA')
+                        THEN 3
+                        WHEN slug = 'rch_operativa'
+                            AND normalized_stage = 'RADICACION POR VALIDAR'
+                        THEN 1
+                        WHEN slug = 'rch_operativa'
+                            AND normalized_stage = 'DOCUMENTOS PENDIENTES'
+                        THEN 2
+                        WHEN slug = 'rch_operativa'
+                            AND normalized_stage = 'DOCUMENTOS SUBSANADOS'
+                        THEN 3
+                        ELSE original_sort_order
+                    END AS sort_order
+                FROM base
+
+                UNION ALL
+
+                SELECT
+                    CASE
+                        WHEN slug = 'pnnc_comercial' THEN 'pnnc_comercial_table'
+                        WHEN slug = 'rch_comercial' THEN 'rch_comercial_table'
+                    END AS slug,
+                    CASE
+                        WHEN slug = 'pnnc_comercial' THEN
+                            CASE
+                                WHEN normalized_stage = 'RECOPILANDO DOCUMENTOS'
+                                THEN '01 RECOPILANDO DOCUMENTOS'
+                                WHEN normalized_stage = 'ANTICIPO REALIZADO'
+                                THEN '02 ANTICIPO REALIZADO'
+                                WHEN normalized_stage = 'CUARENTENA'
+                                THEN '03 CUARENTENA'
+                            END
+                        WHEN slug = 'rch_comercial' THEN
+                            CASE
+                                WHEN normalized_stage IN ('CREACION DE DOCUMENTOS', 'CREACION Y REC DE DOC')
+                                THEN '01 CREACION DE DOCUMENTOS'
+                                WHEN normalized_stage = 'RECOPILANDO DOCUMENTOS'
+                                THEN '02 RECOPILANDO DOCUMENTOS'
+                                WHEN normalized_stage = 'REVISION DE LIDER'
+                                THEN '03 REVISIÓN DE LÍDER'
+                            END
+                    END AS stage,
+                    opportunity,
+                    CASE
+                        WHEN slug = 'pnnc_comercial'
+                            AND normalized_stage = 'RECOPILANDO DOCUMENTOS'
+                        THEN 1
+                        WHEN slug = 'pnnc_comercial'
+                            AND normalized_stage = 'ANTICIPO REALIZADO'
+                        THEN 2
+                        WHEN slug = 'pnnc_comercial'
+                            AND normalized_stage = 'CUARENTENA'
+                        THEN 3
+                        WHEN slug = 'rch_comercial'
+                            AND normalized_stage IN ('CREACION DE DOCUMENTOS', 'CREACION Y REC DE DOC')
+                        THEN 1
+                        WHEN slug = 'rch_comercial'
+                            AND normalized_stage = 'RECOPILANDO DOCUMENTOS'
+                        THEN 2
+                        WHEN slug = 'rch_comercial'
+                            AND normalized_stage = 'REVISION DE LIDER'
+                        THEN 3
+                    END AS sort_order
+                FROM base
+                WHERE slug IN ('pnnc_comercial', 'rch_comercial')
+            ),
+            aggregated AS (
+                SELECT
+                    slug,
+                    stage,
+                    COUNT(*) AS cases,
+                    COALESCE(SUM(opportunity), 0) AS total_value,
+                    MIN(sort_order) AS sort_order
+                FROM classified
+                WHERE stage IS NOT NULL
+                GROUP BY slug, stage
+            ),
+            selected AS (
+                SELECT
+                    ds.slug,
+                    ds.stage,
+                    COALESCE(a.cases, 0) AS cases,
+                    COALESCE(a.total_value, 0) AS total_value,
+                    ds.sort_order
+                FROM desired_stages ds
+                LEFT JOIN aggregated a
+                    ON a.slug = ds.slug
+                    AND a.stage = ds.stage
+
+                UNION ALL
+
+                SELECT
+                    a.slug,
+                    a.stage,
+                    a.cases,
+                    a.total_value,
+                    a.sort_order
+                FROM aggregated a
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM desired_stages ds
+                    WHERE ds.slug = a.slug
+                )
+            )
             SELECT
-                p.slug,
-                COALESCE(s.name, d.stage_id, 'Sin etapa') AS stage,
-                COUNT(*) AS cases,
-                COALESCE(SUM(d.opportunity), 0) AS total_value,
-                COALESCE(s.sort_order, 9999) AS sort_order
-            FROM bitrix.deals d
-            JOIN bitrix.pipelines p ON p.id = d.pipeline_id
-            LEFT JOIN bitrix.pipeline_stages s
-                ON s.pipeline_id = p.id
-                AND s.bitrix_stage_id = d.stage_id
-            GROUP BY p.slug, COALESCE(s.name, d.stage_id, 'Sin etapa'), COALESCE(s.sort_order, 9999)
-            ORDER BY p.slug, sort_order, stage;
+                slug,
+                stage,
+                cases,
+                total_value,
+                sort_order
+            FROM selected
+            ORDER BY slug, sort_order, stage;
             """;
 
         const string departmentSql = """

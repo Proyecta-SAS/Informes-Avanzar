@@ -76,8 +76,7 @@ const diegoSections = [
       ["Etapas Comercial RCH", "Casos y valor por etapa comercial RCH.", "bars"],
       ["Etapas Operativa RCH", "Radicación por validar y documentación pendiente o subsanada.", "bars"],
       ["Etapas Comercial PNNC", "Recopilación, anticipo y cuarentena.", "bars"],
-      ["Etapas Operativa PNNC", "Validación y estado de la documentación comercial.", "bars"],
-      ["Posible cierre PNC", "Monto y número de casos PNNC que avanzan hacia posible cierre.", "table"]
+      ["Etapas Operativa PNNC", "Validación y estado de la documentación comercial.", "bars"]
     ]
   }
 ];
@@ -110,12 +109,7 @@ const generalBlockCodes = {
   "Etapas Comercial RCH": "stages_rch_commercial",
   "Etapas Operativa RCH": "stages_rch_operativa",
   "Etapas Comercial PNNC": "stages_pnnc_commercial",
-  "Etapas Operativa PNNC": "stages_pnnc_operativa",
-  "Posible cierre PNC": "possible_close_pnnc",
-  "Posible cierre general": "management_possible_close",
-  "Detalle cumplimiento PNNC 2025": "management_compliance_pnnc",
-  "Detalle cumplimiento RCH 2026": "management_compliance_rch",
-  "Detalle cumplimiento 1116 2026": "management_compliance_1116"
+  "Etapas Operativa PNNC": "stages_pnnc_operativa"
 };
 let generalBlockAccess = { configured: false, codes: new Set() };
 let teamScope = null;
@@ -326,7 +320,6 @@ const loadDiegoRadicatedValues = async () => {
     const data = await response.json();
     if (teamScope) data.items = (data.items ?? []).filter((item) => isTeamMember(item.advisor));
     generalRadicatedData = data;
-    renderGeneralManagement();
 
     if (!data.items?.length) {
       container.innerHTML = `<div class="empty-block"><strong>Sin valores radicados para ${data.year}</strong><span>Sincronice los negocios de Bitrix para cargar este indicador.</span></div>`;
@@ -759,7 +752,6 @@ const loadDiegoDashboardData = async () => {
     data.departments = (data.departments ?? []).filter((item) => isTeamDepartment(item.department));
   }
   generalDashboardData = data;
-  renderGeneralManagement();
 
   replaceBlockPreview("Total de negociaciones por asesor", renderDataTable(
     ["Asesor", "Total de negociaciones", "Estudios", "Estudios sobre total", "Radicados", "Tasa de cierre"],
@@ -779,9 +771,11 @@ const loadDiegoDashboardData = async () => {
     .forEach((title) => replaceBlockPreview(title, departmentTable, data.departments.length));
 
   const pipelineBlocks = {
-    rch_comercial: ["Etapas Comercial RCH", "Embudo RCH"],
+    rch_comercial_table: ["Etapas Comercial RCH"],
+    rch_comercial: ["Embudo RCH"],
     rch_operativa: ["Etapas Operativa RCH"],
-    pnnc_comercial: ["Etapas Comercial PNNC", "Embudo Insolvencia"],
+    pnnc_comercial_table: ["Etapas Comercial PNNC"],
+    pnnc_comercial: ["Embudo Insolvencia"],
     pnnc_operativa: ["Etapas Operativa PNNC"]
   };
 
@@ -798,12 +792,6 @@ const loadDiegoDashboardData = async () => {
       replaceBlockPreview(title, renderPipelineTable(items, mode), items.length);
     });
   });
-
-  const possibleCloseRows = data.possibleClosePnnc ?? [];
-  const possibleCloseAmount = possibleCloseRows.reduce((sum, item) => sum + Number(item.amount ?? 0), 0);
-  const possibleCloseCases = possibleCloseRows.reduce((sum, item) => sum + Number(item.cases ?? 0), 0);
-  const possibleCloseTable = `<div class="radicated-table-wrap possible-close-wrap"><table class="radicated-table synced-table possible-close-table"><thead><tr><th>Etapa</th><th>Monto</th><th>Casos</th></tr></thead><tbody>${possibleCloseRows.map((item) => `<tr><td>${item.stage}</td><td>${formatNumber.format(item.amount)}</td><td>${formatNumber.format(item.cases)}</td></tr>`).join("")}</tbody><tfoot><tr><th>Total (Sum)</th><td>${formatNumber.format(possibleCloseAmount)}</td><td>${formatNumber.format(possibleCloseCases)}</td></tr></tfoot></table></div>`;
-  replaceBlockPreview("Posible cierre PNC", possibleCloseRows.length ? possibleCloseTable : `<div class="empty-block"><strong>Sin casos de posible cierre PNNC</strong><span>No hay negocios en las etapas configuradas.</span></div>`, possibleCloseRows.length);
 };
 
 const loadDiegoPortfolioCollections = async () => {
@@ -932,7 +920,7 @@ const applyDiegoFilters = () => {
   };
   const selectedLine = document.getElementById("diegoLine").value;
   const selectedMonth = document.getElementById("diegoMonth").value;
-  const selectedPendingLeader = document.getElementById("diegoPendingLeader").value;
+  const selectedPendingLeader = "all";
   const selectedHierarchy = hierarchySelection();
   const hierarchyIndexes = {
     advisors: new Set(),
@@ -1051,7 +1039,7 @@ const setupDiegoFilters = () => {
   advisorSelect.title = hasAdvisorScope
     ? "Filtrar por asesor"
     : "Seleccione primero una línea, un coordinador o un líder";
-  ["diegoMonth", "diegoLine", "diegoAdvisor", "diegoLeader", "diegoCoordinator", "diegoPendingLeader"].forEach((id) => {
+  ["diegoMonth", "diegoLine", "diegoAdvisor", "diegoLeader", "diegoCoordinator"].forEach((id) => {
     const select = document.getElementById(id);
     if (select.dataset.bound === "true") return;
     select.addEventListener("change", () => {
@@ -1082,7 +1070,6 @@ const clearDiegoFilters = async () => {
   document.getElementById("diegoCoordinator").value = "all";
   document.getElementById("diegoLeader").value = "all";
   document.getElementById("diegoAdvisor").value = "all";
-  document.getElementById("diegoPendingLeader").value = "all";
   if (yearChanged) {
     await Promise.all([loadDiegoRadicatedValues(), loadDiegoDashboardData(), loadDiegoPortfolioCollections(), loadDiegoLeadershipAndCommissions()]);
   }
@@ -3868,9 +3855,9 @@ const handleGerenciaMonthFilterChange = (event) => {
 
 
 const renderDiegoDashboard = () => {
-  const sourceSections = reportId === "informe_general_comercial" ? [...diegoSections, generalManagementSection] : diegoSections;
+  const sourceSections = diegoSections;
   const sections = sourceSections.map((section) => {
-    const reportBlocks = section.blocks.filter(([title]) => reportId === "informe_general_comercial" || title !== "Posible cierre PNC");
+    const reportBlocks = section.blocks;
     return { ...section, blocks: reportId === "informe_general_comercial" && generalBlockAccess.configured
       ? reportBlocks.filter(([title]) => generalBlockAccess.codes.has(generalBlockCodes[title]))
       : reportBlocks };
@@ -4092,7 +4079,6 @@ const load = async () => {
       document.querySelector(".diego-overview p").textContent = "Consulta radicación, negociaciones, comisiones, cartera, embudos y etapas sincronizadas desde Bitrix.";
       document.getElementById("diegoYearFilter").hidden = true;
       document.getElementById("diegoMonthFilter").hidden = true;
-      document.getElementById("pendingLeaderFilter").hidden = false;
     }
     renderDiegoDashboard();
     try {
