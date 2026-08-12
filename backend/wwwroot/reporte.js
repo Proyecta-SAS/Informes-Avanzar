@@ -760,8 +760,10 @@ const loadDiegoDashboardData = async () => {
     [...data.advisors]
       .sort((left, right) => left.advisor.localeCompare(right.advisor, "es", { sensitivity: "base" }))
       .map((item) => {
-        const studiesRate = item.negotiations ? `${((item.commercialCases / item.negotiations) * 100).toFixed(1)}%` : "0.0%";
-        const closingRate = item.commercialCases ? `${((item.radicatedCases / item.commercialCases) * 100).toFixed(1)}%` : "N/A";
+        const studiesRateValue = item.studiesRate ?? (item.negotiations ? item.commercialCases / item.negotiations : 0);
+        const closingRateValue = item.closingRate ?? (item.commercialCases ? item.radicatedCases / item.commercialCases : null);
+        const studiesRate = `${(studiesRateValue * 100).toFixed(1)}%`;
+        const closingRate = closingRateValue === null ? "N/A" : `${(closingRateValue * 100).toFixed(1)}%`;
         return `<tr data-advisor="${encodeURIComponent(item.advisor)}"><td>${item.advisor}</td><td>${formatNumber.format(item.negotiations)}</td><td>${formatNumber.format(item.commercialCases)}</td><td>${studiesRate}</td><td>${formatNumber.format(item.radicatedCases)}</td><td>${closingRate}</td></tr>`;
       }),
     "advisor-negotiations-table"
@@ -4294,6 +4296,30 @@ const updateReportView = async () => {
   }
 };
 
+const setupSidebarToggle = () => {
+  const button = document.getElementById("toggleSidebar");
+  if (!button) return;
+
+  const storageKey = "avanzar.sidebarCollapsed";
+  const applyState = (collapsed) => {
+    const label = collapsed ? "Mostrar menu" : "Ocultar menu";
+    document.body.classList.toggle("sidebar-collapsed", collapsed);
+    button.setAttribute("aria-expanded", String(!collapsed));
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    const text = button.querySelector("b");
+    if (text) text.textContent = collapsed ? "Abrir menu" : "Cerrar menu";
+  };
+
+  applyState(localStorage.getItem(storageKey) === "true");
+  button.addEventListener("click", () => {
+    const collapsed = !document.body.classList.contains("sidebar-collapsed");
+    localStorage.setItem(storageKey, String(collapsed));
+    applyState(collapsed);
+  });
+};
+
+setupSidebarToggle();
 document.getElementById("refreshReportButton").addEventListener("click", updateReportView);
 
 let totalsDecorationFrame = 0;
