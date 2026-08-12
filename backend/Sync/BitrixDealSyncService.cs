@@ -236,6 +236,7 @@ public sealed class BitrixDealSyncService(
                 recordsWritten,
                 cursor,
                 cancellationToken,
+                persistUnchangedPayload: mode == SyncMode.Full && reconcileMissing,
                 progress => (recordsRead, recordsWritten, cursor) = progress);
 
             await repository.UpdateRunProgressAsync(syncRunId, recordsRead, recordsWritten, cancellationToken, cursor);
@@ -268,6 +269,7 @@ public sealed class BitrixDealSyncService(
                             recordsWritten,
                             cursor,
                             cancellationToken,
+                            persistUnchangedPayload: mode == SyncMode.Full && reconcileMissing,
                             progress => (recordsRead, recordsWritten, cursor) = progress);
 
                         await repository.UpdateRunProgressAsync(syncRunId, recordsRead, recordsWritten, cancellationToken, cursor);
@@ -296,6 +298,7 @@ public sealed class BitrixDealSyncService(
                         recordsWritten,
                         cursor,
                         cancellationToken,
+                        persistUnchangedPayload: mode == SyncMode.Full && reconcileMissing,
                         progress => (recordsRead, recordsWritten, cursor) = progress);
 
                     await repository.UpdateRunProgressAsync(syncRunId, recordsRead, recordsWritten, cancellationToken, cursor);
@@ -435,6 +438,7 @@ public sealed class BitrixDealSyncService(
         int recordsWritten,
         DateTimeOffset? cursor,
         CancellationToken cancellationToken,
+        bool persistUnchangedPayload,
         Action<(int RecordsRead, int RecordsWritten, DateTimeOffset? Cursor)> setProgress)
     {
         if (result.ValueKind != JsonValueKind.Array || result.GetArrayLength() == 0)
@@ -476,7 +480,8 @@ public sealed class BitrixDealSyncService(
                 deal,
                 bitrixId,
                 currentHashes.GetValueOrDefault(bitrixId),
-                cancellationToken))
+                cancellationToken,
+                persistUnchangedPayload))
             {
                 recordsWritten++;
             }
@@ -835,7 +840,9 @@ public sealed class BitrixDealSyncService(
                 @payloadHash
             )
             ON CONFLICT (connection_id, entity_type, bitrix_id, payload_hash) DO UPDATE
-            SET received_at = bitrix.raw_payloads.received_at
+            SET pipeline_id = EXCLUDED.pipeline_id,
+                sync_run_id = EXCLUDED.sync_run_id,
+                received_at = bitrix.raw_payloads.received_at
             RETURNING id;
             """;
 
