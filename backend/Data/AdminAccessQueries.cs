@@ -233,4 +233,22 @@ public static class AdminAccessQueries
         command.Parameters.AddWithValue("accessLevel", accessLevel is "editor" or "owner" ? accessLevel : "viewer");
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
+
+    public static async Task SetUserReportBlocksAsync(Guid userId, string reportCode, string[] visibleBlocks, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
+    {
+        const string sql = """
+            INSERT INTO reporting.user_report_block_settings (user_id, report_code, visible_blocks, updated_at)
+            VALUES (@userId, @reportCode, @visibleBlocks, now())
+            ON CONFLICT (user_id, report_code) DO UPDATE
+            SET visible_blocks = EXCLUDED.visible_blocks,
+                updated_at = now();
+            """;
+
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("userId", userId);
+        command.Parameters.AddWithValue("reportCode", reportCode);
+        command.Parameters.AddWithValue("visibleBlocks", visibleBlocks);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
 }

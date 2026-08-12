@@ -430,6 +430,15 @@ adminApi.MapPut("/reports/{reportId:guid}/users/{userId:guid}", async (Guid repo
     return Results.NoContent();
 });
 
+adminApi.MapPut("/reports/informe-general/users/{userId:guid}/blocks", async (Guid userId, JsonElement body, NpgsqlDataSource dataSource, CancellationToken cancellationToken) =>
+{
+    var visibleBlocks = body.TryGetProperty("visibleBlocks", out var blocksProperty) && blocksProperty.ValueKind == JsonValueKind.Array
+        ? blocksProperty.EnumerateArray().Select(item => item.GetString()).Where(item => !string.IsNullOrWhiteSpace(item)).Cast<string>().Distinct().ToArray()
+        : Array.Empty<string>();
+    await AdminAccessQueries.SetUserReportBlocksAsync(userId, "informe_general_comercial", visibleBlocks, dataSource, cancellationToken);
+    return Results.NoContent();
+});
+
 app.MapGet("/api/reports/fuerza-comercial-diego/valores-radicados", async (
     int? year,
     NpgsqlDataSource dataSource,
@@ -901,6 +910,7 @@ app.MapPost("/api/bitrix/webhooks/deals", async (
             portal_domain = COALESCE(EXCLUDED.portal_domain, bitrix.outgoing_webhook_events.portal_domain),
             payload = EXCLUDED.payload,
             status = 'pending',
+            attempts = 0,
             event_count = bitrix.outgoing_webhook_events.event_count + 1,
             last_seen_at = now(),
             processed_at = NULL,

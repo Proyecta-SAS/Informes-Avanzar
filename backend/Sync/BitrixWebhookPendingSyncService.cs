@@ -52,8 +52,10 @@ public sealed class BitrixWebhookPendingSyncService(
                 SELECT id
                 FROM bitrix.outgoing_webhook_events
                 WHERE entity_type = 'deal'
-                  AND status IN ('pending', 'failed')
-                  AND attempts < 5
+                  AND (
+                      status = 'pending'
+                      OR (status = 'failed' AND attempts < 2)
+                  )
                 ORDER BY last_seen_at
                 LIMIT @limit
                 FOR UPDATE SKIP LOCKED

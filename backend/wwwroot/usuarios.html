@@ -69,7 +69,8 @@
         </div>
         <form id="roleAssignmentForm" class="role-assignment-form">
           <label>1. Selecciona el usuario<select id="roleAssignmentUser" required></select></label>
-          <fieldset><legend>2. Marca los paneles visibles</legend><label><input type="checkbox" value="informe_general_comercial"> Informe General Comercial</label><label><input type="checkbox" value="fuerza_comercial_diego"> Fuerza Comercial</label><label><input type="checkbox" value="rch_comercial"> RCH Comercial</label></fieldset>
+          <fieldset><legend>2. Marca los paneles visibles</legend><label><input type="checkbox" value="informe_general_comercial"> Informe General Comercial</label></fieldset>
+          <fieldset id="generalBlockAssignment"><legend>3. Tablas del Informe General</legend></fieldset>
           <div class="role-assignment-summary"><span>Rol seleccionado</span><strong id="selectedRoleName">Consulta</strong><small>Los permisos individuales complementan los accesos generales del rol.</small></div>
           <button class="sync-button" type="submit">Aplicar rol y permisos</button>
           <p id="roleAssignmentState" class="role-assignment-state"></p>
@@ -101,7 +102,7 @@
       </section>
     </div>
   </main>
-  <script src="/usuarios.js?v=20260804-role-wizard"></script>
+  <script src="/usuarios.js?v=20260812-general-blocks"></script>
   <script src="/auth-session.js?v=20260806-user-visibility"></script>
 </body>
 </html>
