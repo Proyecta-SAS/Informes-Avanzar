@@ -1322,6 +1322,11 @@ tbody tr:hover {
   display: none !important;
 }
 
+main.app .table-total-summary,
+main.app .radicated-total {
+  display: none !important;
+}
+
 .table-total-summary {
   display: flex;
   align-items: center;

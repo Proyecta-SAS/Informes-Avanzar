@@ -337,7 +337,6 @@ const loadDiegoRadicatedValues = async () => {
     const advisors = [...advisorValues.keys()].sort((left, right) => left.localeCompare(right, "es"));
 
     container.innerHTML = `
-      <div class="radicated-total"><span>Total alcanzado</span><strong>${currencyFormatter.format(data.totalAchieved)}</strong></div>
       <div class="radicated-table-wrap radicated-matrix-wrap">
         <table class="radicated-table radicated-matrix">
           <thead>
@@ -525,18 +524,9 @@ const decorateTableTotals = (root = document) => {
     }
 
     const wrap = table.closest(".radicated-table-wrap, .synced-table-wrap") || table.parentElement;
-    if (!wrap || wrap.previousElementSibling?.classList.contains("radicated-total")) return;
-    let summary = wrap.previousElementSibling;
-    if (!summary?.classList.contains("table-total-summary")) {
-      summary = document.createElement("div");
-      summary.className = "table-total-summary";
-      wrap.before(summary);
+    if (wrap?.previousElementSibling?.classList.contains("table-total-summary")) {
+      wrap.previousElementSibling.remove();
     }
-    const preferred = [...numericIndexes].reverse().find((index) => /total|valor|monto|recaudo|radicado|alcanzado|cartera|comisi/i.test(headers[index])) ?? numericIndexes.at(-1);
-    const value = percentColumns[preferred]
-      ? `${(totals[preferred] / numericCounts[preferred]).toLocaleString("es-CO", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`
-      : formatNumber.format(totals[preferred]);
-    summary.innerHTML = `<span>${percentColumns[preferred] ? "Promedio" : "Total"} ${headers[preferred]}</span><strong>${value}</strong>`;
   });
 };
 

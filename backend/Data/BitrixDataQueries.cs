@@ -528,9 +528,13 @@ public static class BitrixDataQueries
                             'PROSPECTOS REDES SOCIALES',
                             'SETTER',
                             'PROSPECTO INSOLVENCIA',
+                            'PROSPECTOS APP',
                             'PRIMER CONTACTO',
                             'PARA ASIGNAR',
-                            'PLAN RETOMA')
+                            'PLAN RETOMA',
+                            'GESTION DE CONTACTO',
+                            'NO CONTACTADO',
+                            'ALIANZA M.A')
                         THEN '01 SOSPECHOSO'
                         WHEN normalized_stage IN ('CITA AGENDADA', 'REAGENDAR CITA')
                         THEN '02 PROSPECTO'
@@ -558,9 +562,13 @@ public static class BitrixDataQueries
                             'PROSPECTOS REDES SOCIALES',
                             'SETTER',
                             'PROSPECTO INSOLVENCIA',
+                            'PROSPECTOS APP',
                             'PRIMER CONTACTO',
                             'PARA ASIGNAR',
-                            'PLAN RETOMA')
+                            'PLAN RETOMA',
+                            'GESTION DE CONTACTO',
+                            'NO CONTACTADO',
+                            'ALIANZA M.A')
                         THEN 1
                         WHEN normalized_stage IN ('CITA AGENDADA', 'REAGENDAR CITA')
                         THEN 2
@@ -596,10 +604,12 @@ public static class BitrixDataQueries
                             'IMPOSIBLE CONTACTAR',
                             'LLAMATON',
                             'PLAN RETOMA',
+                            'NO CONTACTADO',
                             'NO CONTACTADO REINTENTAR',
                             'CONTACTADO VOLVER A LLAMAR')
                         THEN '01 SOSPECHOSO'
                         WHEN normalized_stage IN (
+                            'PROSPECTO',
                             'CITA CALIFICACION',
                             'REAGENDAR CITA',
                             'INVITADO WEBINAR RCH',
@@ -611,7 +621,11 @@ public static class BitrixDataQueries
                         THEN '02 PROSPECTO'
                         WHEN normalized_stage IN ('NO APLICA', 'ELIMINAR PROSPECTO')
                         THEN '03 NO APLICA'
-                        WHEN normalized_stage = 'EN SEGUIMIENTO'
+                        WHEN normalized_stage IN (
+                            'EN SEGUIMIENTO',
+                            'EN PROCESO',
+                            'SEGUIMIENTO POTENCIAL',
+                            'POSTVENTA')
                         THEN '04 SEGUIMIENTO'
                         WHEN normalized_stage = 'APLICA NO CONTINUA'
                         THEN '05 APLICA NO CONTINUA'
@@ -620,6 +634,7 @@ public static class BitrixDataQueries
                             'RECOPILANDO DOCUMENTOS',
                             'CREACION Y REC DE DOC',
                             'REVISION DE LIDER',
+                            'CUARENTENA RCH (60 DIAS)',
                             'CASO RADICADO POR VALIDAR')
                         THEN '06 CIERRE'
                     END AS stage,
@@ -631,10 +646,12 @@ public static class BitrixDataQueries
                             'IMPOSIBLE CONTACTAR',
                             'LLAMATON',
                             'PLAN RETOMA',
+                            'NO CONTACTADO',
                             'NO CONTACTADO REINTENTAR',
                             'CONTACTADO VOLVER A LLAMAR')
                         THEN 1
                         WHEN normalized_stage IN (
+                            'PROSPECTO',
                             'CITA CALIFICACION',
                             'REAGENDAR CITA',
                             'INVITADO WEBINAR RCH',
@@ -646,7 +663,11 @@ public static class BitrixDataQueries
                         THEN 2
                         WHEN normalized_stage IN ('NO APLICA', 'ELIMINAR PROSPECTO')
                         THEN 3
-                        WHEN normalized_stage = 'EN SEGUIMIENTO'
+                        WHEN normalized_stage IN (
+                            'EN SEGUIMIENTO',
+                            'EN PROCESO',
+                            'SEGUIMIENTO POTENCIAL',
+                            'POSTVENTA')
                         THEN 4
                         WHEN normalized_stage = 'APLICA NO CONTINUA'
                         THEN 5
@@ -655,6 +676,7 @@ public static class BitrixDataQueries
                             'RECOPILANDO DOCUMENTOS',
                             'CREACION Y REC DE DOC',
                             'REVISION DE LIDER',
+                            'CUARENTENA RCH (60 DIAS)',
                             'CASO RADICADO POR VALIDAR')
                         THEN 6
                     END AS sort_order
