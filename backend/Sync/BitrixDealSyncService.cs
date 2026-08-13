@@ -246,9 +246,9 @@ public sealed class BitrixDealSyncService(
                 // Requests with 50 deal-list commands and UF_* fields regularly exceed
                 // Bitrix's 60-second gateway limit. Smaller batches keep the complete
                 // custom-field payload while allowing long pipelines to finish.
-                foreach (var chunk in GetDealListPageStarts(firstPage.Next, firstPage.Total.Value).Chunk(10))
+                foreach (var chunk in GetDealListPageStarts(firstPage.Next, firstPage.Total.Value).Chunk(3))
                 {
-                    foreach (var page in await FetchDealListPageBatchAsync(
+                    var pages = await FetchDealListPageBatchWithFallbackAsync(
                         pipeline.CategoryId,
                         stageId,
                         chunk,
@@ -257,7 +257,8 @@ public sealed class BitrixDealSyncService(
                         effectiveCreatedTo,
                         fieldEqualsFilters,
                         selectFields,
-                        cancellationToken))
+                        cancellationToken);
+                    foreach (var page in pages)
                     {
                         cursor = await ProcessDealPageAsync(
                             dbConnection,
@@ -274,6 +275,8 @@ public sealed class BitrixDealSyncService(
 
                         await repository.UpdateRunProgressAsync(syncRunId, recordsRead, recordsWritten, cancellationToken, cursor);
                     }
+
+                    await Task.Delay(TimeSpan.FromMilliseconds(750), cancellationToken);
                 }
             }
             else
@@ -413,6 +416,88 @@ public sealed class BitrixDealSyncService(
 
         return pages;
     }
+
+    private async Task<IReadOnlyList<JsonElement>> FetchDealListPageBatchWithFallbackAsync(
+        int categoryId,
+        string? stageId,
+        int[] starts,
+        DateTimeOffset? since,
+        DateTimeOffset? createdFrom,
+        DateTimeOffset? createdTo,
+        IReadOnlyDictionary<string, string>? fieldEqualsFilters,
+        IReadOnlyList<string>? selectFields,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await FetchDealListPageBatchAsync(
+                categoryId,
+                stageId,
+                starts,
+                since,
+                createdFrom,
+                createdTo,
+                fieldEqualsFilters,
+                selectFields,
+                cancellationToken);
+        }
+        catch (InvalidOperationException exception) when (IsBitrixOperationTimeLimit(exception))
+        {
+            var pages = new List<JsonElement>();
+            foreach (var start in starts)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+                pages.Add((await FetchDealListPageWithRetryAsync(
+                    categoryId,
+                    stageId,
+                    start,
+                    since,
+                    createdFrom,
+                    createdTo,
+                    fieldEqualsFilters,
+                    selectFields,
+                    cancellationToken)).Result);
+            }
+
+            return pages;
+        }
+    }
+
+    private async Task<DealListPage> FetchDealListPageWithRetryAsync(
+        int categoryId,
+        string? stageId,
+        int start,
+        DateTimeOffset? since,
+        DateTimeOffset? createdFrom,
+        DateTimeOffset? createdTo,
+        IReadOnlyDictionary<string, string>? fieldEqualsFilters,
+        IReadOnlyList<string>? selectFields,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                return await FetchDealListPageAsync(
+                    categoryId,
+                    stageId,
+                    start,
+                    since,
+                    createdFrom,
+                    createdTo,
+                    fieldEqualsFilters,
+                    selectFields,
+                    cancellationToken);
+            }
+            catch (InvalidOperationException exception) when (IsBitrixOperationTimeLimit(exception) && attempt < 5)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(5 * (attempt + 1)), cancellationToken);
+            }
+        }
+    }
+
+    private static bool IsBitrixOperationTimeLimit(Exception exception) =>
+        exception.Message.Contains("OPERATION_TIME_LIMIT", StringComparison.OrdinalIgnoreCase);
 
     private static IEnumerable<int> GetDealListPageStarts(int? firstStart, int total)
     {
