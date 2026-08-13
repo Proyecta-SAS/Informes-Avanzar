@@ -5,7 +5,7 @@ const generalBlockGroups = [
   ["Radicación", [["radicated_values", "Valores radicados por asesor"], ["advisor_negotiations", "Total negociaciones por asesor"], ["coordinator_values", "Valores radicados por coordinador"], ["leader_values", "Valores radicados por líder"], ["coordinator_detail", "Detalle coordinadores"], ["leader_detail", "Radicaciones por líderes"]]],
   ["Comisiones", [["advisor_commissions", "Comisiones por asesor"]]],
   ["Carteras", [["portfolio_state", "Estado de cartera 2025"], ["portfolio_collected", "Cartera recaudada"]]],
-  ["Embudos", [["funnel_insolvency", "Embudo Insolvencia"], ["funnel_rch", "Embudo RCH"]]],
+  ["Embudos", [["funnel_insolvency", "Embudo Insolvencia"], ["funnel_rch", "Embudo RCH"], ["commercial_possible_close", "(COM) Posible Cierre"]]],
   ["Etapas", [["stages_rch_commercial", "Etapas Comercial RCH"], ["stages_rch_operativa", "Etapas Operativa RCH"], ["stages_pnnc_commercial", "Etapas Comercial PNNC"], ["stages_pnnc_operativa", "Etapas Operativa PNNC"], ["possible_close_pnnc", "Posible cierre PNC"]]],
   ["Gerencial", [["management_summary", "Resumen gerencial comercial"], ["management_possible_close", "Posible cierre general"], ["management_compliance_pnnc", "Detalle cumplimiento PNNC 2025"], ["management_compliance_rch", "Detalle cumplimiento RCH 2026"], ["management_compliance_1116", "Detalle cumplimiento 1116 2026"]]]
 ];

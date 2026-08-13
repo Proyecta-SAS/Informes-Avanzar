@@ -2124,6 +2124,27 @@ main.app .radicated-total {
 .synced-table { min-width: 620px; }
 .synced-table td:not(:first-child),
 .synced-table th:not(:first-child) { text-align: right; }
+.commercial-possible-close-wrap {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.commercial-possible-close-section {
+  min-width: 0;
+  overflow-x: auto;
+}
+.commercial-possible-close-group th,
+.commercial-possible-close-group td,
+.commercial-possible-close-subgroup th {
+  background: #f6f8fb;
+  color: #24364f;
+  font-weight: 900;
+}
+@media (max-width: 900px) {
+  .commercial-possible-close-wrap {
+    grid-template-columns: 1fr;
+  }
+}
 .advisor-negotiations-table { min-width: 980px; }
 .advisor-negotiations-table th { position: sticky; top: 0; z-index: 2; background: #f1f5f6; color: #2f3945; font-weight: 700; }
 .advisor-negotiations-table th:first-child,

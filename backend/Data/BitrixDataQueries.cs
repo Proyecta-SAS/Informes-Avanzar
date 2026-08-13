@@ -880,11 +880,112 @@ public static class BitrixDataQueries
             ORDER BY stage, pipeline;
             """;
 
+        const string possibleCloseCommercialSql = """
+            WITH RECURSIVE latest_users AS (
+                SELECT DISTINCT ON (connection_id, bitrix_id) connection_id, bitrix_id, payload
+                FROM bitrix.raw_payloads
+                WHERE entity_type = 'user'
+                ORDER BY connection_id, bitrix_id, received_at DESC
+            ), user_departments AS (
+                SELECT DISTINCT
+                    u.connection_id,
+                    u.bitrix_id,
+                    u.full_name,
+                    (jsonb_array_elements_text(payload.payload -> 'UF_DEPARTMENT'))::bigint AS department_id
+                FROM bitrix.users u
+                JOIN latest_users payload ON payload.connection_id = u.connection_id AND payload.bitrix_id = u.bitrix_id
+                WHERE u.active = true
+                  AND jsonb_typeof(payload.payload -> 'UF_DEPARTMENT') = 'array'
+            ), hierarchy AS (
+                SELECT
+                    ud.connection_id,
+                    ud.bitrix_id,
+                    ud.full_name,
+                    department.id,
+                    department.name,
+                    department.parent_id,
+                    1 AS depth
+                FROM user_departments ud
+                JOIN bitrix.departments department ON department.id = ud.department_id
+                UNION ALL
+                SELECT
+                    hierarchy.connection_id,
+                    hierarchy.bitrix_id,
+                    hierarchy.full_name,
+                    parent.id,
+                    parent.name,
+                    parent.parent_id,
+                    hierarchy.depth + 1
+                FROM hierarchy
+                JOIN bitrix.departments parent ON parent.id = hierarchy.parent_id
+                WHERE hierarchy.depth < 8
+            ), commercial_hierarchy AS (
+                SELECT DISTINCT ON (full_name)
+                    full_name,
+                    (ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%EQ. COOR%'))[1] AS coordinator,
+                    (ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%EQ. LIDER%'))[1] AS leader,
+                    (ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%LINEA%'))[1] AS commercial_line,
+                    (ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%PENDIENTE LIDER COMERCIAL%'))[1] AS pending_commercial_leader,
+                    BOOL_OR(UPPER(TRIM(name)) LIKE '%COMERCIAL%') AS has_commercial_path
+                FROM hierarchy
+                WHERE full_name IS NOT NULL AND full_name <> ''
+                GROUP BY full_name
+                ORDER BY full_name, coordinator NULLS LAST, leader NULLS LAST
+            ), classified AS (
+                SELECT
+                    CASE
+                        WHEN UPPER(TRANSLATE(COALESCE(stage.name, deal.stage_id, ''), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) LIKE '%REVISION DE LIDER%' THEN '01 Revisión líder'
+                        WHEN UPPER(TRANSLATE(COALESCE(stage.name, deal.stage_id, ''), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) LIKE '%RADICACION POR VALIDAR%' THEN '02 Radicación por validar'
+                        WHEN UPPER(TRANSLATE(COALESCE(stage.name, deal.stage_id, ''), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) ~ '(DOCUMENTACION PENDIENTE COMERCIAL|DOCUMENTOS PENDIENTES)' THEN '03 Documentación pendiente'
+                        WHEN UPPER(TRANSLATE(COALESCE(stage.name, deal.stage_id, ''), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) ~ '(DOCUMENTACION SUBSANADA COMERCIAL|DOCUMENTOS SUBSANADOS|DOCUMENTOS SUBSANDADOS COMERCIAL)' THEN '04 Documentación subsanada'
+                    END AS stage,
+                    CASE
+                        WHEN pipeline.category_id IN (26, 28) THEN 'PNNC'
+                        WHEN pipeline.category_id IN (8, 10) THEN 'RCH'
+                        WHEN pipeline.category_id IN (30, 32) THEN '1116'
+                    END AS pipeline,
+                    COALESCE(NULLIF(assigned_user.full_name, ''), deal.assigned_by_bitrix_id, 'Sin asesor') AS advisor,
+                    COALESCE(deal.opportunity, 0) AS amount
+                FROM bitrix.deals deal
+                JOIN bitrix.pipelines pipeline ON pipeline.id = deal.pipeline_id
+                LEFT JOIN bitrix.pipeline_stages stage
+                    ON stage.pipeline_id = pipeline.id
+                    AND stage.bitrix_stage_id = deal.stage_id
+                LEFT JOIN bitrix.users assigned_user
+                    ON assigned_user.connection_id = deal.connection_id
+                    AND assigned_user.bitrix_id = deal.assigned_by_bitrix_id
+                WHERE pipeline.category_id IN (8, 10, 26, 28, 30, 32)
+                  AND EXTRACT(YEAR FROM deal.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @yearNumber
+                  AND (@fromDate IS NULL OR (deal.bitrix_created_at AT TIME ZONE 'America/Bogota')::date >= @fromDate)
+                  AND (@toDate IS NULL OR (deal.bitrix_created_at AT TIME ZONE 'America/Bogota')::date <= @toDate)
+                  AND (@monthNumber IS NULL OR EXTRACT(MONTH FROM deal.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @monthNumber)
+            )
+            SELECT
+                hierarchy.commercial_line,
+                hierarchy.leader,
+                hierarchy.coordinator,
+                hierarchy.pending_commercial_leader,
+                classified.pipeline,
+                classified.stage,
+                classified.advisor,
+                COALESCE(SUM(classified.amount), 0) AS amount,
+                COUNT(*)::bigint AS cases
+            FROM classified
+            LEFT JOIN commercial_hierarchy hierarchy
+                ON hierarchy.full_name = classified.advisor
+                AND hierarchy.has_commercial_path
+            WHERE classified.stage IS NOT NULL
+              AND classified.pipeline IS NOT NULL
+            GROUP BY hierarchy.commercial_line, hierarchy.leader, hierarchy.coordinator, hierarchy.pending_commercial_leader, classified.pipeline, classified.stage, classified.advisor
+            ORDER BY classified.pipeline, classified.stage, classified.advisor;
+            """;
+
         var advisors = new List<object>();
         var stages = new List<object>();
         var departments = new List<object>();
         var possibleClosePnnc = new List<object>();
         var possibleCloseGeneral = new List<object>();
+        var possibleCloseCommercial = new List<object>();
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
         await using (var command = new NpgsqlCommand(advisorSql, connection))
@@ -961,7 +1062,29 @@ public static class BitrixDataQueries
                 possibleCloseGeneral.Add(new { stage = reader.GetString(0), pipeline = reader.GetString(1), amount = reader.GetDecimal(2), cases = reader.GetInt64(3) });
         }
 
-        return new { year, advisors, stages, departments, possibleClosePnnc, possibleCloseGeneral };
+        await using (var command = new NpgsqlCommand(possibleCloseCommercialSql, connection))
+        {
+            command.Parameters.AddWithValue("yearNumber", year);
+            AddDiegoDateFilterParameters(command, from, to, month);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                possibleCloseCommercial.Add(new
+                {
+                    commercialLine = reader.IsDBNull(0) ? null : reader.GetString(0),
+                    leader = reader.IsDBNull(1) ? null : reader.GetString(1),
+                    coordinator = reader.IsDBNull(2) ? null : reader.GetString(2),
+                    pendingCommercialLeader = reader.IsDBNull(3) ? null : reader.GetString(3),
+                    pipeline = reader.GetString(4),
+                    stage = reader.GetString(5),
+                    advisor = reader.GetString(6),
+                    amount = reader.GetDecimal(7),
+                    cases = reader.GetInt64(8)
+                });
+            }
+        }
+
+        return new { year, advisors, stages, departments, possibleClosePnnc, possibleCloseGeneral, possibleCloseCommercial };
     }
 
     public static async Task<object> GetDiegoPortfolioCollectionsAsync(

@@ -76,7 +76,8 @@ const diegoSections = [
       ["Etapas Comercial RCH", "Casos y valor por etapa comercial RCH.", "bars"],
       ["Etapas Operativa RCH", "Radicación por validar y documentación pendiente o subsanada.", "bars"],
       ["Etapas Comercial PNNC", "Recopilación, anticipo y cuarentena.", "bars"],
-      ["Etapas Operativa PNNC", "Validación y estado de la documentación comercial.", "bars"]
+      ["Etapas Operativa PNNC", "Validación y estado de la documentación comercial.", "bars"],
+      ["(COM) Posible Cierre", "Monto y casos por pipeline y etapa.", "table"]
     ]
   }
 ];
@@ -106,12 +107,19 @@ const generalBlockCodes = {
   "Cartera recaudada": "portfolio_collected",
   "Embudo Insolvencia": "funnel_insolvency",
   "Embudo RCH": "funnel_rch",
+  "(COM) Posible Cierre": "commercial_possible_close",
   "Etapas Comercial RCH": "stages_rch_commercial",
   "Etapas Operativa RCH": "stages_rch_operativa",
   "Etapas Comercial PNNC": "stages_pnnc_commercial",
   "Etapas Operativa PNNC": "stages_pnnc_operativa"
 };
 let generalBlockAccess = { configured: false, codes: new Set() };
+const isGeneralBlockVisible = (title) => {
+  const code = generalBlockCodes[title];
+  if (!generalBlockAccess.configured) return true;
+  if (generalBlockAccess.codes.has(code)) return true;
+  return code === "commercial_possible_close";
+};
 let teamScope = null;
 let generalRadicatedData = null;
 let generalDashboardData = null;
@@ -717,6 +725,83 @@ const renderGeneralPossibleClose = (items) => {
   return `<div class="radicated-table-wrap"><table class="radicated-table synced-table management-close-table"><thead><tr><th>Etapa</th>${pipelines.map((pipeline) => `<th>${pipeline}</th>`).join("")}<th>Total (Sum)</th></tr></thead><tbody>${stages.map((stage) => { const rowTotal = pipelines.reduce((sum, pipeline) => sum + valueFor(stage, pipeline), 0); return `<tr><td>${stage}</td>${pipelines.map((pipeline) => `<td>${formatNumber.format(valueFor(stage, pipeline))}</td>`).join("")}<td>${formatNumber.format(rowTotal)}</td></tr>`; }).join("")}</tbody><tfoot><tr><th>Total (Sum)</th>${pipelines.map((pipeline) => `<td>${formatNumber.format(totals.get(pipeline))}</td>`).join("")}<td>${formatNumber.format(grandTotal)}</td></tr></tfoot></table></div>`;
 };
 
+const commercialPossibleCloseLine = (item) => {
+  const source = normalizeFilterText(item.commercialLine || item.pipeline || "");
+  if (source.includes("rch")) return "rch";
+  if (source.includes("pnnc") || source.includes("insolvencia")) return "pnnc";
+  return source;
+};
+
+const commercialPossibleCloseStages = [
+  "01 Revisión líder",
+  "02 Radicación por validar",
+  "03 Documentación pendiente",
+  "04 Documentación subsanada"
+];
+
+const buildCommercialPossibleCloseGroups = (items) => {
+  const grouped = new Map();
+  items.forEach((item) => {
+    const pipeline = item.pipeline ?? "Sin pipeline";
+    const stage = item.stage ?? "Sin etapa";
+    const key = `${pipeline}\u0001${stage}`;
+    if (!grouped.has(key)) grouped.set(key, { pipeline, stage, amount: 0, cases: 0, line: commercialPossibleCloseLine(item) });
+    const row = grouped.get(key);
+    row.amount += Number(item.amount ?? 0);
+    row.cases += Number(item.cases ?? 0);
+  });
+
+  const pipelines = ["RCH", "PNNC"].map((pipeline) => {
+    const line = commercialPossibleCloseLine({ pipeline });
+    const rows = commercialPossibleCloseStages
+      .map((stage) => grouped.get(`${pipeline}\u0001${stage}`) ?? { pipeline, stage, amount: 0, cases: 0, line });
+    return { pipeline, line, rows };
+  }).filter((group) => group.rows.some((row) => row.amount || row.cases));
+  let grandAmount = 0;
+  let grandCases = 0;
+  let count = 0;
+  pipelines.forEach((group) => {
+    const pipelineAmount = group.rows.reduce((sum, row) => sum + row.amount, 0);
+    const pipelineCases = group.rows.reduce((sum, row) => sum + row.cases, 0);
+    grandAmount += pipelineAmount;
+    grandCases += pipelineCases;
+    count += group.rows.length;
+  });
+  return { pipelines, grandAmount, grandCases, count };
+};
+
+const renderCommercialPossibleCloseTable = (group, totals = null) => `
+  <div class="commercial-possible-close-section">
+    <table class="radicated-table synced-table commercial-possible-close-table">
+      <thead><tr><th>Metric</th><th>MONTO</th><th>SUM(CASOS)</th></tr></thead>
+      <tbody>
+        <tr class="commercial-possible-close-group" data-summary-row="true" data-line="${group.line}"><th>PIPELINE</th><td>${escapeHtml(group.pipeline)}</td><td>${escapeHtml(group.pipeline)}</td></tr>
+        <tr class="commercial-possible-close-subgroup" data-summary-row="true" data-line="${group.line}"><th>ETAPA</th><td></td><td></td></tr>
+        ${group.rows.map((row) => `<tr data-line="${group.line}" data-stage-row="true"><td>${escapeHtml(row.stage)}</td><td>${formatNumber.format(row.amount)}</td><td>${formatNumber.format(row.cases)}</td></tr>`).join("")}
+      </tbody>
+      ${totals ? `<tfoot><tr><th>Total (Sum)</th><td>${formatNumber.format(totals.amount)}</td><td>${formatNumber.format(totals.cases)}</td></tr></tfoot>` : ""}
+    </table>
+  </div>`;
+
+const renderCommercialPossibleClose = (items) => {
+  const grouped = buildCommercialPossibleCloseGroups(items);
+  if (!grouped.count) {
+    return {
+      count: 0,
+      html: `<div class="empty-block"><strong>Sin posibles cierres</strong><span>No hay negocios en las etapas configuradas.</span></div>`
+    };
+  }
+  const tables = grouped.pipelines.map((group, index) => {
+    const isLast = index === grouped.pipelines.length - 1;
+    return renderCommercialPossibleCloseTable(group, isLast ? { amount: grouped.grandAmount, cases: grouped.grandCases } : null);
+  });
+  return {
+    count: grouped.count,
+    html: `<div class="radicated-table-wrap synced-table-wrap commercial-possible-close-wrap">
+      ${tables.join("")}
+    </div>`
+  };
+};
 const renderPipelineCompliance = (items, pipeline, monthlyGoals) => {
   const monthly = new Map();
   const includedPipelines = pipeline === "PNNC" ? new Set(["PNNC", "LP-2445"]) : new Set([pipeline]);
@@ -752,6 +837,7 @@ const loadDiegoDashboardData = async () => {
   if (teamScope) {
     data.advisors = (data.advisors ?? []).filter((item) => isTeamMember(item.advisor));
     data.departments = (data.departments ?? []).filter((item) => isTeamDepartment(item.department));
+    data.possibleCloseCommercial = (data.possibleCloseCommercial ?? []).filter((item) => isTeamMember(item.advisor));
   }
   generalDashboardData = data;
 
@@ -792,6 +878,9 @@ const loadDiegoDashboardData = async () => {
       replaceBlockPreview(title, renderPipelineTable(items, mode), items.length);
     });
   });
+  const possibleCloseItems = data.possibleCloseCommercial ?? [];
+  const possibleCloseView = renderCommercialPossibleClose(possibleCloseItems);
+  replaceBlockPreview("(COM) Posible Cierre", possibleCloseView.html, possibleCloseView.count);
 };
 
 const loadDiegoPortfolioCollections = async () => {
@@ -975,7 +1064,7 @@ const applyDiegoFilters = () => {
     Mes: document.getElementById("diegoMonth").value,
     "Línea comercial": document.getElementById("diegoLine").value,
     Asesor: document.getElementById("diegoAdvisor").value,
-    Líder: document.getElementById("diegoLeader").value,
+    "Líder": document.getElementById("diegoLeader").value,
     Coordinador: document.getElementById("diegoCoordinator").value
   };
   const selectedLine = document.getElementById("diegoLine").value;
@@ -1022,6 +1111,16 @@ const applyDiegoFilters = () => {
     return hierarchyIndexes.coordinators.has(coordinator);
   };
 
+  if (generalDashboardData?.possibleCloseCommercial) {
+    const possibleCloseItems = generalDashboardData.possibleCloseCommercial.filter((item) => {
+      const matchesLine = selectedLine === "all" || commercialPossibleCloseLine(item).includes(selectedLine);
+      const matchesTeam = belongsToSelectedHierarchy(item.advisor, item.leader, item.coordinator);
+      return matchesLine && matchesTeam;
+    });
+    const possibleCloseView = renderCommercialPossibleClose(possibleCloseItems);
+    replaceBlockPreview("(COM) Posible Cierre", possibleCloseView.html, possibleCloseView.count);
+  }
+
   document.querySelectorAll(".diego-block").forEach((block) => {
     const title = normalizeFilterText(block.querySelector("h3")?.textContent ?? "");
     const belongsToRch = title.includes("rch");
@@ -1031,6 +1130,7 @@ const applyDiegoFilters = () => {
 
     const table = block.querySelector("table");
     if (!table) return;
+    if (block.dataset.blockCode === "commercial_possible_close") return;
     const hasMonthlyCells = table.classList.contains("radicated-matrix") || table.classList.contains("monthly-matrix");
     if (hasMonthlyCells) {
       table.querySelectorAll("[data-month]").forEach((cell) => {
@@ -1049,6 +1149,9 @@ const applyDiegoFilters = () => {
           if (headerName === "Líder" && title.includes("líder")) return normalizeFilterText(decodeURIComponent(row.dataset.group)) === normalizeFilterText(selected);
         }
         const index = headers.indexOf(headerName);
+        if (index < 0 && normalizeFilterText(headerName).includes("linea") && row.dataset.line) {
+          return normalizeFilterText(row.dataset.line).includes(selected);
+        }
         if (index < 0) return true;
         const cellValue = row.children[index]?.textContent.trim() ?? "";
         if (headerName === "Mes") return cellValue.startsWith(selected);
@@ -1076,8 +1179,9 @@ const applyDiegoFilters = () => {
       const matchesPendingLeader = selectedPendingLeader === "all"
         || stageIndex < 0
         || (selectedPendingLeader === "pending" ? isPendingLeader : !isPendingLeader);
-      row.hidden = !(matches && matchesDateRange && matchesVisibleMonthCells && matchesPendingLeader && matchesRelatedTeam);
-      if (matches && matchesDateRange && matchesVisibleMonthCells && matchesPendingLeader && matchesRelatedTeam) visibleRows += 1;
+      const isVisible = matches && matchesDateRange && matchesVisibleMonthCells && matchesPendingLeader && matchesRelatedTeam;
+      row.hidden = !isVisible;
+      if (isVisible && row.dataset.summaryRow !== "true") visibleRows += 1;
     });
 
     const badge = block.querySelector(".diego-block-title em");
@@ -3946,7 +4050,7 @@ const renderDiegoDashboard = () => {
   const sections = sourceSections.map((section) => {
     const reportBlocks = section.blocks;
     return { ...section, blocks: reportId === "informe_general_comercial" && generalBlockAccess.configured
-      ? reportBlocks.filter(([title]) => generalBlockAccess.codes.has(generalBlockCodes[title]))
+      ? reportBlocks.filter(([title]) => isGeneralBlockVisible(title))
       : reportBlocks };
   }).filter((section) => section.blocks.length);
   document.getElementById("diegoSections").innerHTML = sections.map((section) => `
@@ -3957,7 +4061,7 @@ const renderDiegoDashboard = () => {
       </header>
       <div class="diego-block-grid">
         ${section.blocks.map(([title, description, type]) => `
-          <article data-block-title="${title}" data-block-code="${generalBlockCodes[title]}" class="diego-block diego-block-${type}${["Total de negociaciones por asesor", "Cartera recaudada"].includes(title) ? " diego-block-wide-table" : ""}">
+          <article data-block-title="${title}" data-block-code="${generalBlockCodes[title]}" class="diego-block diego-block-${type}${["Total de negociaciones por asesor", "Cartera recaudada", "(COM) Posible Cierre"].includes(title) ? " diego-block-wide-table" : ""}">
             <div class="diego-block-title"><div><h3>${title}</h3><p>${description}</p></div><em>Sin datos</em></div>
             ${blockPreview(type)}
           </article>
