@@ -453,11 +453,24 @@ Endpoints:
 ```text
 POST /api/bitrix/sync/deals/{pipelineSlug}
 POST /api/bitrix/sync/deals/{pipelineSlug}?stageId={stageId}
+POST /api/bitrix/sync/deals/{pipelineSlug}?fullHistory=true
+POST /api/bitrix/sync/deals/{pipelineSlug}?fullHistory=true&coreFieldsOnly=true
+POST /api/bitrix/sync/deals/{pipelineSlug}?fullHistory=true&coreFieldsOnly=true&resumeFrom=20000
 POST /api/bitrix/sync/global
 POST /api/bitrix/sync/massive
 ```
 
 La persistencia se confirma por página, no al final de toda la pipeline. Si el proceso falla después de varias páginas, los bloques anteriores permanecen guardados.
+
+Por defecto, una sincronización completa consulta negocios creados desde 2025. Use
+`fullHistory=true` solamente cuando un informe deba reconstruirse con todo el histórico;
+esta operación puede tardar varios minutos en pipelines grandes.
+Agregue `coreFieldsOnly=true` para reconstruir rápidamente inventarios y embudos con
+identidad, etapa, responsable, valor y fechas. Los campos personalizados existentes
+se conservan; una sincronización normal posterior puede enriquecer los registros nuevos.
+`resumeFrom` acepta un desplazamiento múltiplo de 50 para continuar una carga
+interrumpida. Una continuación no reconcilia eliminados porque no recorre las páginas
+anteriores; esa reconciliación se realiza solamente en una carga completa desde cero.
 
 ### Incremental
 

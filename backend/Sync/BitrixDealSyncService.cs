@@ -80,6 +80,24 @@ public sealed class BitrixDealSyncService(
         "UF_CRM_1584482115955"
     ];
 
+    // Funnel backfills only need deal identity, stage, ownership, amount and dates.
+    // Snapshot upserts merge custom fields, so this fast inventory pass never erases
+    // richer payloads already stored by full or incremental synchronizations.
+    private static readonly string[] CoreBackfillFields =
+    [
+        "ID",
+        "TITLE",
+        "CATEGORY_ID",
+        "STAGE_ID",
+        "ASSIGNED_BY_ID",
+        "OPPORTUNITY",
+        "CURRENCY_ID",
+        "DATE_CREATE",
+        "DATE_MODIFY",
+        "CLOSED",
+        "CLOSEDATE"
+    ];
+
     public async Task<SyncResult> SyncDealByIdAsync(
         string bitrixId,
         Guid? existingSyncRunId,
@@ -195,11 +213,18 @@ public sealed class BitrixDealSyncService(
         IReadOnlyList<string>? selectFields = null,
         bool reconcileMissing = true,
         string? entityTypeSuffix = null,
-        bool allowConcurrentWithOtherPipelines = false)
+        bool allowConcurrentWithOtherPipelines = false,
+        bool coreFieldsOnly = false,
+        int startAt = 0)
     {
         if (mode == SyncMode.Incremental && !string.IsNullOrWhiteSpace(stageId))
         {
             throw new InvalidOperationException("La sincronizacion incremental se ejecuta por pipeline, no por etapa.");
+        }
+
+        if (startAt < 0 || startAt % 50 != 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(startAt), "The resume offset must be a non-negative multiple of 50.");
         }
 
         var connectionInfo = await repository.GetActiveConnectionAsync(cancellationToken);
@@ -222,6 +247,8 @@ public sealed class BitrixDealSyncService(
         DateTimeOffset? cursor = null;
         var effectiveCreatedFrom = mode == SyncMode.Full ? createdFrom ?? FullSyncCreatedFrom : (DateTimeOffset?)null;
         var effectiveCreatedTo = mode == SyncMode.Full ? createdTo : null;
+        var effectiveSelectFields = selectFields
+            ?? (coreFieldsOnly ? CoreBackfillFields : null);
 
         try
         {
@@ -237,7 +264,7 @@ public sealed class BitrixDealSyncService(
                 await CreateSeenDealsTableAsync(dbConnection, cancellationToken);
             }
 
-            var firstPage = await FetchDealListPageAsync(pipeline.CategoryId, stageId, 0, since, effectiveCreatedFrom, effectiveCreatedTo, fieldEqualsFilters, selectFields, cancellationToken);
+            var firstPage = await FetchDealListPageAsync(pipeline.CategoryId, stageId, startAt, since, effectiveCreatedFrom, effectiveCreatedTo, fieldEqualsFilters, effectiveSelectFields, cancellationToken);
             cursor = await ProcessDealPageAsync(
                 dbConnection,
                 connectionInfo.Id,
@@ -254,7 +281,46 @@ public sealed class BitrixDealSyncService(
 
             await repository.UpdateRunProgressAsync(syncRunId, recordsRead, recordsWritten, cancellationToken, cursor);
 
-            if (firstPage.Total is not null)
+            if (coreFieldsOnly)
+            {
+                var start = firstPage.Next;
+                var visitedStarts = new HashSet<int>();
+                while (start is not null && visitedStarts.Add(start.Value))
+                {
+                    var page = await FetchDealListPageAsync(
+                        pipeline.CategoryId,
+                        stageId,
+                        start.Value,
+                        since,
+                        effectiveCreatedFrom,
+                        effectiveCreatedTo,
+                        fieldEqualsFilters,
+                        effectiveSelectFields,
+                        cancellationToken);
+                    if (page.Result.GetArrayLength() == 0)
+                    {
+                        break;
+                    }
+
+                    cursor = await ProcessDealPageAsync(
+                        dbConnection,
+                        connectionInfo.Id,
+                        pipeline.Id,
+                        syncRunId,
+                        page.Result,
+                        recordsRead,
+                        recordsWritten,
+                        cursor,
+                        trackSeenDeals,
+                        cancellationToken,
+                        persistUnchangedPayload: mode == SyncMode.Full && reconcileMissing,
+                        progress => (recordsRead, recordsWritten, cursor) = progress);
+
+                    await repository.UpdateRunProgressAsync(syncRunId, recordsRead, recordsWritten, cancellationToken, cursor);
+                    start = page.Next;
+                }
+            }
+            else if (firstPage.Total is not null)
             {
                 // Requests with 50 deal-list commands and UF_* fields regularly exceed
                 // Bitrix's 60-second gateway limit. Keep the conservative upstream batch
@@ -269,7 +335,7 @@ public sealed class BitrixDealSyncService(
                         effectiveCreatedFrom,
                         effectiveCreatedTo,
                         fieldEqualsFilters,
-                        selectFields,
+                        effectiveSelectFields,
                         cancellationToken);
                     foreach (var page in pages)
                     {
@@ -299,7 +365,7 @@ public sealed class BitrixDealSyncService(
                 var visitedStarts = new HashSet<int>();
                 while (start is not null && visitedStarts.Add(start.Value))
                 {
-                    var page = await FetchDealListPageAsync(pipeline.CategoryId, stageId, start.Value, since, effectiveCreatedFrom, effectiveCreatedTo, fieldEqualsFilters, selectFields, cancellationToken);
+                    var page = await FetchDealListPageAsync(pipeline.CategoryId, stageId, start.Value, since, effectiveCreatedFrom, effectiveCreatedTo, fieldEqualsFilters, effectiveSelectFields, cancellationToken);
                     if (page.Result.GetArrayLength() == 0)
                     {
                         break;

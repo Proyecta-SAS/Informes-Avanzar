@@ -541,7 +541,9 @@ const decorateTableTotals = (root = document) => {
 };
 
 const renderPipelineTable = (items, mode) => {
-  const sortedItems = [...items].sort((left, right) => right.cases - left.cases);
+  const sortedItems = [...items].sort((left, right) => mode === "funnel"
+    ? left.cases - right.cases
+    : right.cases - left.cases);
   const maxCases = Math.max(...sortedItems.map((item) => item.cases), 1);
   const isFunnel = mode === "funnel";
   const headers = isFunnel
@@ -775,10 +777,10 @@ const loadDiegoDashboardData = async () => {
 
   const pipelineBlocks = {
     rch_comercial_table: ["Etapas Comercial RCH"],
-    rch_comercial: ["Embudo RCH"],
+    rch_comercial_funnel: ["Embudo RCH"],
     rch_operativa: ["Etapas Operativa RCH"],
     pnnc_comercial_table: ["Etapas Comercial PNNC"],
-    pnnc_comercial: ["Embudo Insolvencia"],
+    pnnc_comercial_funnel: ["Embudo Insolvencia"],
     pnnc_operativa: ["Etapas Operativa PNNC"]
   };
 

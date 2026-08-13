@@ -1085,10 +1085,20 @@ app.MapPost("/api/bitrix/sync/stages", async (
 app.MapPost("/api/bitrix/sync/deals/{pipelineSlug}", async (
     string pipelineSlug,
     string? stageId,
+    bool? fullHistory,
+    bool? coreFieldsOnly,
+    int? resumeFrom,
     IBitrixDealSyncService dealSyncService,
     CancellationToken cancellationToken) =>
 {
-    var result = await dealSyncService.SyncPipelineDealsAsync(pipelineSlug, stageId, cancellationToken);
+    var result = await dealSyncService.SyncPipelineDealsAsync(
+        pipelineSlug,
+        stageId,
+        cancellationToken,
+        createdFrom: fullHistory == true ? DateTimeOffset.UnixEpoch : null,
+        reconcileMissing: resumeFrom.GetValueOrDefault() == 0,
+        coreFieldsOnly: coreFieldsOnly == true,
+        startAt: resumeFrom.GetValueOrDefault());
     return Results.Ok(result);
 });
 

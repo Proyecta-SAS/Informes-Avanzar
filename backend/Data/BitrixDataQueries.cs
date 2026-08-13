@@ -346,6 +346,18 @@ public static class BitrixDataQueries
                     ('pnnc_comercial_table', '01 RECOPILANDO DOCUMENTOS', 1),
                     ('pnnc_comercial_table', '02 ANTICIPO REALIZADO', 2),
                     ('pnnc_comercial_table', '03 CUARENTENA', 3),
+                    ('pnnc_comercial_funnel', '01 SOSPECHOSO', 1),
+                    ('pnnc_comercial_funnel', '02 PROSPECTO', 2),
+                    ('pnnc_comercial_funnel', '03 NO APLICA', 3),
+                    ('pnnc_comercial_funnel', '04 SEGUIMIENTO', 4),
+                    ('pnnc_comercial_funnel', '05 APLICA NO CONTINUA', 5),
+                    ('pnnc_comercial_funnel', '06 CIERRE', 6),
+                    ('rch_comercial_funnel', '01 SOSPECHOSO', 1),
+                    ('rch_comercial_funnel', '02 PROSPECTO', 2),
+                    ('rch_comercial_funnel', '03 NO APLICA', 3),
+                    ('rch_comercial_funnel', '04 SEGUIMIENTO', 4),
+                    ('rch_comercial_funnel', '05 APLICA NO CONTINUA', 5),
+                    ('rch_comercial_funnel', '06 CIERRE', 6),
                     ('rch_comercial_table', '01 CREACION DE DOCUMENTOS', 1),
                     ('rch_comercial_table', '02 RECOPILANDO DOCUMENTOS', 2),
                     ('rch_comercial_table', '03 REVISIÓN DE LÍDER', 3),
@@ -356,8 +368,12 @@ public static class BitrixDataQueries
             base AS (
                 SELECT
                     p.slug,
-                    UPPER(TRANSLATE(COALESCE(s.name, d.stage_id, ''),
-                        'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) AS normalized_stage,
+                    REGEXP_REPLACE(
+                        TRIM(UPPER(TRANSLATE(COALESCE(s.name, d.stage_id, ''),
+                            'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN'))),
+                        '[[:space:]]+',
+                        ' ',
+                        'g') AS normalized_stage,
                     COALESCE(s.name, d.stage_id, 'Sin etapa') AS original_stage,
                     d.opportunity,
                     COALESCE(s.sort_order, 9999) AS original_sort_order
@@ -470,6 +486,148 @@ public static class BitrixDataQueries
                     END AS sort_order
                 FROM base
                 WHERE slug IN ('pnnc_comercial', 'rch_comercial')
+
+                UNION ALL
+
+                SELECT
+                    'pnnc_comercial_funnel' AS slug,
+                    CASE
+                        WHEN normalized_stage IN (
+                            'PROSPECTOS REDES SOCIALES',
+                            'SETTER',
+                            'PROSPECTO INSOLVENCIA',
+                            'PRIMER CONTACTO',
+                            'PARA ASIGNAR',
+                            'PLAN RETOMA')
+                        THEN '01 SOSPECHOSO'
+                        WHEN normalized_stage IN ('CITA AGENDADA', 'REAGENDAR CITA')
+                        THEN '02 PROSPECTO'
+                        WHEN normalized_stage IN ('NO APLICA', 'ELIMINAR PROSPECTO')
+                        THEN '03 NO APLICA'
+                        WHEN normalized_stage IN (
+                            'EN SEGUIMIENTO',
+                            'SOLICITUDES Y CONSULTAS DATA',
+                            'CONSULTA REALIZADA',
+                            'LLAMADA DE CALIDAD',
+                            'RECOPILANDO DOCUMENTOS')
+                        THEN '04 SEGUIMIENTO'
+                        WHEN normalized_stage = 'APLICA NO CONTINUA'
+                        THEN '05 APLICA NO CONTINUA'
+                        WHEN normalized_stage IN (
+                            'ANTICIPO REALIZADO',
+                            'CUARENTENA',
+                            'REVISION DE LIDER',
+                            'PROCESO RADICADO PNNC')
+                        THEN '06 CIERRE'
+                    END AS stage,
+                    opportunity,
+                    CASE
+                        WHEN normalized_stage IN (
+                            'PROSPECTOS REDES SOCIALES',
+                            'SETTER',
+                            'PROSPECTO INSOLVENCIA',
+                            'PRIMER CONTACTO',
+                            'PARA ASIGNAR',
+                            'PLAN RETOMA')
+                        THEN 1
+                        WHEN normalized_stage IN ('CITA AGENDADA', 'REAGENDAR CITA')
+                        THEN 2
+                        WHEN normalized_stage IN ('NO APLICA', 'ELIMINAR PROSPECTO')
+                        THEN 3
+                        WHEN normalized_stage IN (
+                            'EN SEGUIMIENTO',
+                            'SOLICITUDES Y CONSULTAS DATA',
+                            'CONSULTA REALIZADA',
+                            'LLAMADA DE CALIDAD',
+                            'RECOPILANDO DOCUMENTOS')
+                        THEN 4
+                        WHEN normalized_stage = 'APLICA NO CONTINUA'
+                        THEN 5
+                        WHEN normalized_stage IN (
+                            'ANTICIPO REALIZADO',
+                            'CUARENTENA',
+                            'REVISION DE LIDER',
+                            'PROCESO RADICADO PNNC')
+                        THEN 6
+                    END AS sort_order
+                FROM base
+                WHERE slug = 'pnnc_comercial'
+
+                UNION ALL
+
+                SELECT
+                    'rch_comercial_funnel' AS slug,
+                    CASE
+                        WHEN normalized_stage IN (
+                            'PROSPECTO REDES SOCIALES RCH',
+                            'SETTER',
+                            'IMPOSIBLE CONTACTAR',
+                            'LLAMATON',
+                            'PLAN RETOMA',
+                            'NO CONTACTADO REINTENTAR',
+                            'CONTACTADO VOLVER A LLAMAR')
+                        THEN '01 SOSPECHOSO'
+                        WHEN normalized_stage IN (
+                            'CITA CALIFICACION',
+                            'REAGENDAR CITA',
+                            'INVITADO WEBINAR RCH',
+                            'SEGUIMIENTO SIN ESTUDIO',
+                            'SOLICITANDO EXTRACTO',
+                            'SOLICITUD DE ESTUDIO',
+                            'ESTUDIO REALIZADO',
+                            'SUSTENTACION')
+                        THEN '02 PROSPECTO'
+                        WHEN normalized_stage IN ('NO APLICA', 'ELIMINAR PROSPECTO')
+                        THEN '03 NO APLICA'
+                        WHEN normalized_stage = 'EN SEGUIMIENTO'
+                        THEN '04 SEGUIMIENTO'
+                        WHEN normalized_stage = 'APLICA NO CONTINUA'
+                        THEN '05 APLICA NO CONTINUA'
+                        WHEN normalized_stage IN (
+                            'CREACION DE DOCUMENTOS',
+                            'RECOPILANDO DOCUMENTOS',
+                            'CREACION Y REC DE DOC',
+                            'REVISION DE LIDER',
+                            'CASO RADICADO POR VALIDAR')
+                        THEN '06 CIERRE'
+                    END AS stage,
+                    opportunity,
+                    CASE
+                        WHEN normalized_stage IN (
+                            'PROSPECTO REDES SOCIALES RCH',
+                            'SETTER',
+                            'IMPOSIBLE CONTACTAR',
+                            'LLAMATON',
+                            'PLAN RETOMA',
+                            'NO CONTACTADO REINTENTAR',
+                            'CONTACTADO VOLVER A LLAMAR')
+                        THEN 1
+                        WHEN normalized_stage IN (
+                            'CITA CALIFICACION',
+                            'REAGENDAR CITA',
+                            'INVITADO WEBINAR RCH',
+                            'SEGUIMIENTO SIN ESTUDIO',
+                            'SOLICITANDO EXTRACTO',
+                            'SOLICITUD DE ESTUDIO',
+                            'ESTUDIO REALIZADO',
+                            'SUSTENTACION')
+                        THEN 2
+                        WHEN normalized_stage IN ('NO APLICA', 'ELIMINAR PROSPECTO')
+                        THEN 3
+                        WHEN normalized_stage = 'EN SEGUIMIENTO'
+                        THEN 4
+                        WHEN normalized_stage = 'APLICA NO CONTINUA'
+                        THEN 5
+                        WHEN normalized_stage IN (
+                            'CREACION DE DOCUMENTOS',
+                            'RECOPILANDO DOCUMENTOS',
+                            'CREACION Y REC DE DOC',
+                            'REVISION DE LIDER',
+                            'CASO RADICADO POR VALIDAR')
+                        THEN 6
+                    END AS sort_order
+                FROM base
+                WHERE slug = 'rch_comercial'
             ),
             aggregated AS (
                 SELECT

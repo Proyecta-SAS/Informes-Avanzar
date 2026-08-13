@@ -18,5 +18,7 @@ public interface IBitrixDealSyncService
         IReadOnlyList<string>? selectFields = null,
         bool reconcileMissing = true,
         string? entityTypeSuffix = null,
-        bool allowConcurrentWithOtherPipelines = false);
+        bool allowConcurrentWithOtherPipelines = false,
+        bool coreFieldsOnly = false,
+        int startAt = 0);
 }
