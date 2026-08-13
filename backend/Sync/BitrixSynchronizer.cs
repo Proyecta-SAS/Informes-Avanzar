@@ -52,4 +52,66 @@ public sealed class BitrixSynchronizer(
         }
     }
 
+    public async Task<IReadOnlyList<SyncResult>> RunCommercialNightlyAsync(CancellationToken cancellationToken)
+    {
+        var ownerId = $"{Environment.MachineName}:commercial-nightly:{Guid.NewGuid():N}";
+        var locked = await repository.TryAcquireGlobalLockAsync(ownerId, TimeSpan.FromHours(8), cancellationToken);
+
+        if (!locked)
+        {
+            throw new InvalidOperationException("Another global Bitrix synchronization is already running.");
+        }
+
+        try
+        {
+            var reportYear = GetCommercialSyncYear();
+            var createdFrom = new DateTimeOffset(reportYear, 1, 1, 0, 0, 0, TimeSpan.FromHours(-5));
+            var createdTo = createdFrom.AddYears(1).AddTicks(-1);
+            var results = new List<SyncResult>
+            {
+                await userSyncService.SyncUsersAsync(cancellationToken),
+                await stageSyncService.SyncStagesAsync(cancellationToken)
+            };
+
+            foreach (var pipelineSlug in new[] { "rch_comercial", "pnnc_comercial" })
+            {
+                results.Add(await dealSyncService.SyncPipelineDealsAsync(
+                    pipelineSlug,
+                    null,
+                    cancellationToken,
+                    SyncMode.Full,
+                    createdFrom: createdFrom,
+                    createdTo: createdTo,
+                    reconcileMissing: false,
+                    entityTypeSuffix: $"nightly-{reportYear}"));
+            }
+
+            foreach (var pipelineSlug in new[] { "rch_operativa", "pnnc_operativa" })
+            {
+                results.Add(await dealSyncService.SyncPipelineDealsAsync(
+                    pipelineSlug,
+                    null,
+                    cancellationToken,
+                    SyncMode.Full));
+            }
+
+            return results;
+        }
+        finally
+        {
+            await repository.ReleaseGlobalLockAsync(ownerId, CancellationToken.None);
+        }
+    }
+
+    private static int GetCommercialSyncYear()
+    {
+        var configuredYear = Environment.GetEnvironmentVariable("BITRIX_COMMERCIAL_SYNC_YEAR");
+        if (int.TryParse(configuredYear, out var parsedYear) && parsedYear is >= 2020 and <= 2100)
+        {
+            return parsedYear;
+        }
+
+        return DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).Year;
+    }
+
 }

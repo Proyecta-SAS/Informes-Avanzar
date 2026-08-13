@@ -16,26 +16,26 @@ public static class BitrixDataQueries
                 ('informes_bi_builder', 'Informes BI Builder', 224, 'comercial', 44, true),
                 ('ins_libranza', 'INS Libranza', 107, 'operaciones', 50, true),
                 ('ins_embargos', 'INS Embargos', 109, 'operaciones', 52, true),
-                ('pqrfs', 'PQRFS', 97, 'servicio_cliente', 55, true),
+                ('pqrfs', 'PQRFS', 97, 'servicio_cliente', 55, false),
                 ('seguros_operativa', 'Seguros Operativa', 256, 'seguros', 60, true),
                 ('seguros_comercial', 'Seguros Comercial', 278, 'seguros', 62, true),
                 ('cuentas_cobro', 'Cuentas de Cobro', 72, 'comercial', 70, true)
             ON CONFLICT DO NOTHING;
 
             UPDATE bitrix.pipelines pipeline
-            SET name = source.name, domain = source.domain, sync_order = source.sync_order, is_active = true
+            SET name = source.name, domain = source.domain, sync_order = source.sync_order, is_active = source.is_active
             FROM (VALUES
-                (30, '1116 Comercial', 'comercial', 41),
-                (32, '1116 Operativa', 'operaciones', 42),
-                (248, 'LP-2445 Operativa', 'operaciones', 43),
-                (224, 'Informes BI Builder', 'comercial', 44),
-                (107, 'INS Libranza', 'operaciones', 50),
-                (109, 'INS Embargos', 'operaciones', 52),
-                (97, 'PQRFS', 'servicio_cliente', 55),
-                (256, 'Seguros Operativa', 'seguros', 60),
-                (278, 'Seguros Comercial', 'seguros', 62),
-                (72, 'Cuentas de Cobro', 'comercial', 70)
-            ) AS source(category_id, name, domain, sync_order)
+                (30, '1116 Comercial', 'comercial', 41, true),
+                (32, '1116 Operativa', 'operaciones', 42, true),
+                (248, 'LP-2445 Operativa', 'operaciones', 43, true),
+                (224, 'Informes BI Builder', 'comercial', 44, true),
+                (107, 'INS Libranza', 'operaciones', 50, true),
+                (109, 'INS Embargos', 'operaciones', 52, true),
+                (97, 'PQRFS', 'servicio_cliente', 55, false),
+                (256, 'Seguros Operativa', 'seguros', 60, true),
+                (278, 'Seguros Comercial', 'seguros', 62, true),
+                (72, 'Cuentas de Cobro', 'comercial', 70, true)
+            ) AS source(category_id, name, domain, sync_order, is_active)
             WHERE pipeline.category_id = source.category_id;
 
             UPDATE bitrix.pipelines
@@ -264,76 +264,103 @@ public static class BitrixDataQueries
         CancellationToken cancellationToken)
     {
         const string advisorSql = """
+            WITH base_unificada AS (
+                SELECT
+                    COALESCE(
+                        NULLIF(TRIM(CONCAT_WS(' ', NULLIF(user_payload.payload ->> 'NAME', ''), NULLIF(user_payload.payload ->> 'LAST_NAME', ''))), ''),
+                        NULLIF(u.full_name, ''),
+                        d.assigned_by_bitrix_id,
+                        'Sin asesor'
+                    ) AS advisor,
+                    CASE
+                        WHEN p.category_id IN (8, 10) THEN 'RCH'
+                        WHEN p.category_id IN (26, 28) THEN 'Insolvencia'
+                    END AS line,
+                    CASE
+                        WHEN p.category_id IN (8, 26)
+                          AND (
+                              snapshot.custom_fields ->> 'UF_CRM_1737654190' = @yearText
+                              OR snapshot.custom_fields ->> 'UF_CRM_1737654190' = CASE @yearText
+                                  WHEN '2025' THEN '37058'
+                                  WHEN '2026' THEN '37060'
+                                  WHEN '2027' THEN '37062'
+                                  WHEN '2028' THEN '37064'
+                                  WHEN '2029' THEN '37066'
+                                  WHEN '2030' THEN '37068'
+                                  WHEN '2031' THEN '37070'
+                                  WHEN '2032' THEN '37072'
+                                  WHEN '2033' THEN '37074'
+                                  WHEN '2034' THEN '37076'
+                                  WHEN '2035' THEN '37078'
+                              END
+                          )
+                          AND (
+                              snapshot.custom_fields ->> 'UF_CRM_1648503084848' IN (
+                                  '16810', '16812', '39202', '39204', '39206', '39208',
+                                  '39210', '39212', '39214', '39216', '39218', '39220'
+                              )
+                              OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1648503084848', ''))
+                                  ~ '(ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|SEPTIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)'
+                          )
+                        THEN 'estudio'
+                        WHEN p.category_id IN (10, 28)
+                          AND (
+                              snapshot.custom_fields ->> 'UF_CRM_1737653376' = @yearText
+                              OR snapshot.custom_fields ->> 'UF_CRM_1737653376' = CASE @yearText
+                                  WHEN '2024' THEN '37206'
+                                  WHEN '2025' THEN '37036'
+                                  WHEN '2026' THEN '39138'
+                              END
+                          )
+                          AND (
+                              snapshot.custom_fields ->> 'UF_CRM_1676419915' IN (
+                                  '22560', '22562', '39144', '39146', '39148', '39150',
+                                  '39152', '39154', '39156', '39158', '39160', '39162'
+                              )
+                              OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', ''))
+                                  ~ '(ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|SEPTIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)'
+                          )
+                        THEN 'radicado'
+                    END AS tipo,
+                    d.opportunity
+                FROM bitrix.deals d
+                JOIN bitrix.pipelines p ON p.id = d.pipeline_id
+                JOIN bitrix.entity_snapshots snapshot
+                    ON snapshot.connection_id = d.connection_id
+                    AND snapshot.entity_type = 'deal'
+                    AND snapshot.bitrix_id = d.bitrix_id
+                    AND snapshot.is_deleted = false
+                LEFT JOIN bitrix.users u
+                    ON u.connection_id = d.connection_id
+                    AND u.bitrix_id = d.assigned_by_bitrix_id
+                LEFT JOIN bitrix.raw_payloads user_payload
+                    ON user_payload.id = u.raw_payload_id
+                WHERE p.category_id IN (8, 10, 26, 28)
+                  AND EXTRACT(YEAR FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @yearNumber
+            ),
+            line_summary AS (
+                SELECT
+                    advisor,
+                    line,
+                    COUNT(*) AS negotiations,
+                    COUNT(*) FILTER (WHERE tipo = 'estudio') AS commercial_cases,
+                    COUNT(*) FILTER (WHERE tipo = 'radicado') AS radicated_cases,
+                    COALESCE(SUM(opportunity), 0) AS total_value,
+                    COUNT(*) FILTER (WHERE tipo = 'estudio')::numeric / NULLIF(COUNT(*), 0) AS studies_rate,
+                    COUNT(*) FILTER (WHERE tipo = 'radicado')::numeric / NULLIF(COUNT(*) FILTER (WHERE tipo = 'estudio'), 0) AS closing_rate
+                FROM base_unificada
+                GROUP BY advisor, line
+            )
             SELECT
-                COALESCE(
-                    NULLIF(TRIM(CONCAT_WS(' ', NULLIF(user_payload.payload ->> 'NAME', ''), NULLIF(user_payload.payload ->> 'LAST_NAME', ''))), ''),
-                    NULLIF(u.full_name, ''),
-                    d.assigned_by_bitrix_id,
-                    'Sin asesor'
-                ) AS advisor,
-                COUNT(*) AS negotiations,
-                COUNT(*) FILTER (
-                    WHERE p.category_id IN (8, 26)
-                      AND (
-                          snapshot.custom_fields ->> 'UF_CRM_1737654190' = @yearText
-                          OR snapshot.custom_fields ->> 'UF_CRM_1737654190' = CASE @yearText
-                              WHEN '2025' THEN '37058'
-                              WHEN '2026' THEN '37060'
-                              WHEN '2027' THEN '37062'
-                              WHEN '2028' THEN '37064'
-                              WHEN '2029' THEN '37066'
-                              WHEN '2030' THEN '37068'
-                              WHEN '2031' THEN '37070'
-                              WHEN '2032' THEN '37072'
-                              WHEN '2033' THEN '37074'
-                              WHEN '2034' THEN '37076'
-                              WHEN '2035' THEN '37078'
-                          END
-                      )
-                      AND (
-                          snapshot.custom_fields ->> 'UF_CRM_1648503084848' IN (
-                              '16810', '16812', '39202', '39204', '39206', '39208',
-                              '39210', '39212', '39214', '39216', '39218', '39220'
-                          )
-                          OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1648503084848', ''))
-                              ~ '(ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|SEPTIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)'
-                      )
-                ) AS commercial_cases,
-                COUNT(*) FILTER (
-                    WHERE p.category_id IN (10, 28)
-                      AND (
-                          snapshot.custom_fields ->> 'UF_CRM_1737653376' = @yearText
-                          OR snapshot.custom_fields ->> 'UF_CRM_1737653376' = CASE @yearText
-                              WHEN '2024' THEN '37206'
-                              WHEN '2025' THEN '37036'
-                              WHEN '2026' THEN '39138'
-                          END
-                      )
-                      AND (
-                          snapshot.custom_fields ->> 'UF_CRM_1676419915' IN (
-                              '22560', '22562', '39144', '39146', '39148', '39150',
-                              '39152', '39154', '39156', '39158', '39160', '39162'
-                          )
-                          OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', ''))
-                              ~ '(ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|SEPTIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)'
-                      )
-                ) AS radicated_cases,
-                COALESCE(SUM(d.opportunity), 0) AS total_value
-            FROM bitrix.deals d
-            JOIN bitrix.pipelines p ON p.id = d.pipeline_id
-            JOIN bitrix.entity_snapshots snapshot
-                ON snapshot.connection_id = d.connection_id
-                AND snapshot.entity_type = 'deal'
-                AND snapshot.bitrix_id = d.bitrix_id
-                AND snapshot.is_deleted = false
-            LEFT JOIN bitrix.users u
-                ON u.connection_id = d.connection_id
-                AND u.bitrix_id = d.assigned_by_bitrix_id
-            LEFT JOIN bitrix.raw_payloads user_payload
-                ON user_payload.id = u.raw_payload_id
-            WHERE p.category_id IN (8, 10, 26, 28)
-              AND EXTRACT(YEAR FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @yearNumber
-            GROUP BY 1
+                advisor,
+                SUM(negotiations)::bigint AS negotiations,
+                SUM(commercial_cases)::bigint AS commercial_cases,
+                SUM(radicated_cases)::bigint AS radicated_cases,
+                COALESCE(SUM(total_value), 0) AS total_value,
+                COALESCE(SUM(studies_rate), 0) AS studies_rate,
+                SUM(closing_rate) AS closing_rate
+            FROM line_summary
+            GROUP BY advisor
             ORDER BY advisor;
             """;
 
@@ -806,7 +833,9 @@ public static class BitrixDataQueries
                     negotiations = reader.GetInt64(1),
                     commercialCases = reader.GetInt64(2),
                     radicatedCases = reader.GetInt64(3),
-                    totalValue = reader.GetDecimal(4)
+                    totalValue = reader.GetDecimal(4),
+                    studiesRate = reader.GetDecimal(5),
+                    closingRate = reader.IsDBNull(6) ? (decimal?)null : reader.GetDecimal(6)
                 });
             }
         }
@@ -1169,10 +1198,7 @@ public static class BitrixDataQueries
                     ON u.connection_id = d.connection_id
                     AND u.bitrix_id = d.assigned_by_bitrix_id
                 WHERE pipeline.category_id = 72
-                    AND UPPER(TRIM(stage.name)) IN (
-                        'CUENTA PAGADA CUENTAS DE COBRO',
-                        'VERIFICADO X PAGAR'
-                    )
+                    AND UPPER(TRIM(stage.name)) = 'CUENTA PAGADA CUENTAS DE COBRO'
                     AND d.bitrix_created_at IS NOT NULL
                     AND EXTRACT(YEAR FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @year
             )

@@ -1516,12 +1516,38 @@ if (!string.IsNullOrWhiteSpace(jobMode))
         return;
     }
 
+    if (normalizedJobMode == "commercial-nightly")
+    {
+        app.Logger.LogInformation("Starting Bitrix commercial nightly job.");
+        await using var commercialScope = app.Services.CreateAsyncScope();
+        var commercialSynchronizer = commercialScope.ServiceProvider.GetRequiredService<IBitrixSynchronizer>();
+        var commercialResults = await commercialSynchronizer.RunCommercialNightlyAsync(CancellationToken.None);
+
+        foreach (var result in commercialResults)
+        {
+            app.Logger.LogInformation(
+                "Bitrix commercial nightly result: {EntityType} {Status}, read {RecordsRead}, wrote {RecordsWritten}, error {ErrorMessage}",
+                result.EntityType,
+                result.Status,
+                result.RecordsRead,
+                result.RecordsWritten,
+                result.ErrorMessage);
+        }
+
+        if (commercialResults.Any(result => !string.Equals(result.Status, "succeeded", StringComparison.OrdinalIgnoreCase)))
+        {
+            Environment.ExitCode = 1;
+        }
+
+        return;
+    }
+
     var mode = normalizedJobMode switch
     {
         "full" => SyncMode.Full,
         "incremental" => SyncMode.Incremental,
         _ => throw new InvalidOperationException(
-            "BITRIX_SYNC_MODE must be 'full', 'incremental' or 'webhook-pending'.")
+            "BITRIX_SYNC_MODE must be 'full', 'incremental', 'webhook-pending' or 'commercial-nightly'.")
     };
 
     app.Logger.LogInformation("Starting Bitrix synchronization job in {Mode} mode.", mode);
