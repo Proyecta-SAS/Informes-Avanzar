@@ -368,6 +368,7 @@ public static class BitrixDataQueries
             base AS (
                 SELECT
                     p.slug,
+                    d.stage_id AS source_stage_id,
                     REGEXP_REPLACE(
                         TRIM(UPPER(TRANSLATE(COALESCE(s.name, d.stage_id, ''),
                             'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN'))),
@@ -387,6 +388,8 @@ public static class BitrixDataQueries
                 LEFT JOIN bitrix.pipeline_stages s
                     ON s.pipeline_id = p.id
                     AND s.bitrix_stage_id = d.stage_id
+                WHERE p.slug <> 'rch_operativa'
+                   OR (d.bitrix_created_at AT TIME ZONE 'America/Bogota')::date >= DATE '2025-01-01'
             ),
             classified AS (
                 SELECT
@@ -455,11 +458,12 @@ public static class BitrixDataQueries
                             END
                         WHEN slug = 'rch_comercial' THEN
                             CASE
-                                WHEN normalized_stage IN ('CREACION DE DOCUMENTOS', 'CREACION Y REC DE DOC')
+                                WHEN normalized_stage = 'CREACION DE DOCUMENTOS'
                                 THEN '01 CREACION DE DOCUMENTOS'
                                 WHEN normalized_stage = 'RECOPILANDO DOCUMENTOS'
                                 THEN '02 RECOPILANDO DOCUMENTOS'
-                                WHEN normalized_stage = 'REVISION DE LIDER'
+                                WHEN source_stage_id = 'C8:UC_2EQ41K'
+                                    OR normalized_stage = 'REVISION DE LIDER'
                                 THEN '03 REVISIÓN DE LÍDER'
                             END
                     END AS stage,
@@ -475,13 +479,14 @@ public static class BitrixDataQueries
                             AND normalized_stage = 'CUARENTENA'
                         THEN 3
                         WHEN slug = 'rch_comercial'
-                            AND normalized_stage IN ('CREACION DE DOCUMENTOS', 'CREACION Y REC DE DOC')
+                            AND normalized_stage = 'CREACION DE DOCUMENTOS'
                         THEN 1
                         WHEN slug = 'rch_comercial'
                             AND normalized_stage = 'RECOPILANDO DOCUMENTOS'
                         THEN 2
                         WHEN slug = 'rch_comercial'
-                            AND normalized_stage = 'REVISION DE LIDER'
+                            AND (source_stage_id = 'C8:UC_2EQ41K'
+                                OR normalized_stage = 'REVISION DE LIDER')
                         THEN 3
                     END AS sort_order
                 FROM base
@@ -674,6 +679,7 @@ public static class BitrixDataQueries
                 total_value,
                 sort_order
             FROM selected
+            WHERE NOT (slug = 'rch_operativa' AND cases = 0 AND total_value = 0)
             ORDER BY slug, sort_order, stage;
             """;
 

@@ -245,7 +245,9 @@ public sealed class BitrixDealSyncService(
         var recordsWritten = 0;
         DateTimeOffset? since = null;
         DateTimeOffset? cursor = null;
-        var effectiveCreatedFrom = mode == SyncMode.Full ? createdFrom ?? FullSyncCreatedFrom : (DateTimeOffset?)null;
+        var effectiveCreatedFrom = mode == SyncMode.Full
+            ? createdFrom ?? (string.IsNullOrWhiteSpace(stageId) ? FullSyncCreatedFrom : null)
+            : null;
         var effectiveCreatedTo = mode == SyncMode.Full ? createdTo : null;
         var effectiveSelectFields = selectFields
             ?? (coreFieldsOnly ? CoreBackfillFields : null);
