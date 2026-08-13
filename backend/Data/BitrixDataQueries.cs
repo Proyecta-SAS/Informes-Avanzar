@@ -886,6 +886,11 @@ public static class BitrixDataQueries
                 FROM bitrix.raw_payloads
                 WHERE entity_type = 'user'
                 ORDER BY connection_id, bitrix_id, received_at DESC
+            ), latest_deal_snapshots AS (
+                SELECT DISTINCT ON (connection_id, bitrix_id) connection_id, bitrix_id, is_deleted
+                FROM bitrix.entity_snapshots
+                WHERE entity_type = 'deal'
+                ORDER BY connection_id, bitrix_id, updated_at DESC, created_at DESC
             ), user_departments AS (
                 SELECT DISTINCT
                     u.connection_id,
@@ -934,10 +939,10 @@ public static class BitrixDataQueries
             ), classified AS (
                 SELECT
                     CASE
-                        WHEN UPPER(TRANSLATE(COALESCE(stage.name, deal.stage_id, ''), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) LIKE '%REVISION DE LIDER%' THEN '01 Revisión líder'
-                        WHEN UPPER(TRANSLATE(COALESCE(stage.name, deal.stage_id, ''), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) LIKE '%RADICACION POR VALIDAR%' THEN '02 Radicación por validar'
-                        WHEN UPPER(TRANSLATE(COALESCE(stage.name, deal.stage_id, ''), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) ~ '(DOCUMENTACION PENDIENTE COMERCIAL|DOCUMENTOS PENDIENTES)' THEN '03 Documentación pendiente'
-                        WHEN UPPER(TRANSLATE(COALESCE(stage.name, deal.stage_id, ''), 'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) ~ '(DOCUMENTACION SUBSANADA COMERCIAL|DOCUMENTOS SUBSANADOS|DOCUMENTOS SUBSANDADOS COMERCIAL)' THEN '04 Documentación subsanada'
+                        WHEN REGEXP_REPLACE(TRIM(UPPER(TRANSLATE(COALESCE(stage.name, deal.stage_id, ''), CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241), 'AEIOUUNAEIOUUN'))), '[[:space:]]+', ' ', 'g') IN ('REVISION DE LIDER') THEN '01 Revisi' || CHR(243) || 'n l' || CHR(237) || 'der'
+                        WHEN REGEXP_REPLACE(TRIM(UPPER(TRANSLATE(COALESCE(stage.name, deal.stage_id, ''), CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241), 'AEIOUUNAEIOUUN'))), '[[:space:]]+', ' ', 'g') IN ('RADICACION POR VALIDAR') THEN '02 Radicaci' || CHR(243) || 'n por validar'
+                        WHEN REGEXP_REPLACE(TRIM(UPPER(TRANSLATE(COALESCE(stage.name, deal.stage_id, ''), CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241), 'AEIOUUNAEIOUUN'))), '[[:space:]]+', ' ', 'g') IN ('DOCUMENTACION PENDIENTE COMERCIAL', 'DOCUMENTOS PENDIENTES') THEN '03 Documentaci' || CHR(243) || 'n pendiente'
+                        WHEN REGEXP_REPLACE(TRIM(UPPER(TRANSLATE(COALESCE(stage.name, deal.stage_id, ''), CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241), 'AEIOUUNAEIOUUN'))), '[[:space:]]+', ' ', 'g') IN ('DOCUMENTACION SUBSANADA COMERCIAL', 'DOCUMENTOS SUBSANADOS', 'DOCUMENTOS SUBSANDADOS COMERCIAL') THEN '04 Documentaci' || CHR(243) || 'n subsanada'
                     END AS stage,
                     CASE
                         WHEN pipeline.category_id IN (26, 28) THEN 'PNNC'
@@ -948,6 +953,10 @@ public static class BitrixDataQueries
                     COALESCE(deal.opportunity, 0) AS amount
                 FROM bitrix.deals deal
                 JOIN bitrix.pipelines pipeline ON pipeline.id = deal.pipeline_id
+                JOIN latest_deal_snapshots deal_snapshot
+                    ON deal_snapshot.connection_id = deal.connection_id
+                    AND deal_snapshot.bitrix_id = deal.bitrix_id
+                    AND deal_snapshot.is_deleted = false
                 LEFT JOIN bitrix.pipeline_stages stage
                     ON stage.pipeline_id = pipeline.id
                     AND stage.bitrix_stage_id = deal.stage_id
@@ -955,29 +964,41 @@ public static class BitrixDataQueries
                     ON assigned_user.connection_id = deal.connection_id
                     AND assigned_user.bitrix_id = deal.assigned_by_bitrix_id
                 WHERE pipeline.category_id IN (8, 10, 26, 28, 30, 32)
-                  AND EXTRACT(YEAR FROM deal.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @yearNumber
                   AND (@fromDate IS NULL OR (deal.bitrix_created_at AT TIME ZONE 'America/Bogota')::date >= @fromDate)
                   AND (@toDate IS NULL OR (deal.bitrix_created_at AT TIME ZONE 'America/Bogota')::date <= @toDate)
                   AND (@monthNumber IS NULL OR EXTRACT(MONTH FROM deal.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @monthNumber)
+            ), grouped AS (
+                SELECT
+                    hierarchy.commercial_line,
+                    hierarchy.leader,
+                    hierarchy.coordinator,
+                    hierarchy.pending_commercial_leader,
+                    classified.pipeline,
+                    classified.stage,
+                    classified.advisor,
+                    classified.amount,
+                    COUNT(*)::bigint AS cases
+                FROM classified
+                LEFT JOIN commercial_hierarchy hierarchy
+                    ON hierarchy.full_name = classified.advisor
+                    AND hierarchy.has_commercial_path
+                WHERE classified.stage IS NOT NULL
+                  AND classified.pipeline IS NOT NULL
+                GROUP BY hierarchy.commercial_line, hierarchy.leader, hierarchy.coordinator, hierarchy.pending_commercial_leader, classified.pipeline, classified.stage, classified.advisor, classified.amount
             )
             SELECT
-                hierarchy.commercial_line,
-                hierarchy.leader,
-                hierarchy.coordinator,
-                hierarchy.pending_commercial_leader,
-                classified.pipeline,
-                classified.stage,
-                classified.advisor,
-                COALESCE(SUM(classified.amount), 0) AS amount,
-                COUNT(*)::bigint AS cases
-            FROM classified
-            LEFT JOIN commercial_hierarchy hierarchy
-                ON hierarchy.full_name = classified.advisor
-                AND hierarchy.has_commercial_path
-            WHERE classified.stage IS NOT NULL
-              AND classified.pipeline IS NOT NULL
-            GROUP BY hierarchy.commercial_line, hierarchy.leader, hierarchy.coordinator, hierarchy.pending_commercial_leader, classified.pipeline, classified.stage, classified.advisor
-            ORDER BY classified.pipeline, classified.stage, classified.advisor;
+                commercial_line,
+                leader,
+                coordinator,
+                pending_commercial_leader,
+                pipeline,
+                stage,
+                advisor,
+                COALESCE(SUM(amount), 0) AS amount,
+                COALESCE(SUM(cases), 0)::bigint AS cases
+            FROM grouped
+            GROUP BY commercial_line, leader, coordinator, pending_commercial_leader, pipeline, stage, advisor
+            ORDER BY pipeline, stage, advisor;
             """;
 
         var advisors = new List<object>();
