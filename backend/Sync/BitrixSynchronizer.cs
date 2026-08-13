@@ -71,26 +71,21 @@ public sealed class BitrixSynchronizer(
 
             foreach (var pipelineSlug in new[] { "rch_comercial", "pnnc_comercial" })
             {
-                results.Add(await dealSyncService.SyncPipelineDealsAsync(
+                results.AddRange(await SyncPipelineWithTransientRetriesAsync(
                     pipelineSlug,
-                    null,
                     cancellationToken,
-                    SyncMode.Full,
-                    createdFrom: createdFrom,
-                    createdTo: createdTo,
+                    createdFrom,
+                    createdTo,
                     reconcileMissing: false,
-                    entityTypeSuffix: $"nightly-{reportYear}",
-                    allowConcurrentWithOtherPipelines: true));
+                    entityTypeSuffix: $"nightly-{reportYear}"));
             }
 
             foreach (var pipelineSlug in new[] { "rch_operativa", "pnnc_operativa" })
             {
-                results.Add(await dealSyncService.SyncPipelineDealsAsync(
+                results.AddRange(await SyncPipelineWithTransientRetriesAsync(
                     pipelineSlug,
-                    null,
                     cancellationToken,
-                    SyncMode.Full,
-                    allowConcurrentWithOtherPipelines: true));
+                    reconcileMissing: true));
             }
 
             return results;
@@ -99,6 +94,59 @@ public sealed class BitrixSynchronizer(
         {
             await repository.ReleaseGlobalLockAsync(ownerId, CancellationToken.None);
         }
+    }
+
+    private async Task<IReadOnlyList<SyncResult>> SyncPipelineWithTransientRetriesAsync(
+        string pipelineSlug,
+        CancellationToken cancellationToken,
+        DateTimeOffset? createdFrom = null,
+        DateTimeOffset? createdTo = null,
+        bool reconcileMissing = true,
+        string? entityTypeSuffix = null)
+    {
+        var results = new List<SyncResult>();
+        var startAt = 0;
+
+        for (var attempt = 1; attempt <= 3; attempt++)
+        {
+            var result = await dealSyncService.SyncPipelineDealsAsync(
+                pipelineSlug,
+                null,
+                cancellationToken,
+                SyncMode.Full,
+                createdFrom: createdFrom,
+                createdTo: createdTo,
+                reconcileMissing: reconcileMissing,
+                entityTypeSuffix: entityTypeSuffix,
+                allowConcurrentWithOtherPipelines: true,
+                startAt: startAt);
+
+            results.Add(result);
+            if (result.Status == "succeeded" || !IsTransientSyncError(result.ErrorMessage) || result.RecordsRead <= startAt)
+            {
+                return results;
+            }
+
+            startAt = reconcileMissing
+                ? 0
+                : Math.Max(startAt, result.RecordsRead / 50 * 50);
+            await Task.Delay(TimeSpan.FromSeconds(15 * attempt), cancellationToken);
+        }
+
+        return results;
+    }
+
+    private static bool IsTransientSyncError(string? errorMessage)
+    {
+        if (string.IsNullOrWhiteSpace(errorMessage))
+        {
+            return false;
+        }
+
+        return errorMessage.Contains("Exception while reading from stream", StringComparison.OrdinalIgnoreCase)
+            || errorMessage.Contains("connection reset", StringComparison.OrdinalIgnoreCase)
+            || errorMessage.Contains("timeout", StringComparison.OrdinalIgnoreCase)
+            || errorMessage.Contains("temporarily", StringComparison.OrdinalIgnoreCase);
     }
 
     private static int GetCommercialSyncYear()
