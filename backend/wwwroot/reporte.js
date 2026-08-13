@@ -317,6 +317,26 @@ let customerServiceWithdrawals = {
   rchDetail: []
 };
 let customerServiceSummary = { compliance: 0, received: 0 };
+let diegoHierarchyLoaded = false;
+let diegoCommercialDataLoaded = false;
+let diegoManualRefreshRequested = false;
+
+const markCommercialViewPending = () => {
+  if (["fuerza_comercial_diego", "informe_general_comercial"].includes(reportId)) {
+    setText("reportStatus", diegoCommercialDataLoaded ? "Pendiente" : "Sin cargar");
+  }
+};
+
+const ensureDiegoFilterHierarchy = async () => {
+  if (diegoHierarchyLoaded) return;
+  try {
+    await loadDiegoFilterHierarchy();
+  } catch (error) {
+    console.warn("La jerarquÃ­a comercial aÃºn no estÃ¡ disponible; el informe continuarÃ¡ cargando sus tablas.", error);
+    commercialHierarchy = [];
+  }
+  diegoHierarchyLoaded = true;
+};
 
 
 const loadDiegoRadicatedValues = async () => {
@@ -944,6 +964,7 @@ const loadDiegoLeadershipAndCommissions = async () => {
 };
 
 const loadDiegoFilterHierarchy = async () => {
+  if (!diegoManualRefreshRequested) return;
   const response = await fetch("/api/reports/fuerza-comercial-diego/jerarquia-filtros");
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
@@ -1020,12 +1041,21 @@ const getDiegoCommercialQueryString = () => {
 };
 
 const reloadDiegoCommercialData = async () => {
+  if (!diegoManualRefreshRequested) {
+    diegoCommercialDataLoaded = false;
+    setText("reportStatus", "Sin cargar");
+    document.querySelectorAll("#diegoSections .empty-block, #diegoSections .radicated-values").forEach((block) => {
+      block.innerHTML = `<div class="empty-block"><strong>Vista sin cargar</strong><span>Use Actualizar vista para consultar los datos.</span></div>`;
+    });
+    return;
+  }
   await Promise.all([
     loadDiegoRadicatedValues(),
     loadDiegoDashboardData(),
     loadDiegoPortfolioCollections(),
     loadDiegoLeadershipAndCommissions()
   ]);
+  diegoCommercialDataLoaded = true;
   setupDiegoFilters();
   if (reportId === "informe_general_comercial") applyGeneralCommercialLabels();
 };
@@ -1217,7 +1247,8 @@ const setupDiegoFilters = () => {
     if (select.dataset.bound === "true") return;
     select.addEventListener("change", async () => {
       if (id === "diegoMonth") {
-        await reloadDiegoCommercialData();
+        applyDiegoFilters();
+        markCommercialViewPending();
         return;
       }
       if (id === "diegoLine") {
@@ -1241,7 +1272,10 @@ const setupDiegoFilters = () => {
   ["diegoDateFrom", "diegoDateTo"].forEach((id) => {
     const input = document.getElementById(id);
     if (!input || input.dataset.bound === "true") return;
-    input.addEventListener("change", reloadDiegoCommercialData);
+    input.addEventListener("change", () => {
+      applyDiegoFilters();
+      markCommercialViewPending();
+    });
     input.dataset.bound = "true";
   });
   applyDiegoFilters();
@@ -1263,8 +1297,8 @@ const clearDiegoFilters = async () => {
   document.getElementById("diegoLeader").value = "all";
   document.getElementById("diegoAdvisor").value = "all";
   clearFilterOptionSearches(["diegoCoordinator", "diegoLeader", "diegoAdvisor"]);
-  if (hadServerFilters) await reloadDiegoCommercialData();
-  else setupDiegoFilters();
+  setupDiegoFilters();
+  if (hadServerFilters) markCommercialViewPending();
 };
 
 const loadGerenciaCompliance = async () => {
@@ -4438,7 +4472,7 @@ const load = async () => {
     const filterPanel = document.querySelector("#diegoDashboard .diego-filters");
     const filterToggle = document.getElementById("toggleDiegoFilters");
     setupFilterDrawer(filterPanel, filterToggle);
-    document.getElementById("diegoYear").addEventListener("change", reloadDiegoCommercialData);
+    document.getElementById("diegoYear").addEventListener("change", markCommercialViewPending);
     await reloadDiegoCommercialData();
     return;
   }
@@ -4619,7 +4653,9 @@ const updateReportView = async () => {
   setText("reportStatus", "Leyendo");
   try {
     if (["fuerza_comercial_diego", "informe_general_comercial"].includes(reportId)) {
-      await Promise.all([loadDiegoRadicatedValues(), loadDiegoDashboardData()]);
+      diegoManualRefreshRequested = true;
+      await ensureDiegoFilterHierarchy();
+      await reloadDiegoCommercialData();
     } else if (reportId === "informe_gerencia_2026_2027") {
       await loadGerenciaReportData();
     } else {

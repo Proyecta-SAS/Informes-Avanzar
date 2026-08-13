@@ -150,7 +150,24 @@ public static class BitrixDataQueries
         CancellationToken cancellationToken)
     {
         const string sql = """
-            WITH radicated AS (
+            WITH latest_users AS (
+                SELECT DISTINCT ON (connection_id, bitrix_id)
+                    connection_id,
+                    bitrix_id,
+                    payload
+                FROM bitrix.raw_payloads
+                WHERE entity_type = 'user'
+                ORDER BY connection_id, bitrix_id, received_at DESC
+            ), latest_snapshots AS (
+                SELECT DISTINCT ON (connection_id, bitrix_id)
+                    connection_id,
+                    bitrix_id,
+                    custom_fields
+                FROM bitrix.entity_snapshots
+                WHERE entity_type = 'deal'
+                  AND is_deleted = false
+                ORDER BY connection_id, bitrix_id, updated_at DESC
+            ), radicated AS (
                 SELECT
                     CASE
                         WHEN s.custom_fields ->> 'UF_CRM_1676419915' = '22560' OR UPPER(COALESCE(s.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%ENERO%' THEN '01 ENE'
@@ -172,21 +189,30 @@ public static class BitrixDataQueries
                         WHEN p.category_id = 32 THEN '1116'
                         WHEN p.category_id = 248 THEN 'LP-2445'
                     END AS pipeline,
-                    COALESCE(NULLIF(u.full_name, ''), d.assigned_by_bitrix_id, 'Sin asesor') AS advisor,
+                    COALESCE(
+                        NULLIF(TRIM(CONCAT_WS(' ',
+                            NULLIF(assigned_payload.payload ->> 'NAME', ''),
+                            NULLIF(assigned_payload.payload ->> 'LAST_NAME', '')
+                        )), ''),
+                        NULLIF(u.full_name, ''),
+                        d.assigned_by_bitrix_id,
+                        'Sin asesor'
+                    ) AS advisor,
                     d.opportunity AS amount
                 FROM bitrix.deals d
                 INNER JOIN bitrix.pipelines p ON p.id = d.pipeline_id
-                INNER JOIN bitrix.entity_snapshots s
+                INNER JOIN latest_snapshots s
                     ON s.connection_id = d.connection_id
-                    AND s.entity_type = 'deal'
                     AND s.bitrix_id = d.bitrix_id
-                    AND s.is_deleted = false
+                LEFT JOIN latest_users assigned_payload
+                    ON assigned_payload.connection_id = d.connection_id
+                    AND assigned_payload.bitrix_id = d.assigned_by_bitrix_id
                 LEFT JOIN bitrix.users u
                     ON u.connection_id = d.connection_id
                     AND u.bitrix_id = d.assigned_by_bitrix_id
                 WHERE
                     (
-                        p.category_id IN (10, 28, 32, 248)
+                        p.category_id IN (10, 28)
                     )
                     AND (
                         s.custom_fields ->> 'UF_CRM_1737653376' = @year
@@ -195,6 +221,17 @@ public static class BitrixDataQueries
                             WHEN '2025' THEN '37036'
                             WHEN '2026' THEN '39138'
                         END
+                    )
+                    AND (
+                        (
+                            p.category_id = 10
+                            AND NULLIF(s.custom_fields ->> 'UF_CRM_1628266963127', '') IS NOT NULL
+                        )
+                        OR
+                        (
+                            p.category_id = 28
+                            AND NULLIF(s.custom_fields ->> 'UF_CRM_1590601503', '') IS NOT NULL
+                        )
                     )
             )
             SELECT month, pipeline, advisor, COALESCE(SUM(amount), 0) AS total_achieved
@@ -1482,9 +1519,18 @@ public static class BitrixDataQueries
                         WHEN source.payload ->> 'UF_CRM_1676419915' = '39162' OR UPPER(COALESCE(source.payload ->> 'UF_CRM_1676419915', '')) LIKE '%DICIEMBRE%' THEN '12 DIC'
                     END AS month,
                     source.payload ->> 'ASSIGNED_BY_ID' AS advisor_id,
-                    COALESCE(NULLIF(assigned_user.full_name, ''), source.payload ->> 'ASSIGNED_BY_ID') AS advisor,
+                    COALESCE(
+                        NULLIF(TRIM(CONCAT_WS(' ',
+                            NULLIF(assigned_payload.payload ->> 'NAME', ''),
+                            NULLIF(assigned_payload.payload ->> 'LAST_NAME', '')
+                        )), ''),
+                        NULLIF(assigned_user.full_name, ''),
+                        source.payload ->> 'ASSIGNED_BY_ID'
+                    ) AS advisor,
                     SUM(COALESCE(NULLIF(source.payload ->> 'OPPORTUNITY', '')::numeric, 0)) AS total_achieved
                 FROM source_deals source
+                LEFT JOIN latest_users assigned_payload
+                    ON assigned_payload.bitrix_id = source.payload ->> 'ASSIGNED_BY_ID'
                 LEFT JOIN bitrix.users assigned_user
                     ON assigned_user.bitrix_id = source.payload ->> 'ASSIGNED_BY_ID'
                 WHERE source.payload ->> 'CATEGORY_ID' IN ('10', '28', '32', '248')
@@ -1495,6 +1541,17 @@ public static class BitrixDataQueries
                             WHEN '2025' THEN '37036'
                             WHEN '2026' THEN '39138'
                         END
+                    )
+                    AND (
+                        (
+                            source.payload ->> 'CATEGORY_ID' = '10'
+                            AND NULLIF(source.payload ->> 'UF_CRM_1628266963127', '') IS NOT NULL
+                        )
+                        OR
+                        (
+                            source.payload ->> 'CATEGORY_ID' = '28'
+                            AND NULLIF(source.payload ->> 'UF_CRM_1590601503', '') IS NOT NULL
+                        )
                     )
                 GROUP BY 1, 2, 3
             )
@@ -1630,21 +1687,27 @@ public static class BitrixDataQueries
             WITH commissions AS (
                 SELECT
                     EXTRACT(MONTH FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int AS month_number,
-                    COALESCE(NULLIF(u.full_name, ''), d.assigned_by_bitrix_id, 'Sin asesor') AS advisor,
+                    COALESCE(
+                        NULLIF(TRIM(CONCAT_WS(' ',
+                            NULLIF(user_payload.payload ->> 'NAME', ''),
+                            NULLIF(user_payload.payload ->> 'LAST_NAME', '')
+                        )), ''),
+                        NULLIF(u.full_name, ''),
+                        d.assigned_by_bitrix_id,
+                        'Sin asesor'
+                    ) AS advisor,
                     COALESCE(d.opportunity, 0) AS amount
                 FROM bitrix.deals d
                 JOIN bitrix.pipelines pipeline ON pipeline.id = d.pipeline_id
                 JOIN bitrix.pipeline_stages stage
                     ON stage.pipeline_id = pipeline.id
                     AND stage.bitrix_stage_id = d.stage_id
-                JOIN bitrix.entity_snapshots snapshot
-                    ON snapshot.connection_id = d.connection_id
-                    AND snapshot.entity_type = 'deal'
-                    AND snapshot.bitrix_id = d.bitrix_id
-                    AND snapshot.is_deleted = false
                 LEFT JOIN bitrix.users u
                     ON u.connection_id = d.connection_id
                     AND u.bitrix_id = d.assigned_by_bitrix_id
+                LEFT JOIN latest_users user_payload
+                    ON user_payload.connection_id = d.connection_id
+                    AND user_payload.bitrix_id = d.assigned_by_bitrix_id
                 WHERE pipeline.category_id = 72
                     AND UPPER(TRIM(stage.name)) = 'CUENTA PAGADA CUENTAS DE COBRO'
                     AND d.bitrix_created_at IS NOT NULL
@@ -1672,8 +1735,7 @@ public static class BitrixDataQueries
                 COALESCE(SUM(amount), 0) AS total
             FROM commissions
             GROUP BY month_number, advisor
-            ORDER BY total DESC, month_number, advisor
-            LIMIT 1000;
+            ORDER BY total DESC, month_number, advisor;
             """;
 
         const string relationshipsSql = """
