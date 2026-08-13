@@ -67,11 +67,7 @@ public sealed class BitrixSynchronizer(
             var reportYear = GetCommercialSyncYear();
             var createdFrom = new DateTimeOffset(reportYear, 1, 1, 0, 0, 0, TimeSpan.FromHours(-5));
             var createdTo = createdFrom.AddYears(1).AddTicks(-1);
-            var results = new List<SyncResult>
-            {
-                await userSyncService.SyncUsersAsync(cancellationToken),
-                await stageSyncService.SyncStagesAsync(cancellationToken)
-            };
+            var results = new List<SyncResult>();
 
             foreach (var pipelineSlug in new[] { "rch_comercial", "pnnc_comercial" })
             {
