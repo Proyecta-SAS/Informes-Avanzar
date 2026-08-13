@@ -79,7 +79,8 @@ public sealed class BitrixSynchronizer(
                     createdFrom: createdFrom,
                     createdTo: createdTo,
                     reconcileMissing: false,
-                    entityTypeSuffix: $"nightly-{reportYear}"));
+                    entityTypeSuffix: $"nightly-{reportYear}",
+                    allowConcurrentWithOtherPipelines: true));
             }
 
             foreach (var pipelineSlug in new[] { "rch_operativa", "pnnc_operativa" })
@@ -88,7 +89,8 @@ public sealed class BitrixSynchronizer(
                     pipelineSlug,
                     null,
                     cancellationToken,
-                    SyncMode.Full));
+                    SyncMode.Full,
+                    allowConcurrentWithOtherPipelines: true));
             }
 
             return results;
