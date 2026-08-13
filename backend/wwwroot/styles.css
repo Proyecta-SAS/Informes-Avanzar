@@ -1740,6 +1740,27 @@ main.app .radicated-total {
   font-weight: 800;
 }
 
+.filter-date-range {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px 8px;
+}
+
+.filter-date-range > span {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.diego-filters .filter-date-range label {
+  gap: 5px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .diego-filters select,
 .diego-filters input {
   width: 100%;
@@ -1756,6 +1777,70 @@ main.app .radicated-total {
 .diego-filters input:hover { border-color: #a9b7ca; background-color: #fff; }
 .diego-filters select:focus,
 .diego-filters input:focus { outline: none; border-color: #8d2944; box-shadow: 0 0 0 3px rgba(169, 22, 50, .1); background-color: #fff; }
+.filter-combobox {
+  position: relative;
+  display: block;
+}
+.filter-combobox-native {
+  display: none;
+}
+.diego-filters .filter-combobox-input {
+  padding-right: 32px;
+  background-image: linear-gradient(45deg, transparent 50%, #63748b 50%), linear-gradient(135deg, #63748b 50%, transparent 50%);
+  background-position: calc(100% - 18px) 18px, calc(100% - 13px) 18px;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.filter-combobox-list {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  left: 0;
+  z-index: 120;
+  display: none;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid #cfd9e6;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 12px 26px rgba(31, 55, 91, .14);
+  padding: 5px;
+}
+.filter-combobox.is-open .filter-combobox-list {
+  display: grid;
+  gap: 2px;
+}
+.filter-combobox-list button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  box-shadow: none;
+  color: #24364d;
+  padding: 7px 9px;
+  font-size: 12px;
+  font-weight: 750;
+  text-align: left;
+}
+.filter-combobox-list button:hover,
+.filter-combobox-list button.is-selected {
+  background: #f2f5f9;
+  color: #8d2944;
+}
+.filter-combobox-empty {
+  padding: 10px;
+  color: #7b8da5;
+  font-size: 12px;
+  font-weight: 800;
+}
+.filter-combobox-input:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
 .clear-report-filters { display: inline-flex; min-width: 150px; height: 40px; align-items: center; justify-content: center; gap: 7px; border: 1px solid #d8b9c2; border-radius: 10px; background: #fff8fa; color: #9f1832; padding: 0 15px; font-size: 12px; font-weight: 900; white-space: nowrap; cursor: pointer; transition: background .18s ease, border-color .18s ease, transform .18s ease; }
 .clear-report-filters:hover { border-color: #b21b38; background: #fff; transform: translateY(-1px); }
 .clear-report-filters:focus-visible { outline: 3px solid rgba(169, 22, 50, .14); outline-offset: 2px; }

@@ -313,10 +313,10 @@ let customerServiceSummary = { compliance: 0, received: 0 };
 
 const loadDiegoRadicatedValues = async () => {
   const container = document.getElementById("diegoValoresRadicados");
-  const year = document.getElementById("diegoYear").value;
+  const queryString = getDiegoCommercialQueryString();
 
   try {
-    const response = await fetch(`/api/reports/fuerza-comercial-diego/valores-radicados?year=${encodeURIComponent(year)}`);
+    const response = await fetch(`/api/reports/fuerza-comercial-diego/valores-radicados?${queryString}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     if (teamScope) data.items = (data.items ?? []).filter((item) => isTeamMember(item.advisor));
@@ -745,8 +745,8 @@ const renderGeneralManagement = () => {
 };
 
 const loadDiegoDashboardData = async () => {
-  const year = document.getElementById("diegoYear").value;
-  const response = await fetch(`/api/reports/fuerza-comercial-diego/dashboard?year=${encodeURIComponent(year)}`);
+  const queryString = getDiegoCommercialQueryString();
+  const response = await fetch(`/api/reports/fuerza-comercial-diego/dashboard?${queryString}`);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
   if (teamScope) {
@@ -795,8 +795,8 @@ const loadDiegoDashboardData = async () => {
 };
 
 const loadDiegoPortfolioCollections = async () => {
-  const year = document.getElementById("diegoYear").value;
-  const response = await fetch(`/api/reports/fuerza-comercial-diego/cartera-recaudada?year=${encodeURIComponent(year)}`);
+  const queryString = getDiegoCommercialQueryString();
+  const response = await fetch(`/api/reports/fuerza-comercial-diego/cartera-recaudada?${queryString}`);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
   if (teamScope) {
@@ -824,8 +824,8 @@ const loadDiegoPortfolioCollections = async () => {
 };
 
 const loadDiegoLeadershipAndCommissions = async () => {
-  const year = document.getElementById("diegoYear").value;
-  const response = await fetch(`/api/reports/fuerza-comercial-diego/liderazgo-comisiones?year=${encodeURIComponent(year)}`);
+  const queryString = getDiegoCommercialQueryString();
+  const response = await fetch(`/api/reports/fuerza-comercial-diego/liderazgo-comisiones?${queryString}`);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
   data.coordinatorValues = data.coordinatorValues ?? [];
@@ -914,6 +914,60 @@ const fillFilterOptions = (id, values) => {
     select.append(option);
   });
   if ([...select.options].some((option) => option.value === previous)) select.value = previous;
+  enhanceSearchableFilterSelect(select);
+};
+
+const getDiegoCommercialQueryString = () => {
+  const params = new URLSearchParams();
+  params.set("year", document.getElementById("diegoYear")?.value ?? "2026");
+  let dateFrom = document.getElementById("diegoDateFrom")?.value;
+  let dateTo = document.getElementById("diegoDateTo")?.value;
+  const month = document.getElementById("diegoMonth")?.value;
+  if (dateFrom && dateTo && dateFrom > dateTo) [dateFrom, dateTo] = [dateTo, dateFrom];
+  if (dateFrom) params.set("from", dateFrom);
+  if (dateTo) params.set("to", dateTo);
+  if (month && month !== "all") params.set("month", month);
+  return params.toString();
+};
+
+const reloadDiegoCommercialData = async () => {
+  await Promise.all([
+    loadDiegoRadicatedValues(),
+    loadDiegoDashboardData(),
+    loadDiegoPortfolioCollections(),
+    loadDiegoLeadershipAndCommissions()
+  ]);
+  setupDiegoFilters();
+  if (reportId === "informe_general_comercial") applyGeneralCommercialLabels();
+};
+
+const parseDateInputValue = (value) => {
+  if (!value) return null;
+  const parts = value.split("-").map((part) => Number.parseInt(part, 10));
+  if (parts.length !== 3 || parts.some((part) => !Number.isFinite(part))) return null;
+  return new Date(parts[0], parts[1] - 1, parts[2]);
+};
+
+const getDiegoDateRange = () => {
+  const from = parseDateInputValue(document.getElementById("diegoDateFrom")?.value ?? "");
+  const to = parseDateInputValue(document.getElementById("diegoDateTo")?.value ?? "");
+  if (from && to && from > to) return { from: to, to: from };
+  return { from, to };
+};
+
+const getMonthCodeFromText = (value = "") => {
+  const match = String(value).trim().match(/^(\d{1,2})/);
+  return match ? match[1].padStart(2, "0") : "";
+};
+
+const diegoMonthMatchesDateRange = (monthValue, range) => {
+  if (!range.from && !range.to) return true;
+  const monthNumber = Number.parseInt(getMonthCodeFromText(monthValue), 10);
+  if (!Number.isFinite(monthNumber) || monthNumber < 1 || monthNumber > 12) return true;
+  const year = Number.parseInt(document.getElementById("diegoYear")?.value ?? "2026", 10);
+  const monthStart = new Date(year, monthNumber - 1, 1);
+  const monthEnd = new Date(year, monthNumber, 0, 23, 59, 59, 999);
+  return (!range.from || monthEnd >= range.from) && (!range.to || monthStart <= range.to);
 };
 
 const applyDiegoFilters = () => {
@@ -926,6 +980,8 @@ const applyDiegoFilters = () => {
   };
   const selectedLine = document.getElementById("diegoLine").value;
   const selectedMonth = document.getElementById("diegoMonth").value;
+  const selectedDateRange = getDiegoDateRange();
+  const monthMatchesDateRange = (monthValue) => diegoMonthMatchesDateRange(monthValue, selectedDateRange);
   const selectedPendingLeader = "all";
   const selectedHierarchy = hierarchySelection();
   const hierarchyIndexes = {
@@ -975,9 +1031,11 @@ const applyDiegoFilters = () => {
 
     const table = block.querySelector("table");
     if (!table) return;
-    if (table.classList.contains("radicated-matrix") || table.classList.contains("monthly-matrix")) {
+    const hasMonthlyCells = table.classList.contains("radicated-matrix") || table.classList.contains("monthly-matrix");
+    if (hasMonthlyCells) {
       table.querySelectorAll("[data-month]").forEach((cell) => {
-        cell.hidden = selectedMonth !== "all" && cell.dataset.month !== selectedMonth;
+        cell.hidden = (selectedMonth !== "all" && cell.dataset.month !== selectedMonth)
+          || !monthMatchesDateRange(cell.dataset.month);
       });
     }
     const headers = [...table.querySelectorAll("thead th")].map((header) => header.textContent.trim());
@@ -1010,12 +1068,16 @@ const applyDiegoFilters = () => {
       const matchesRelatedTeam = !hasHierarchyIdentity || belongsToSelectedHierarchy(rowAdvisor, rowLeader, rowCoordinator);
       const stageIndex = headers.findIndex((header) => normalizeFilterText(header).startsWith("etapa"));
       const stageValue = stageIndex >= 0 ? normalizeFilterText(row.children[stageIndex]?.textContent ?? "") : "";
+      const rowMonthIndex = headers.indexOf("Mes");
+      const matchesDateRange = rowMonthIndex < 0 || monthMatchesDateRange(row.children[rowMonthIndex]?.textContent ?? "");
+      const matchesVisibleMonthCells = !hasMonthlyCells
+        || [...row.querySelectorAll("[data-month]")].some((cell) => !cell.hidden && cell.textContent.trim());
       const isPendingLeader = stageValue.includes("lider") || stageValue.includes("líder");
       const matchesPendingLeader = selectedPendingLeader === "all"
         || stageIndex < 0
         || (selectedPendingLeader === "pending" ? isPendingLeader : !isPendingLeader);
-      row.hidden = !(matches && matchesPendingLeader && matchesRelatedTeam);
-      if (matches && matchesPendingLeader && matchesRelatedTeam) visibleRows += 1;
+      row.hidden = !(matches && matchesDateRange && matchesVisibleMonthCells && matchesPendingLeader && matchesRelatedTeam);
+      if (matches && matchesDateRange && matchesVisibleMonthCells && matchesPendingLeader && matchesRelatedTeam) visibleRows += 1;
     });
 
     const badge = block.querySelector(".diego-block-title em");
@@ -1045,24 +1107,38 @@ const setupDiegoFilters = () => {
   advisorSelect.title = hasAdvisorScope
     ? "Filtrar por asesor"
     : "Seleccione primero una línea, un coordinador o un líder";
+  enhanceSearchableFilterSelect(advisorSelect);
   ["diegoMonth", "diegoLine", "diegoAdvisor", "diegoLeader", "diegoCoordinator"].forEach((id) => {
     const select = document.getElementById(id);
     if (select.dataset.bound === "true") return;
-    select.addEventListener("change", () => {
+    select.addEventListener("change", async () => {
+      if (id === "diegoMonth") {
+        await reloadDiegoCommercialData();
+        return;
+      }
       if (id === "diegoLine") {
         document.getElementById("diegoCoordinator").value = "all";
         document.getElementById("diegoLeader").value = "all";
         document.getElementById("diegoAdvisor").value = "all";
+        clearFilterOptionSearches(["diegoCoordinator", "diegoLeader", "diegoAdvisor"]);
       } else if (id === "diegoCoordinator") {
         document.getElementById("diegoLeader").value = "all";
         document.getElementById("diegoAdvisor").value = "all";
+        clearFilterOptionSearches(["diegoLeader", "diegoAdvisor"]);
       } else if (id === "diegoLeader") {
         document.getElementById("diegoAdvisor").value = "all";
+        clearFilterOptionSearches(["diegoAdvisor"]);
       }
       if (["diegoLine", "diegoCoordinator", "diegoLeader"].includes(id)) setupDiegoFilters();
       else applyDiegoFilters();
     });
     select.dataset.bound = "true";
+  });
+  ["diegoDateFrom", "diegoDateTo"].forEach((id) => {
+    const input = document.getElementById(id);
+    if (!input || input.dataset.bound === "true") return;
+    input.addEventListener("change", reloadDiegoCommercialData);
+    input.dataset.bound = "true";
   });
   applyDiegoFilters();
 };
@@ -1070,16 +1146,21 @@ const setupDiegoFilters = () => {
 const clearDiegoFilters = async () => {
   const year = document.getElementById("diegoYear");
   const yearChanged = year.value !== "2026";
+  const hadServerFilters = yearChanged
+    || document.getElementById("diegoMonth").value !== "all"
+    || Boolean(document.getElementById("diegoDateFrom").value)
+    || Boolean(document.getElementById("diegoDateTo").value);
   year.value = "2026";
   document.getElementById("diegoMonth").value = "all";
+  document.getElementById("diegoDateFrom").value = "";
+  document.getElementById("diegoDateTo").value = "";
   document.getElementById("diegoLine").value = "all";
   document.getElementById("diegoCoordinator").value = "all";
   document.getElementById("diegoLeader").value = "all";
   document.getElementById("diegoAdvisor").value = "all";
-  if (yearChanged) {
-    await Promise.all([loadDiegoRadicatedValues(), loadDiegoDashboardData(), loadDiegoPortfolioCollections(), loadDiegoLeadershipAndCommissions()]);
-  }
-  setupDiegoFilters();
+  clearFilterOptionSearches(["diegoCoordinator", "diegoLeader", "diegoAdvisor"]);
+  if (hadServerFilters) await reloadDiegoCommercialData();
+  else setupDiegoFilters();
 };
 
 const loadGerenciaCompliance = async () => {
@@ -3919,6 +4000,154 @@ const normalizeFilterValue = (value) => String(value ?? "")
   .toLowerCase()
   .trim();
 
+const searchableFilterSelectIds = new Set([
+  "standardStageFilter",
+  "standardOwnerFilter",
+  "diegoCoordinator",
+  "diegoLeader",
+  "diegoAdvisor"
+]);
+
+const getFilterSelectLabel = (select) => {
+  const label = select.closest("label");
+  const text = [...(label?.childNodes ?? [])]
+    .filter((node) => node.nodeType === Node.TEXT_NODE)
+    .map((node) => node.textContent.trim())
+    .join(" ")
+    .trim();
+  return text || "opciones";
+};
+
+const getSearchableSelectInput = (select) =>
+  select.closest("label")?.querySelector(`.filter-combobox-input[data-target-select="${select.id}"]`);
+
+const getSearchableSelectRoot = (select) =>
+  select.closest("label")?.querySelector(`.filter-combobox[data-target-select="${select.id}"]`);
+
+const getSearchableSelectDropdown = (select) =>
+  select.closest("label")?.querySelector(`.filter-combobox-list[data-target-select="${select.id}"]`);
+
+let searchableSelectDocumentBound = false;
+
+const searchableSelectOptions = (select) => select._filterOptions ?? [...select.options].map((option) => ({
+  value: option.value,
+  label: option.textContent
+}));
+
+const closeFilterComboboxes = (exceptRoot = null) => {
+  document.querySelectorAll(".filter-combobox.is-open").forEach((root) => {
+    if (root === exceptRoot) return;
+    const select = document.getElementById(root.dataset.targetSelect);
+    if (select) syncSearchableSelectInput(select);
+    root.classList.remove("is-open");
+  });
+};
+
+const syncSearchableSelectInput = (select) => {
+  const options = searchableSelectOptions(select);
+  const input = getSearchableSelectInput(select);
+  const selected = options.find((option) => option.value === select.value) ?? options[0];
+  if (input) input.value = selected?.label ?? "";
+};
+
+const applySearchableSelectFilter = (select) => {
+  const root = getSearchableSelectRoot(select);
+  const input = getSearchableSelectInput(select);
+  const dropdown = getSearchableSelectDropdown(select);
+  if (!root || !input || !dropdown) return;
+
+  const term = normalizeFilterValue(input.value);
+  const visibleOptions = searchableSelectOptions(select).filter((option, index) =>
+    index === 0 || !term || normalizeFilterValue(option.label).includes(term)
+  );
+
+  dropdown.innerHTML = visibleOptions.length
+    ? visibleOptions.map((option) => `
+      <button type="button" data-value="${escapeHtml(option.value)}" class="${option.value === select.value ? "is-selected" : ""}">
+        ${escapeHtml(option.label)}
+      </button>`).join("")
+    : `<span class="filter-combobox-empty">Sin coincidencias</span>`;
+  root.classList.add("is-open");
+};
+
+const enhanceSearchableFilterSelect = (select) => {
+  if (!select || !searchableFilterSelectIds.has(select.id)) return;
+  const label = select.closest("label");
+  if (!label) return;
+
+  if (!getSearchableSelectInput(select)) {
+    const combo = document.createElement("span");
+    combo.className = "filter-combobox";
+    combo.dataset.targetSelect = select.id;
+    combo.innerHTML = `
+      <input class="filter-combobox-input" type="search" autocomplete="off" data-target-select="${select.id}" placeholder="${getFilterSelectLabel(select)}">
+      <span class="filter-combobox-list" data-target-select="${select.id}" role="listbox"></span>`;
+    label.insertBefore(combo, select);
+    select.classList.add("filter-combobox-native");
+
+    const input = getSearchableSelectInput(select);
+    const dropdown = getSearchableSelectDropdown(select);
+    input.addEventListener("focus", () => {
+      closeFilterComboboxes(combo);
+      input.select();
+      applySearchableSelectFilter(select);
+    });
+    input.addEventListener("input", () => applySearchableSelectFilter(select));
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        combo.classList.remove("is-open");
+        syncSearchableSelectInput(select);
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        const first = dropdown.querySelector("button:not([data-value='all'])") ?? dropdown.querySelector("button");
+        first?.click();
+      }
+    });
+    dropdown.addEventListener("mousedown", (event) => event.preventDefault());
+    dropdown.addEventListener("click", (event) => {
+      const option = event.target.closest("button[data-value]");
+      if (!option) return;
+      select.value = option.dataset.value;
+      syncSearchableSelectInput(select);
+      combo.classList.remove("is-open");
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    select.addEventListener("change", () => {
+      syncSearchableSelectInput(select);
+    });
+  }
+
+  select._filterOptions = [...select.options].map((option) => ({
+    value: option.value,
+    label: option.textContent
+  }));
+  const input = getSearchableSelectInput(select);
+  if (input) input.disabled = select.disabled;
+  syncSearchableSelectInput(select);
+  if (!searchableSelectDocumentBound) {
+    document.addEventListener("click", (event) => {
+      if (!event.target.closest(".filter-combobox")) closeFilterComboboxes();
+    });
+    searchableSelectDocumentBound = true;
+  }
+};
+
+const focusFirstFilterSearch = (panel) => {
+  const search = panel?.querySelector(".filter-combobox-input:not(:disabled)");
+  if (search) window.setTimeout(() => search.focus(), 60);
+};
+
+const clearFilterOptionSearches = (ids) => {
+  ids.forEach((id) => {
+    const select = document.getElementById(id);
+    const input = select ? getSearchableSelectInput(select) : null;
+    if (!select || !input) return;
+    syncSearchableSelectInput(select);
+    getSearchableSelectRoot(select)?.classList.remove("is-open");
+  });
+};
+
 const setupFilterDrawer = (panel, toggle) => {
   document.body.classList.add("report-has-filter-drawer");
   const setCollapsed = (collapsed) => {
@@ -3929,7 +4158,11 @@ const setupFilterDrawer = (panel, toggle) => {
     toggle.title = collapsed ? "Mostrar filtros" : "Ocultar filtros";
   };
   setCollapsed(false);
-  toggle.addEventListener("click", () => setCollapsed(!panel.classList.contains("is-collapsed")));
+  toggle.addEventListener("click", () => {
+    const collapsed = !panel.classList.contains("is-collapsed");
+    setCollapsed(collapsed);
+    if (!collapsed) focusFirstFilterSearch(panel);
+  });
 };
 
 const fillStandardFilter = (select, values, allLabel) => {
@@ -3937,6 +4170,7 @@ const fillStandardFilter = (select, values, allLabel) => {
   [...new Set(values.filter(Boolean))]
     .sort((left, right) => left.localeCompare(right, "es", { sensitivity: "base" }))
     .forEach((value) => select.add(new Option(value, value)));
+  enhanceSearchableFilterSelect(select);
 };
 
 const renderStandardDistributions = (deals) => {
@@ -4004,6 +4238,7 @@ const setupStandardFilters = () => {
       document.getElementById("standardDealSearch").value = "";
       document.getElementById("standardStageFilter").value = "all";
       document.getElementById("standardOwnerFilter").value = "all";
+      clearFilterOptionSearches(["standardStageFilter", "standardOwnerFilter"]);
       applyStandardFilters();
     });
     setupFilterDrawer(panel, document.getElementById("toggleStandardFilters"));
@@ -4084,7 +4319,6 @@ const load = async () => {
       document.querySelector(".diego-overview h2").textContent = "Informe general del área comercial";
       document.querySelector(".diego-overview p").textContent = "Consulta radicación, negociaciones, comisiones, cartera, embudos y etapas sincronizadas desde Bitrix.";
       document.getElementById("diegoYearFilter").hidden = true;
-      document.getElementById("diegoMonthFilter").hidden = true;
     }
     renderDiegoDashboard();
     try {
@@ -4100,13 +4334,8 @@ const load = async () => {
     const filterPanel = document.querySelector("#diegoDashboard .diego-filters");
     const filterToggle = document.getElementById("toggleDiegoFilters");
     setupFilterDrawer(filterPanel, filterToggle);
-    document.getElementById("diegoYear").addEventListener("change", async () => {
-      await Promise.all([loadDiegoRadicatedValues(), loadDiegoDashboardData(), loadDiegoPortfolioCollections(), loadDiegoLeadershipAndCommissions()]);
-      setupDiegoFilters();
-    });
-    await Promise.all([loadDiegoRadicatedValues(), loadDiegoDashboardData(), loadDiegoPortfolioCollections(), loadDiegoLeadershipAndCommissions()]);
-    if (isGeneralCommercial) applyGeneralCommercialLabels();
-    setupDiegoFilters();
+    document.getElementById("diegoYear").addEventListener("change", reloadDiegoCommercialData);
+    await reloadDiegoCommercialData();
     return;
   }
   if (reportId === "informe_gerencia_2026_2027") {

@@ -1,10 +1,25 @@
 using System.Globalization;
 using Npgsql;
+using NpgsqlTypes;
 
 namespace InformesAvanzar.Api.Data;
 
 public static class BitrixDataQueries
 {
+    private static int? NormalizeMonthFilter(string? month)
+    {
+        return int.TryParse(month, CultureInfo.InvariantCulture, out var parsed) && parsed is >= 1 and <= 12
+            ? parsed
+            : null;
+    }
+
+    private static void AddDiegoDateFilterParameters(NpgsqlCommand command, DateTime? from, DateTime? to, string? month)
+    {
+        command.Parameters.Add("fromDate", NpgsqlDbType.Date).Value = from?.Date ?? (object)DBNull.Value;
+        command.Parameters.Add("toDate", NpgsqlDbType.Date).Value = to?.Date ?? (object)DBNull.Value;
+        command.Parameters.Add("monthNumber", NpgsqlDbType.Integer).Value = NormalizeMonthFilter(month) ?? (object)DBNull.Value;
+    }
+
     public static async Task EnsureManagementPipelinesAsync(NpgsqlDataSource dataSource, CancellationToken cancellationToken)
     {
         const string sql = """
@@ -128,6 +143,9 @@ public static class BitrixDataQueries
 
     public static async Task<object> GetDiegoRadicatedValuesAsync(
         int year,
+        DateTime? from,
+        DateTime? to,
+        string? month,
         NpgsqlDataSource dataSource,
         CancellationToken cancellationToken)
     {
@@ -182,6 +200,9 @@ public static class BitrixDataQueries
             SELECT month, pipeline, advisor, COALESCE(SUM(amount), 0) AS total_achieved
             FROM radicated
             WHERE month IS NOT NULL
+              AND (@monthNumber IS NULL OR LEFT(month, 2)::int = @monthNumber)
+              AND (@fromDate IS NULL OR (make_date(@yearNumber, LEFT(month, 2)::int, 1) + INTERVAL '1 month' - INTERVAL '1 day')::date >= @fromDate)
+              AND (@toDate IS NULL OR make_date(@yearNumber, LEFT(month, 2)::int, 1) <= @toDate)
             GROUP BY month, pipeline, advisor
             ORDER BY total_achieved DESC, month, pipeline, advisor;
             """;
@@ -195,6 +216,7 @@ public static class BitrixDataQueries
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue("year", year.ToString(CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("yearNumber", year);
+        AddDiegoDateFilterParameters(command, from, to, month);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
         while (await reader.ReadAsync(cancellationToken))
@@ -260,6 +282,9 @@ public static class BitrixDataQueries
 
     public static async Task<object> GetDiegoCommercialDashboardAsync(
         int year,
+        DateTime? from,
+        DateTime? to,
+        string? month,
         NpgsqlDataSource dataSource,
         CancellationToken cancellationToken)
     {
@@ -337,6 +362,9 @@ public static class BitrixDataQueries
                     ON user_payload.id = u.raw_payload_id
                 WHERE p.category_id IN (8, 10, 26, 28)
                   AND EXTRACT(YEAR FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @yearNumber
+                  AND (@fromDate IS NULL OR (d.bitrix_created_at AT TIME ZONE 'America/Bogota')::date >= @fromDate)
+                  AND (@toDate IS NULL OR (d.bitrix_created_at AT TIME ZONE 'America/Bogota')::date <= @toDate)
+                  AND (@monthNumber IS NULL OR EXTRACT(MONTH FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @monthNumber)
             ),
             line_summary AS (
                 SELECT
@@ -415,8 +443,14 @@ public static class BitrixDataQueries
                 LEFT JOIN bitrix.pipeline_stages s
                     ON s.pipeline_id = p.id
                     AND s.bitrix_stage_id = d.stage_id
-                WHERE p.slug <> 'rch_operativa'
-                   OR (d.bitrix_created_at AT TIME ZONE 'America/Bogota')::date >= DATE '2025-01-01'
+                WHERE EXTRACT(YEAR FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @yearNumber
+                  AND (@fromDate IS NULL OR (d.bitrix_created_at AT TIME ZONE 'America/Bogota')::date >= @fromDate)
+                  AND (@toDate IS NULL OR (d.bitrix_created_at AT TIME ZONE 'America/Bogota')::date <= @toDate)
+                  AND (@monthNumber IS NULL OR EXTRACT(MONTH FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @monthNumber)
+                  AND (
+                      p.slug <> 'rch_operativa'
+                      OR (d.bitrix_created_at AT TIME ZONE 'America/Bogota')::date >= DATE '2025-01-01'
+                  )
             ),
             classified AS (
                 SELECT
@@ -762,6 +796,9 @@ public static class BitrixDataQueries
                 WHERE payload.id = u.raw_payload_id
             ) organization ON true
             WHERE p.category_id IN (10, 28)
+              AND (@fromDate IS NULL OR (d.bitrix_created_at AT TIME ZONE 'America/Bogota')::date >= @fromDate)
+              AND (@toDate IS NULL OR (d.bitrix_created_at AT TIME ZONE 'America/Bogota')::date <= @toDate)
+              AND (@monthNumber IS NULL OR EXTRACT(MONTH FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @monthNumber)
               AND (
                   snapshot.custom_fields ->> 'UF_CRM_1737653376' = @yearText
                   OR snapshot.custom_fields ->> 'UF_CRM_1737653376' = CASE @yearText
@@ -795,6 +832,10 @@ public static class BitrixDataQueries
                     LIMIT 1
                 ) raw_user ON true
                 WHERE p.category_id IN (26, 28)
+                  AND EXTRACT(YEAR FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @yearNumber
+                  AND (@fromDate IS NULL OR (d.bitrix_created_at AT TIME ZONE 'America/Bogota')::date >= @fromDate)
+                  AND (@toDate IS NULL OR (d.bitrix_created_at AT TIME ZONE 'America/Bogota')::date <= @toDate)
+                  AND (@monthNumber IS NULL OR EXTRACT(MONTH FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @monthNumber)
                   AND EXISTS (
                       SELECT 1
                       FROM jsonb_array_elements_text(raw_user.payload->'UF_DEPARTMENT') department_id
@@ -827,6 +868,10 @@ public static class BitrixDataQueries
                 JOIN bitrix.pipelines p ON p.id = d.pipeline_id
                 LEFT JOIN bitrix.pipeline_stages s ON s.pipeline_id = p.id AND s.bitrix_stage_id = d.stage_id
                 WHERE p.category_id IN (8, 10, 26, 28, 30, 32)
+                  AND EXTRACT(YEAR FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @yearNumber
+                  AND (@fromDate IS NULL OR (d.bitrix_created_at AT TIME ZONE 'America/Bogota')::date >= @fromDate)
+                  AND (@toDate IS NULL OR (d.bitrix_created_at AT TIME ZONE 'America/Bogota')::date <= @toDate)
+                  AND (@monthNumber IS NULL OR EXTRACT(MONTH FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @monthNumber)
             )
             SELECT stage, pipeline, COALESCE(SUM(opportunity),0) AS amount, COUNT(*)::bigint AS cases
             FROM classified
@@ -846,6 +891,7 @@ public static class BitrixDataQueries
         {
             command.Parameters.AddWithValue("yearText", year.ToString(CultureInfo.InvariantCulture));
             command.Parameters.AddWithValue("yearNumber", year);
+            AddDiegoDateFilterParameters(command, from, to, month);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {
@@ -863,8 +909,10 @@ public static class BitrixDataQueries
         }
 
         await using (var command = new NpgsqlCommand(stageSql, connection))
-        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
+            command.Parameters.AddWithValue("yearNumber", year);
+            AddDiegoDateFilterParameters(command, from, to, month);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {
                 stages.Add(new
@@ -881,6 +929,7 @@ public static class BitrixDataQueries
         await using (var command = new NpgsqlCommand(departmentSql, connection))
         {
             command.Parameters.AddWithValue("yearText", year.ToString(CultureInfo.InvariantCulture));
+            AddDiegoDateFilterParameters(command, from, to, month);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {
@@ -896,14 +945,18 @@ public static class BitrixDataQueries
         await using (var command = new NpgsqlCommand(possibleClosePnncSql, connection))
         {
             command.Parameters.AddWithValue("insolvencyDepartmentIds", new[] { "1332", "1324", "1366", "1414", "1346", "1430", "1432", "1254", "1310", "1426", "1326", "1374", "1402", "1404", "1428", "1308", "1328", "1320", "1252", "1408", "1410", "1412" });
+            command.Parameters.AddWithValue("yearNumber", year);
+            AddDiegoDateFilterParameters(command, from, to, month);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
                 possibleClosePnnc.Add(new { stage = reader.GetString(0), amount = reader.GetDecimal(1), cases = reader.GetInt64(2) });
         }
 
         await using (var command = new NpgsqlCommand(possibleCloseGeneralSql, connection))
-        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
+            command.Parameters.AddWithValue("yearNumber", year);
+            AddDiegoDateFilterParameters(command, from, to, month);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
                 possibleCloseGeneral.Add(new { stage = reader.GetString(0), pipeline = reader.GetString(1), amount = reader.GetDecimal(2), cases = reader.GetInt64(3) });
         }
@@ -913,6 +966,9 @@ public static class BitrixDataQueries
 
     public static async Task<object> GetDiegoPortfolioCollectionsAsync(
         int year,
+        DateTime? from,
+        DateTime? to,
+        string? month,
         NpgsqlDataSource dataSource,
         CancellationToken cancellationToken)
     {
@@ -960,6 +1016,9 @@ public static class BitrixDataQueries
                     AND NULLIF(snapshot.custom_fields ->> fields.date_key, '') IS NOT NULL
                     AND NULLIF(snapshot.custom_fields ->> fields.value_key, '') IS NOT NULL
                     AND EXTRACT(YEAR FROM (snapshot.custom_fields ->> fields.date_key)::date) = @year
+                    AND (@fromDate IS NULL OR (snapshot.custom_fields ->> fields.date_key)::date >= @fromDate)
+                    AND (@toDate IS NULL OR (snapshot.custom_fields ->> fields.date_key)::date <= @toDate)
+                    AND (@monthNumber IS NULL OR EXTRACT(MONTH FROM (snapshot.custom_fields ->> fields.date_key)::date)::int = @monthNumber)
             )
             SELECT month, commercial_line, COALESCE(SUM(amount), 0) AS collected
             FROM payments
@@ -973,6 +1032,7 @@ public static class BitrixDataQueries
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue("year", year);
+        AddDiegoDateFilterParameters(command, from, to, month);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
@@ -1011,6 +1071,10 @@ public static class BitrixDataQueries
                     AND snapshot.bitrix_id = deals.bitrix_id
                     AND snapshot.is_deleted = false
                 WHERE pipelines.category_id IN (68, 12)
+                    AND EXTRACT(YEAR FROM deals.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @year
+                    AND (@fromDate IS NULL OR (deals.bitrix_created_at AT TIME ZONE 'America/Bogota')::date >= @fromDate)
+                    AND (@toDate IS NULL OR (deals.bitrix_created_at AT TIME ZONE 'America/Bogota')::date <= @toDate)
+                    AND (@monthNumber IS NULL OR EXTRACT(MONTH FROM deals.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @monthNumber)
                     AND UPPER(TRIM(COALESCE(stages.name, deals.stage_id, ''))) IN (
                         'VERIFICACION CASO EXITOSO',
                         'CASOS CON NOVEDAD',
@@ -1071,8 +1135,10 @@ public static class BitrixDataQueries
 
         var portfolio = new List<object>();
         await using (var portfolioCommand = new NpgsqlCommand(portfolioSql, connection))
-        await using (var portfolioReader = await portfolioCommand.ExecuteReaderAsync(cancellationToken))
         {
+            portfolioCommand.Parameters.AddWithValue("year", year);
+            AddDiegoDateFilterParameters(portfolioCommand, from, to, month);
+            await using var portfolioReader = await portfolioCommand.ExecuteReaderAsync(cancellationToken);
             while (await portfolioReader.ReadAsync(cancellationToken))
             {
                 portfolio.Add(new
@@ -1091,6 +1157,9 @@ public static class BitrixDataQueries
 
     public static async Task<object> GetDiegoLeadershipAndCommissionsAsync(
         int year,
+        DateTime? from,
+        DateTime? to,
+        string? month,
         NpgsqlDataSource dataSource,
         CancellationToken cancellationToken,
         DateTimeOffset? coordinatorAsOf = null)
@@ -1297,6 +1366,9 @@ public static class BitrixDataQueries
             FROM radicated
             JOIN effective_hierarchy hierarchy ON hierarchy.bitrix_id = radicated.advisor_id
             WHERE radicated.month IS NOT NULL
+              AND (@monthNumber IS NULL OR LEFT(radicated.month, 2)::int = @monthNumber)
+              AND (@fromDate IS NULL OR (make_date(@yearNumber, LEFT(radicated.month, 2)::int, 1) + INTERVAL '1 month' - INTERVAL '1 day')::date >= @fromDate)
+              AND (@toDate IS NULL OR make_date(@yearNumber, LEFT(radicated.month, 2)::int, 1) <= @toDate)
               AND hierarchy.coordinator IS NOT NULL
             ORDER BY hierarchy.coordinator, radicated.advisor, radicated.month;
             """;
@@ -1403,6 +1475,9 @@ public static class BitrixDataQueries
             JOIN people_by_name people
                 ON people.full_name = radicated.advisor
             WHERE radicated.month IS NOT NULL
+              AND (@monthNumber IS NULL OR LEFT(radicated.month, 2)::int = @monthNumber)
+              AND (@fromDate IS NULL OR (make_date(@yearNumber, LEFT(radicated.month, 2)::int, 1) + INTERVAL '1 month' - INTERVAL '1 day')::date >= @fromDate)
+              AND (@toDate IS NULL OR make_date(@yearNumber, LEFT(radicated.month, 2)::int, 1) <= @toDate)
             GROUP BY radicated.month, radicated.advisor, people.leader, people.coordinator, radicated.commercial_line
             ORDER BY total_achieved DESC;
             """;
@@ -1430,6 +1505,9 @@ public static class BitrixDataQueries
                     AND UPPER(TRIM(stage.name)) = 'CUENTA PAGADA CUENTAS DE COBRO'
                     AND d.bitrix_created_at IS NOT NULL
                     AND EXTRACT(YEAR FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @year
+                    AND (@fromDate IS NULL OR (d.bitrix_created_at AT TIME ZONE 'America/Bogota')::date >= @fromDate)
+                    AND (@toDate IS NULL OR (d.bitrix_created_at AT TIME ZONE 'America/Bogota')::date <= @toDate)
+                    AND (@monthNumber IS NULL OR EXTRACT(MONTH FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @monthNumber)
             )
             SELECT
                 CASE month_number
@@ -1513,6 +1591,8 @@ public static class BitrixDataQueries
                 command.CommandTimeout = 180;
             }
             command.Parameters.AddWithValue("yearText", year.ToString(CultureInfo.InvariantCulture));
+            command.Parameters.AddWithValue("yearNumber", year);
+            AddDiegoDateFilterParameters(command, from, to, month);
             command.Parameters.Add(new NpgsqlParameter("coordinatorAsOf", NpgsqlTypes.NpgsqlDbType.TimestampTz)
             {
                 Value = coordinatorAsOf.HasValue ? coordinatorAsOf.Value : DBNull.Value
@@ -1538,6 +1618,7 @@ public static class BitrixDataQueries
         {
             command.Parameters.AddWithValue("yearText", year.ToString(CultureInfo.InvariantCulture));
             command.Parameters.AddWithValue("yearNumber", year);
+            AddDiegoDateFilterParameters(command, from, to, month);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {
@@ -1556,6 +1637,7 @@ public static class BitrixDataQueries
         await using (var command = new NpgsqlCommand(commissionsSql, connection))
         {
             command.Parameters.AddWithValue("year", year);
+            AddDiegoDateFilterParameters(command, from, to, month);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {

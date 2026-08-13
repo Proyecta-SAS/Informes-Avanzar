@@ -461,48 +461,72 @@ adminApi.MapPut("/reports/informe-general/users/{userId:guid}/blocks", async (Gu
 
 app.MapGet("/api/reports/fuerza-comercial-diego/valores-radicados", async (
     int? year,
+    DateTime? from,
+    DateTime? to,
+    string? month,
     NpgsqlDataSource dataSource,
     CancellationToken cancellationToken) =>
 {
     var selectedYear = year is >= 2000 and <= 2100 ? year.Value : DateTime.UtcNow.Year;
     return Results.Ok(await BitrixDataQueries.GetDiegoRadicatedValuesAsync(
         selectedYear,
+        from,
+        to,
+        month,
         dataSource,
         cancellationToken));
 });
 
 app.MapGet("/api/reports/fuerza-comercial-diego/dashboard", async (
     int? year,
+    DateTime? from,
+    DateTime? to,
+    string? month,
     NpgsqlDataSource dataSource,
     CancellationToken cancellationToken) =>
 {
     var selectedYear = year is >= 2000 and <= 2100 ? year.Value : DateTime.UtcNow.Year;
     return Results.Ok(await BitrixDataQueries.GetDiegoCommercialDashboardAsync(
         selectedYear,
+        from,
+        to,
+        month,
         dataSource,
         cancellationToken));
 });
 
 app.MapGet("/api/reports/fuerza-comercial-diego/cartera-recaudada", async (
     int? year,
+    DateTime? from,
+    DateTime? to,
+    string? month,
     NpgsqlDataSource dataSource,
     CancellationToken cancellationToken) =>
 {
     var selectedYear = year is >= 2000 and <= 2100 ? year.Value : DateTime.UtcNow.Year;
     return Results.Ok(await BitrixDataQueries.GetDiegoPortfolioCollectionsAsync(
         selectedYear,
+        from,
+        to,
+        month,
         dataSource,
         cancellationToken));
 });
 
 app.MapGet("/api/reports/fuerza-comercial-diego/liderazgo-comisiones", async (
     int? year,
+    DateTime? from,
+    DateTime? to,
+    string? month,
     NpgsqlDataSource dataSource,
     CancellationToken cancellationToken) =>
 {
     var selectedYear = year is >= 2000 and <= 2100 ? year.Value : DateTime.UtcNow.Year;
     return Results.Ok(await BitrixDataQueries.GetDiegoLeadershipAndCommissionsAsync(
         selectedYear,
+        from,
+        to,
+        month,
         dataSource,
         cancellationToken));
 });

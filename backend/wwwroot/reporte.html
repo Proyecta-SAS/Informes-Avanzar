@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard</title>
   <link rel="icon" href="https://avanzarsoluciones.com/wp-content/uploads/2025/01/cropped-favico-Avanzar-180x180.jpg" sizes="180x180">
-  <link rel="stylesheet" href="/styles.css?v=20260813-hide-table-totals">
+  <link rel="stylesheet" href="/styles.css?v=20260813-hide-table-totals-date-month">
 </head>
 <body>
   <aside class="sidebar">
@@ -129,8 +129,13 @@
           </div>
           <div class="filter-controls">
             <label id="diegoYearFilter">Año<select id="diegoYear"><option>2026</option><option>2025</option></select></label>
+            <div class="filter-date-range" aria-label="Rango de fechas">
+              <span>Rango de fechas</span>
+              <label>Desde<input id="diegoDateFrom" type="date"></label>
+              <label>Hasta<input id="diegoDateTo" type="date"></label>
+            </div>
             <label id="diegoMonthFilter">Mes<select id="diegoMonth"><option value="all">Todos</option><option value="01">Enero</option><option value="02">Febrero</option><option value="03">Marzo</option><option value="04">Abril</option><option value="05">Mayo</option><option value="06">Junio</option><option value="07">Julio</option><option value="08">Agosto</option><option value="09">Septiembre</option><option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option></select></label>
-            <label>Línea comercial<select id="diegoLine"><option value="all">Todas</option><option value="rch">RCH</option><option value="pnnc">PNNC</option></select></label>
+            <label>Línea de negocio<select id="diegoLine"><option value="all">Todas</option><option value="rch">RCH</option><option value="pnnc">PNNC</option></select></label>
             <label>Coordinador<select id="diegoCoordinator"><option value="all">Todos</option></select></label>
             <label>Líder<select id="diegoLeader"><option value="all">Todos</option></select></label>
             <label>Asesor<select id="diegoAdvisor"><option value="all">Todos</option></select></label>
@@ -989,7 +994,7 @@
     </section>
   </main>
 
-  <script src="/reporte.js?v=20260813-hide-table-totals"></script>
+  <script src="/reporte.js?v=20260813-hide-table-totals-date-month"></script>
   <script src="/auth-session.js?v=20260806-gerencia-menu"></script>
 </body>
 </html>
