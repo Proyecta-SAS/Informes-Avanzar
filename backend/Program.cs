@@ -50,6 +50,23 @@ var panelSigningKey = app.Configuration["PANEL_AUTH_SIGNING_KEY"] ?? app.Configu
 var superAdminEmail = app.Configuration["SUPERADMIN_EMAIL"] ?? "superadmin@avanzarsoluciones.com";
 app.Use(async (context, next) =>
 {
+    try
+    {
+        await next();
+    }
+    catch (SyncAlreadyRunningException exception) when (!context.Response.HasStarted)
+    {
+        app.Logger.LogInformation(exception, "A Bitrix synchronization request was rejected because another run is active.");
+        context.Response.StatusCode = StatusCodes.Status409Conflict;
+        await context.Response.WriteAsJsonAsync(new
+        {
+            code = "sync_already_running",
+            message = exception.Message
+        }, context.RequestAborted);
+    }
+});
+app.Use(async (context, next) =>
+{
     var path = context.Request.Path.Value ?? "/";
     var isPublic = path is "/login.html" or "/login.js" or "/health" or "/health/db" or "/api/bitrix/webhooks/deals" || path.StartsWith("/assets/") || path == "/styles.css" || path == "/api/auth/login";
     var panelUser = PanelAuthentication.ValidateToken(context.Request.Cookies[PanelAuthentication.CookieName], panelSigningKey);
@@ -1172,6 +1189,163 @@ app.MapPost("/api/bitrix/sync/reports/comercial/quick", async (
         report = "comercial-quick",
         backfill,
         elapsedSeconds = Math.Round(stopwatch.Elapsed.TotalSeconds, 2),
+        recordsRead = results.Sum(result => result.RecordsRead),
+        recordsWritten = results.Sum(result => result.RecordsWritten),
+        results
+    });
+});
+
+app.MapPost("/api/bitrix/sync/reports/comercial/commissions", async (
+    int? year,
+    IBitrixDealSyncService dealSyncService,
+    CancellationToken cancellationToken) =>
+{
+    var selectedYear = year is >= 2000 and <= 2100 ? year.Value : DateTime.UtcNow.Year;
+    var bogotaOffset = TimeSpan.FromHours(-5);
+    var createdFrom = new DateTimeOffset(selectedYear, 1, 1, 0, 0, 0, bogotaOffset);
+    var createdTo = new DateTimeOffset(selectedYear + 1, 1, 1, 0, 0, 0, bogotaOffset).AddTicks(-1);
+    var fields = new[]
+    {
+        "ID",
+        "TITLE",
+        "CATEGORY_ID",
+        "STAGE_ID",
+        "ASSIGNED_BY_ID",
+        "OPPORTUNITY",
+        "CURRENCY_ID",
+        "DATE_CREATE",
+        "DATE_MODIFY",
+        "CLOSED"
+    };
+
+    var result = await dealSyncService.SyncPipelineDealsAsync(
+        "cuentas_cobro",
+        null,
+        cancellationToken,
+        SyncMode.Full,
+        createdFrom,
+        createdTo,
+        selectFields: fields,
+        reconcileMissing: true,
+        entityTypeSuffix: $"commissions:{selectedYear}",
+        allowConcurrentWithOtherPipelines: true);
+
+    return Results.Ok(result);
+});
+
+app.MapPost("/api/bitrix/sync/reports/comercial/portfolio-state", async (
+    string? fromStageId,
+    IBitrixDealSyncService dealSyncService,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    var pipelineSlugs = new[]
+    {
+        "rch_cartera",
+        "pnnc_cartera"
+    };
+    var stageNames = new[]
+    {
+        "VERIFICACION CASO EXITOSO",
+        "CASOS CON NOVEDAD",
+        "NOTIFICADO",
+        "CARTERA EN TIEMPO",
+        "MORA 0 - 30 DÍAS",
+        "POR GESTIONAR",
+        "ANTICIPO PENDIENTE RADICACIÓN",
+        "CARTERA DE ESTRUCTURACIÓN",
+        "EN SEGUIMIENTO",
+        "MORA 30 - 60 DÍAS",
+        "COBRO PRE JURIDICO",
+        "ACUERDO DE PAGO",
+        "INCUMPLIMIENTO DE ACUERDO",
+        "COBRO JURIDICO",
+        "OBJECIONES",
+        "MORA 30 - 60 DIAS",
+        "ACUERDO DE PAGO EN MORA",
+        "GENERACIÓN DE PAZ Y SALVO",
+        "GANADO",
+        "GENERACIÓN PAZ Y SALVO"
+    };
+    var fields = new[]
+    {
+        "ID",
+        "TITLE",
+        "CATEGORY_ID",
+        "STAGE_ID",
+        "ASSIGNED_BY_ID",
+        "OPPORTUNITY",
+        "CURRENCY_ID",
+        "DATE_CREATE",
+        "DATE_MODIFY",
+        "CLOSED"
+    };
+    const string stageSql = """
+        SELECT pipeline.slug, stage.bitrix_stage_id
+        FROM bitrix.pipeline_stages stage
+        JOIN bitrix.pipelines pipeline ON pipeline.id = stage.pipeline_id
+        WHERE pipeline.slug = ANY(@pipelineSlugs)
+          AND UPPER(TRIM(stage.name)) = ANY(@stageNames)
+        ORDER BY pipeline.sync_order, stage.sort_order, stage.bitrix_stage_id;
+        """;
+    var reportStages = new List<(string PipelineSlug, string StageId)>();
+    await using (var connection = await dataSource.OpenConnectionAsync(cancellationToken))
+    await using (var command = new NpgsqlCommand(stageSql, connection))
+    {
+        command.Parameters.AddWithValue("pipelineSlugs", pipelineSlugs);
+        command.Parameters.AddWithValue("stageNames", stageNames);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            reportStages.Add((reader.GetString(0), reader.GetString(1)));
+        }
+    }
+
+    if (!string.IsNullOrWhiteSpace(fromStageId))
+    {
+        var resumeIndex = reportStages.FindIndex(stage =>
+            string.Equals(stage.StageId, fromStageId, StringComparison.OrdinalIgnoreCase));
+        if (resumeIndex < 0)
+        {
+            return Results.BadRequest(new { message = "La etapa indicada no pertenece al reporte Estado de cartera." });
+        }
+
+        reportStages = reportStages.Skip(resumeIndex).ToList();
+    }
+
+    var createdFrom = new DateTimeOffset(1970, 1, 1, 0, 0, 0, TimeSpan.Zero);
+    var results = new List<SyncResult>();
+
+    foreach (var (pipelineSlug, stageId) in reportStages)
+    {
+        var result = await dealSyncService.SyncPipelineDealsAsync(
+            pipelineSlug,
+            stageId,
+            cancellationToken,
+            SyncMode.Full,
+            createdFrom,
+            selectFields: fields,
+            reconcileMissing: true,
+            entityTypeSuffix: $"portfolio-state:{stageId}",
+            allowConcurrentWithOtherPipelines: true);
+        results.Add(result);
+
+        if (!string.Equals(result.Status, "succeeded", StringComparison.OrdinalIgnoreCase))
+        {
+            break;
+        }
+    }
+
+    return Results.Ok(new
+    {
+        report = "portfolio-state",
+        resumedFromStageId = fromStageId,
+        status = reportStages.Count > 0
+            && results.Count == reportStages.Count
+            && results.All(result => string.Equals(result.Status, "succeeded", StringComparison.OrdinalIgnoreCase))
+            ? "succeeded"
+            : "failed",
+        stages = reportStages.Count,
         recordsRead = results.Sum(result => result.RecordsRead),
         recordsWritten = results.Sum(result => result.RecordsWritten),
         results

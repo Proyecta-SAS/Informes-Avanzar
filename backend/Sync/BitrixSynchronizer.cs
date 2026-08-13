@@ -19,7 +19,7 @@ public sealed class BitrixSynchronizer(
 
         if (!locked)
         {
-            throw new InvalidOperationException("Another global Bitrix synchronization is already running.");
+            throw new SyncAlreadyRunningException("Ya hay una sincronizacion global de Bitrix activa.");
         }
 
         try

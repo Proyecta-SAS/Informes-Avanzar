@@ -53,7 +53,7 @@ const diegoSections = [
     title: "Estado de carteras",
     description: "Composición, recaudo y estado de la cartera comercial.",
     blocks: [
-      ["Estado de cartera 2025", "Distribución entre cartera en tiempo, seguimiento y mora.", "donut"],
+      ["Estado de cartera", "Distribución entre cartera en tiempo, seguimiento y mora.", "donut"],
       ["Cartera recaudada", "Valor recaudado por asesor, líder y coordinación.", "chart"]
     ]
   },
@@ -102,7 +102,7 @@ const generalBlockCodes = {
   "Detalle de coordinadores": "coordinator_detail",
   "Detalle de radicaciones por líder": "leader_detail",
   "Comisiones por asesor": "advisor_commissions",
-  "Estado de cartera 2025": "portfolio_state",
+  "Estado de cartera": "portfolio_state",
   "Cartera recaudada": "portfolio_collected",
   "Embudo Insolvencia": "funnel_insolvency",
   "Embudo RCH": "funnel_rch",
@@ -368,7 +368,7 @@ const generalCommercialLabels = {
   "Detalle de coordinadores": "Detalle Coordinadores 2026",
   "Detalle de radicaciones por líder": "(COM) Valores Radicaciones Lideres 2026",
   "Comisiones por asesor": "(COM) Comisiones Asesor 2026",
-  "Estado de cartera 2025": "(COM) Estado de cartera 2025",
+  "Estado de cartera": "(COM) Estado de cartera",
   "Cartera recaudada": "(COM) Cartera Recaudada",
   "Embudo Insolvencia": "(COM) Embudo Insolvencia",
   "Embudo RCH": "(COM) Embudo RCH",
@@ -635,7 +635,10 @@ const renderCommissionMatrix = (items) => {
     const values = advisorValues.get(item.advisor);
     values.set(item.month, (values.get(item.month) ?? 0) + item.total);
   });
-  const advisors = [...advisorValues.keys()].sort((left, right) => left.localeCompare(right, "es", { sensitivity: "base" }));
+  const advisorTotal = (advisor) => [...advisorValues.get(advisor).values()].reduce((sum, value) => sum + value, 0);
+  const advisors = [...advisorValues.keys()].sort((left, right) =>
+    advisorTotal(right) - advisorTotal(left)
+    || left.localeCompare(right, "es", { sensitivity: "base" }));
   const monthTotals = new Map(months.map((month) => [month, items.filter((item) => item.month === month).reduce((sum, item) => sum + item.total, 0)]));
   const grandTotal = [...monthTotals.values()].reduce((sum, value) => sum + value, 0);
 
@@ -807,7 +810,7 @@ const loadDiegoPortfolioCollections = async () => {
   const portfolioContent = portfolioRows.length
     ? renderDataTable(["Asesor", "Línea", "Valor cartera por cobrar", "Valor cartera con novedad", "Valor cartera exitosa"], portfolioRows, "portfolio-state-table")
     : `<div class="empty-block"><strong>Sin cartera disponible</strong><span>Sincronice las pipelines RCH Cartera e Insolvencia Cartera.</span></div>`;
-  replaceBlockPreview("Estado de cartera 2025", portfolioContent, data.portfolio.length);
+  replaceBlockPreview("Estado de cartera", portfolioContent, data.portfolio.length);
   const collectionsByMonth = new Map();
   data.items.forEach((item) => {
     const monthKey = item.month.slice(0, 2);

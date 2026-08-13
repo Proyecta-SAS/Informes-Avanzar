@@ -194,7 +194,8 @@ public sealed class BitrixDealSyncService(
         IReadOnlyDictionary<string, string>? fieldEqualsFilters = null,
         IReadOnlyList<string>? selectFields = null,
         bool reconcileMissing = true,
-        string? entityTypeSuffix = null)
+        string? entityTypeSuffix = null,
+        bool allowConcurrentWithOtherPipelines = false)
     {
         if (mode == SyncMode.Incremental && !string.IsNullOrWhiteSpace(stageId))
         {
@@ -208,7 +209,12 @@ public sealed class BitrixDealSyncService(
             : string.IsNullOrWhiteSpace(stageId)
                 ? $"deal:{pipeline.Slug}"
                 : $"deal:{pipeline.Slug}:stage:{stageId}";
-        var syncRunId = await repository.StartRunAsync(connectionInfo.Id, entityType, mode, cancellationToken);
+        var syncRunId = await repository.StartRunAsync(
+            connectionInfo.Id,
+            entityType,
+            mode,
+            cancellationToken,
+            allowConcurrentWithOtherPipelines ? $"deal:{pipeline.Slug}" : null);
 
         var recordsRead = 0;
         var recordsWritten = 0;
@@ -225,6 +231,12 @@ public sealed class BitrixDealSyncService(
             cursor = since;
 
             await using var dbConnection = await dataSource.OpenConnectionAsync(cancellationToken);
+            var trackSeenDeals = mode == SyncMode.Full && reconcileMissing;
+            if (trackSeenDeals)
+            {
+                await CreateSeenDealsTableAsync(dbConnection, cancellationToken);
+            }
+
             var firstPage = await FetchDealListPageAsync(pipeline.CategoryId, stageId, 0, since, effectiveCreatedFrom, effectiveCreatedTo, fieldEqualsFilters, selectFields, cancellationToken);
             cursor = await ProcessDealPageAsync(
                 dbConnection,
@@ -235,6 +247,7 @@ public sealed class BitrixDealSyncService(
                 recordsRead,
                 recordsWritten,
                 cursor,
+                trackSeenDeals,
                 cancellationToken,
                 persistUnchangedPayload: mode == SyncMode.Full && reconcileMissing,
                 progress => (recordsRead, recordsWritten, cursor) = progress);
@@ -244,8 +257,8 @@ public sealed class BitrixDealSyncService(
             if (firstPage.Total is not null)
             {
                 // Requests with 50 deal-list commands and UF_* fields regularly exceed
-                // Bitrix's 60-second gateway limit. Smaller batches keep the complete
-                // custom-field payload while allowing long pipelines to finish.
+                // Bitrix's 60-second gateway limit. Keep the conservative upstream batch
+                // size for all projections and rely on the per-page fallback below.
                 foreach (var chunk in GetDealListPageStarts(firstPage.Next, firstPage.Total.Value).Chunk(3))
                 {
                     var pages = await FetchDealListPageBatchWithFallbackAsync(
@@ -269,6 +282,7 @@ public sealed class BitrixDealSyncService(
                             recordsRead,
                             recordsWritten,
                             cursor,
+                            trackSeenDeals,
                             cancellationToken,
                             persistUnchangedPayload: mode == SyncMode.Full && reconcileMissing,
                             progress => (recordsRead, recordsWritten, cursor) = progress);
@@ -300,6 +314,7 @@ public sealed class BitrixDealSyncService(
                         recordsRead,
                         recordsWritten,
                         cursor,
+                        trackSeenDeals,
                         cancellationToken,
                         persistUnchangedPayload: mode == SyncMode.Full && reconcileMissing,
                         progress => (recordsRead, recordsWritten, cursor) = progress);
@@ -315,9 +330,12 @@ public sealed class BitrixDealSyncService(
                     dbConnection,
                     connectionInfo.Id,
                     pipeline.Id,
-                    syncRunId,
                     stageId,
+                    effectiveCreatedFrom,
+                    effectiveCreatedTo,
                     cancellationToken);
+
+                await DropSeenDealsTableAsync(dbConnection, cancellationToken);
             }
 
             await repository.FinishRunAsync(syncRunId, "succeeded", recordsRead, recordsWritten, null, CancellationToken.None, cursor);
@@ -522,6 +540,7 @@ public sealed class BitrixDealSyncService(
         int recordsRead,
         int recordsWritten,
         DateTimeOffset? cursor,
+        bool trackSeenDeals,
         CancellationToken cancellationToken,
         bool persistUnchangedPayload,
         Action<(int RecordsRead, int RecordsWritten, DateTimeOffset? Cursor)> setProgress)
@@ -533,16 +552,22 @@ public sealed class BitrixDealSyncService(
         }
 
         await using var transaction = await dbConnection.BeginTransactionAsync(cancellationToken);
+        var bitrixIds = result.EnumerateArray()
+            .Select(deal => GetString(deal, "ID"))
+            .Where(bitrixId => !string.IsNullOrWhiteSpace(bitrixId))
+            .Cast<string>()
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        if (trackSeenDeals)
+        {
+            await TrackSeenDealsAsync(dbConnection, transaction, bitrixIds, cancellationToken);
+        }
+
         var currentHashes = await LoadCurrentDealHashesAsync(
             dbConnection,
             transaction,
             connectionId,
-            result.EnumerateArray()
-                .Select(deal => GetString(deal, "ID"))
-                .Where(bitrixId => !string.IsNullOrWhiteSpace(bitrixId))
-                .Cast<string>()
-                .Distinct(StringComparer.Ordinal)
-                .ToArray(),
+            bitrixIds,
             cancellationToken);
 
         foreach (var deal in result.EnumerateArray())
@@ -577,6 +602,42 @@ public sealed class BitrixDealSyncService(
         return cursor;
     }
 
+    private static async Task CreateSeenDealsTableAsync(
+        NpgsqlConnection connection,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            CREATE TEMP TABLE IF NOT EXISTS sync_seen_deals (
+                bitrix_id text PRIMARY KEY
+            ) ON COMMIT PRESERVE ROWS;
+
+            TRUNCATE TABLE pg_temp.sync_seen_deals;
+            """;
+        await using var command = new NpgsqlCommand(sql, connection);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task TrackSeenDealsAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        string[] bitrixIds,
+        CancellationToken cancellationToken)
+    {
+        if (bitrixIds.Length == 0)
+        {
+            return;
+        }
+
+        const string sql = """
+            INSERT INTO pg_temp.sync_seen_deals (bitrix_id)
+            SELECT unnest(@bitrixIds)
+            ON CONFLICT (bitrix_id) DO NOTHING;
+            """;
+        await using var command = new NpgsqlCommand(sql, connection, transaction);
+        command.Parameters.AddWithValue("bitrixIds", bitrixIds);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     private static string BuildBatchCommand(string method, IEnumerable<KeyValuePair<string, string>> parameters)
     {
         var query = string.Join(
@@ -591,8 +652,9 @@ public sealed class BitrixDealSyncService(
         NpgsqlConnection connection,
         Guid connectionId,
         Guid pipelineId,
-        Guid syncRunId,
         string? stageId,
+        DateTimeOffset? createdFrom,
+        DateTimeOffset? createdTo,
         CancellationToken cancellationToken)
     {
         var stageFilter = string.IsNullOrWhiteSpace(stageId)
@@ -608,24 +670,37 @@ public sealed class BitrixDealSyncService(
               AND snapshot.entity_type = 'deal'
               AND snapshot.is_deleted = false
               {stageFilter}
+              AND (@createdFrom IS NULL OR snapshot.bitrix_created_at >= @createdFrom)
+              AND (@createdTo IS NULL OR snapshot.bitrix_created_at <= @createdTo)
               AND NOT EXISTS (
                   SELECT 1
-                  FROM bitrix.raw_payloads payload
-                  WHERE payload.sync_run_id = @syncRunId
-                    AND payload.entity_type = 'deal'
-                    AND payload.bitrix_id = snapshot.bitrix_id
+                  FROM pg_temp.sync_seen_deals seen
+                  WHERE seen.bitrix_id = snapshot.bitrix_id
               );
             """;
 
         await using var command = new NpgsqlCommand(sql, connection);
         command.Parameters.AddWithValue("connectionId", connectionId);
         command.Parameters.AddWithValue("pipelineId", pipelineId);
-        command.Parameters.AddWithValue("syncRunId", syncRunId);
+        command.Parameters.Add("createdFrom", NpgsqlDbType.TimestampTz).Value =
+            (object?)createdFrom?.ToUniversalTime() ?? DBNull.Value;
+        command.Parameters.Add("createdTo", NpgsqlDbType.TimestampTz).Value =
+            (object?)createdTo?.ToUniversalTime() ?? DBNull.Value;
         if (!string.IsNullOrWhiteSpace(stageId))
         {
             command.Parameters.AddWithValue("stageId", stageId);
         }
 
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task DropSeenDealsTableAsync(
+        NpgsqlConnection connection,
+        CancellationToken cancellationToken)
+    {
+        await using var command = new NpgsqlCommand(
+            "DROP TABLE IF EXISTS pg_temp.sync_seen_deals;",
+            connection);
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 

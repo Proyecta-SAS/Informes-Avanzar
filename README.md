@@ -498,6 +498,8 @@ GET /api/reports/fuerza-comercial-diego/valores-radicados?year=2026
 GET /api/reports/fuerza-comercial-diego/dashboard?year=2026
 GET /api/reports/fuerza-comercial-diego/cartera-recaudada?year=2026
 GET /api/reports/fuerza-comercial-diego/liderazgo-comisiones?year=2026
+POST /api/bitrix/sync/reports/comercial/commissions?year=2026
+POST /api/bitrix/sync/reports/comercial/portfolio-state
 ```
 
 ## Informe Fuerza Comercial Diego

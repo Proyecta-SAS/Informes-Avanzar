@@ -2,6 +2,7 @@ const formatNumber = new Intl.NumberFormat("es-CO");
 
 let pipelines = [];
 let stagesByPipeline = new Map();
+let syncInProgress = false;
 
 const escapeHtml = (value) => String(value ?? "")
   .replaceAll("&", "&amp;")
@@ -31,7 +32,8 @@ const loadState = async () => {
   const response = await fetch("/api/data/sync-state");
   if (!response.ok) throw new Error(`No fue posible consultar el estado: HTTP ${response.status}`);
   const state = await response.json();
-  setSyncButtonsDisabled(state.isSyncing);
+  syncInProgress = state.isSyncing;
+  setSyncButtonsDisabled(syncInProgress);
 
   if (!state.isSyncing) {
     setStatus("Listo", "Sin sincronizaciones activas");
@@ -158,6 +160,8 @@ const renderPipelineRows = () => {
       await runSync(`/api/bitrix/sync/deals/${encodeURIComponent(button.dataset.pipelineIncremental)}/incremental`);
     });
   });
+
+  setSyncButtonsDisabled(syncInProgress);
 };
 
 const reloadInventory = async () => {
@@ -179,12 +183,32 @@ const reload = async () => {
 };
 
 const runSync = async (url) => {
+  if (syncInProgress) {
+    setStatus("Sincronizando", "Espera a que termine la sincronizacion activa.");
+    return;
+  }
+
+  try {
+    if (await loadState()) return;
+  } catch (error) {
+    setStatus("Error", error.message);
+    setSyncButtonsDisabled(false);
+    return;
+  }
+
+  syncInProgress = true;
   setSyncButtonsDisabled(true);
   setStatus("Iniciando", "Arrancando sincronizacion");
   const response = await fetch(url, { method: "POST" });
   if (!response.ok) {
-    setStatus("Error", `La sincronizacion no pudo iniciar: HTTP ${response.status}`);
-    setSyncButtonsDisabled(false);
+    const error = await response.json().catch(() => ({}));
+    if (response.status === 409) {
+      await reloadActivity().catch(() => {});
+      setStatus("Sincronizando", error.message ?? "Ya hay otra sincronizacion activa.");
+      return;
+    }
+    setStatus("Error", error.message ?? `La sincronizacion no pudo iniciar: HTTP ${response.status}`);
+    await loadState().catch(() => setSyncButtonsDisabled(false));
     return;
   }
   await reload();

@@ -7,7 +7,12 @@ public interface IBitrixSyncRepository
 {
     Task<BitrixConnection> GetActiveConnectionAsync(CancellationToken cancellationToken);
     Task<IReadOnlyList<BitrixPipeline>> ListActivePipelinesAsync(CancellationToken cancellationToken);
-    Task<Guid> StartRunAsync(Guid connectionId, string entityType, SyncMode mode, CancellationToken cancellationToken);
+    Task<Guid> StartRunAsync(
+        Guid connectionId,
+        string entityType,
+        SyncMode mode,
+        CancellationToken cancellationToken,
+        string? concurrencyKey = null);
     Task<DateTimeOffset?> GetLastSuccessfulCursorAsync(Guid connectionId, string entityType, CancellationToken cancellationToken);
     Task UpdateRunProgressAsync(Guid syncRunId, int recordsRead, int recordsWritten, CancellationToken cancellationToken, DateTimeOffset? cursor = null);
     Task FinishRunAsync(Guid syncRunId, string status, int recordsRead, int recordsWritten, string? errorMessage, CancellationToken cancellationToken, DateTimeOffset? cursor = null);
@@ -69,12 +74,22 @@ public sealed class BitrixSyncRepository(NpgsqlDataSource dataSource) : IBitrixS
         return pipelines;
     }
 
-    public async Task<Guid> StartRunAsync(Guid connectionId, string entityType, SyncMode mode, CancellationToken cancellationToken)
+    public async Task<Guid> StartRunAsync(
+        Guid connectionId,
+        string entityType,
+        SyncMode mode,
+        CancellationToken cancellationToken,
+        string? concurrencyKey = null)
     {
         const string activeRunSql = """
             SELECT entity_type
             FROM bitrix.sync_runs
             WHERE status = 'running'
+              AND (
+                  @concurrencyKey IS NULL
+                  OR entity_type = @concurrencyKey
+                  OR entity_type LIKE @concurrencyPrefix
+              )
             ORDER BY created_at DESC
             LIMIT 1;
             """;
@@ -92,10 +107,14 @@ public sealed class BitrixSyncRepository(NpgsqlDataSource dataSource) : IBitrixS
 
         await using (var activeCommand = new NpgsqlCommand(activeRunSql, connection, transaction))
         {
+            activeCommand.Parameters.Add("concurrencyKey", NpgsqlTypes.NpgsqlDbType.Text).Value =
+                (object?)concurrencyKey ?? DBNull.Value;
+            activeCommand.Parameters.Add("concurrencyPrefix", NpgsqlTypes.NpgsqlDbType.Text).Value =
+                concurrencyKey is null ? DBNull.Value : $"{concurrencyKey}:%";
             var activeEntity = (string?)await activeCommand.ExecuteScalarAsync(cancellationToken);
             if (!string.IsNullOrWhiteSpace(activeEntity))
             {
-                throw new InvalidOperationException($"Ya hay una sincronizacion activa: {activeEntity}.");
+                throw new SyncAlreadyRunningException($"Ya hay una sincronizacion activa: {activeEntity}.");
             }
         }
 

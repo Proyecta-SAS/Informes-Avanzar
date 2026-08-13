@@ -1,4 +1,5 @@
 .env
+env
 bin/
 obj/
 .vs/
@@ -6,3 +7,4 @@ obj/
 TestResults/
 coverage/
 .DS_Store
+*.log

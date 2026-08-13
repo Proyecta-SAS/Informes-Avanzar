@@ -17,5 +17,6 @@ public interface IBitrixDealSyncService
         IReadOnlyDictionary<string, string>? fieldEqualsFilters = null,
         IReadOnlyList<string>? selectFields = null,
         bool reconcileMissing = true,
-        string? entityTypeSuffix = null);
+        string? entityTypeSuffix = null,
+        bool allowConcurrentWithOtherPipelines = false);
 }

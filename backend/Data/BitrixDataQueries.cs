@@ -18,7 +18,8 @@ public static class BitrixDataQueries
                 ('ins_embargos', 'INS Embargos', 109, 'operaciones', 52, true),
                 ('pqrfs', 'PQRFS', 97, 'servicio_cliente', 55, true),
                 ('seguros_operativa', 'Seguros Operativa', 256, 'seguros', 60, true),
-                ('seguros_comercial', 'Seguros Comercial', 278, 'seguros', 62, true)
+                ('seguros_comercial', 'Seguros Comercial', 278, 'seguros', 62, true),
+                ('cuentas_cobro', 'Cuentas de Cobro', 72, 'comercial', 70, true)
             ON CONFLICT DO NOTHING;
 
             UPDATE bitrix.pipelines pipeline
@@ -32,9 +33,15 @@ public static class BitrixDataQueries
                 (109, 'INS Embargos', 'operaciones', 52),
                 (97, 'PQRFS', 'servicio_cliente', 55),
                 (256, 'Seguros Operativa', 'seguros', 60),
-                (278, 'Seguros Comercial', 'seguros', 62)
+                (278, 'Seguros Comercial', 'seguros', 62),
+                (72, 'Cuentas de Cobro', 'comercial', 70)
             ) AS source(category_id, name, domain, sync_order)
             WHERE pipeline.category_id = source.category_id;
+
+            UPDATE bitrix.pipelines
+            SET slug = 'cuentas_cobro'
+            WHERE category_id = 72
+              AND slug <> 'cuentas_cobro';
             """;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var command = new NpgsqlCommand(sql, connection);
@@ -770,11 +777,10 @@ public static class BitrixDataQueries
                 SELECT
                     COALESCE(NULLIF(users.full_name, ''), deals.assigned_by_bitrix_id, 'Sin asesor') AS advisor,
                     CASE
-                        WHEN pipelines.category_id IN (12, 302) THEN 'RCH'
-                        WHEN pipelines.category_id IN (68, 308) THEN 'Insolvencia'
+                        WHEN pipelines.category_id = 68 THEN 'Insolvencia'
+                        WHEN pipelines.category_id = 12 THEN 'RCH'
                     END AS commercial_line,
-                    UPPER(TRANSLATE(COALESCE(stages.name, deals.stage_id, ''),
-                        'ÁÉÍÓÚÜÑáéíóúüñ', 'AEIOUUNAEIOUUN')) AS stage_name,
+                    UPPER(TRIM(COALESCE(stages.name, deals.stage_id, ''))) AS stage_name,
                     COALESCE(deals.opportunity, 0) AS amount
                 FROM bitrix.deals deals
                 JOIN bitrix.pipelines pipelines ON pipelines.id = deals.pipeline_id
@@ -784,18 +790,68 @@ public static class BitrixDataQueries
                 LEFT JOIN bitrix.users users
                     ON users.connection_id = deals.connection_id
                     AND users.bitrix_id = deals.assigned_by_bitrix_id
-                WHERE pipelines.category_id IN (12, 68, 302, 308)
+                JOIN bitrix.entity_snapshots snapshot
+                    ON snapshot.connection_id = deals.connection_id
+                    AND snapshot.entity_type = 'deal'
+                    AND snapshot.bitrix_id = deals.bitrix_id
+                    AND snapshot.is_deleted = false
+                WHERE pipelines.category_id IN (68, 12)
+                    AND UPPER(TRIM(COALESCE(stages.name, deals.stage_id, ''))) IN (
+                        'VERIFICACION CASO EXITOSO',
+                        'CASOS CON NOVEDAD',
+                        'NOTIFICADO',
+                        'CARTERA EN TIEMPO',
+                        'MORA 0 - 30 DÍAS',
+                        'POR GESTIONAR',
+                        'ANTICIPO PENDIENTE RADICACIÓN',
+                        'CARTERA DE ESTRUCTURACIÓN',
+                        'EN SEGUIMIENTO',
+                        'MORA 30 - 60 DÍAS',
+                        'COBRO PRE JURIDICO',
+                        'ACUERDO DE PAGO',
+                        'INCUMPLIMIENTO DE ACUERDO',
+                        'COBRO JURIDICO',
+                        'OBJECIONES',
+                        'MORA 30 - 60 DIAS',
+                        'ACUERDO DE PAGO EN MORA',
+                        'GENERACIÓN DE PAZ Y SALVO',
+                        'GANADO',
+                        'GENERACIÓN PAZ Y SALVO'
+                    )
             )
             SELECT
                 advisor,
                 commercial_line,
-                COALESCE(SUM(amount) FILTER (WHERE stage_name !~ '(NOVEDAD|OBJEC|MORA|BAJA|ELIMINAR|GANADO|EXITOS|FACTUR|PAZ Y SALVO|PAGAD)'), 0) AS receivable,
-                COALESCE(SUM(amount) FILTER (WHERE stage_name ~ '(NOVEDAD|OBJEC|MORA|BAJA|ELIMINAR)'), 0) AS with_novelty,
-                COALESCE(SUM(amount) FILTER (WHERE stage_name ~ '(GANADO|EXITOS|FACTUR|PAZ Y SALVO|PAGAD)'), 0) AS successful
+                COALESCE(SUM(amount) FILTER (WHERE stage_name IN (
+                    'VERIFICACION CASO EXITOSO',
+                    'CASOS CON NOVEDAD',
+                    'NOTIFICADO',
+                    'CARTERA EN TIEMPO',
+                    'MORA 0 - 30 DÍAS',
+                    'POR GESTIONAR',
+                    'ANTICIPO PENDIENTE RADICACIÓN',
+                    'CARTERA DE ESTRUCTURACIÓN',
+                    'EN SEGUIMIENTO'
+                )), 0) AS receivable,
+                COALESCE(SUM(amount) FILTER (WHERE stage_name IN (
+                    'MORA 30 - 60 DÍAS',
+                    'COBRO PRE JURIDICO',
+                    'ACUERDO DE PAGO',
+                    'INCUMPLIMIENTO DE ACUERDO',
+                    'COBRO JURIDICO',
+                    'OBJECIONES',
+                    'MORA 30 - 60 DIAS',
+                    'ACUERDO DE PAGO EN MORA'
+                )), 0) AS with_novelty,
+                COALESCE(SUM(amount) FILTER (WHERE stage_name IN (
+                    'GENERACIÓN DE PAZ Y SALVO',
+                    'GANADO',
+                    'GENERACIÓN PAZ Y SALVO'
+                )), 0) AS successful
             FROM portfolio
             GROUP BY advisor, commercial_line
-            HAVING SUM(amount) > 0
-            ORDER BY receivable DESC, advisor;
+            ORDER BY receivable DESC, advisor
+            LIMIT 1000;
             """;
 
         var portfolio = new List<object>();
@@ -930,21 +986,53 @@ public static class BitrixDataQueries
             """;
 
         const string commissionsSql = """
+            WITH commissions AS (
+                SELECT
+                    EXTRACT(MONTH FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int AS month_number,
+                    COALESCE(NULLIF(u.full_name, ''), d.assigned_by_bitrix_id, 'Sin asesor') AS advisor,
+                    COALESCE(d.opportunity, 0) AS amount
+                FROM bitrix.deals d
+                JOIN bitrix.pipelines pipeline ON pipeline.id = d.pipeline_id
+                JOIN bitrix.pipeline_stages stage
+                    ON stage.pipeline_id = pipeline.id
+                    AND stage.bitrix_stage_id = d.stage_id
+                JOIN bitrix.entity_snapshots snapshot
+                    ON snapshot.connection_id = d.connection_id
+                    AND snapshot.entity_type = 'deal'
+                    AND snapshot.bitrix_id = d.bitrix_id
+                    AND snapshot.is_deleted = false
+                LEFT JOIN bitrix.users u
+                    ON u.connection_id = d.connection_id
+                    AND u.bitrix_id = d.assigned_by_bitrix_id
+                WHERE pipeline.category_id = 72
+                    AND UPPER(TRIM(stage.name)) IN (
+                        'CUENTA PAGADA CUENTAS DE COBRO',
+                        'VERIFICADO X PAGAR'
+                    )
+                    AND d.bitrix_created_at IS NOT NULL
+                    AND EXTRACT(YEAR FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @year
+            )
             SELECT
-                TO_CHAR(COALESCE(d.bitrix_created_at, d.created_at), 'MM MON') AS month,
-                COALESCE(NULLIF(u.full_name, ''), d.assigned_by_bitrix_id, 'Sin asesor') AS advisor,
-                COALESCE(SUM(d.opportunity), 0) AS total
-            FROM bitrix.deals d
-            JOIN bitrix.pipelines pipeline ON pipeline.id = d.pipeline_id
-            LEFT JOIN bitrix.pipeline_stages stage
-                ON stage.pipeline_id = pipeline.id AND stage.bitrix_stage_id = d.stage_id
-            LEFT JOIN bitrix.users u
-                ON u.connection_id = d.connection_id AND u.bitrix_id = d.assigned_by_bitrix_id
-            WHERE pipeline.category_id = 72
-                AND UPPER(COALESCE(stage.name, '')) IN ('CUENTA PAGADA CUENTAS DE COBRO', 'VERIFICADO X PAGAR')
-                AND EXTRACT(YEAR FROM COALESCE(d.bitrix_created_at, d.created_at)) = @year
-            GROUP BY 1, 2
-            ORDER BY total DESC;
+                CASE month_number
+                    WHEN 1 THEN '01 ENE'
+                    WHEN 2 THEN '02 FEB'
+                    WHEN 3 THEN '03 MAR'
+                    WHEN 4 THEN '04 ABR'
+                    WHEN 5 THEN '05 MAY'
+                    WHEN 6 THEN '06 JUN'
+                    WHEN 7 THEN '07 JUL'
+                    WHEN 8 THEN '08 AGO'
+                    WHEN 9 THEN '09 SEP'
+                    WHEN 10 THEN '10 OCT'
+                    WHEN 11 THEN '11 NOV'
+                    WHEN 12 THEN '12 DIC'
+                END AS month,
+                advisor,
+                COALESCE(SUM(amount), 0) AS total
+            FROM commissions
+            GROUP BY month_number, advisor
+            ORDER BY total DESC, month_number, advisor
+            LIMIT 1000;
             """;
 
         const string relationshipsSql = """
