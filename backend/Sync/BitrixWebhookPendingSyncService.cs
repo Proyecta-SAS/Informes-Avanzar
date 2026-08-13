@@ -10,13 +10,15 @@ public sealed class BitrixWebhookPendingSyncService(
     public async Task<SyncResult> ProcessPendingDealChangesAsync(int limit, CancellationToken cancellationToken)
     {
         var effectiveLimit = Math.Clamp(limit, 1, 5000);
-        var connectionInfo = await repository.GetActiveConnectionAsync(cancellationToken);
-        var syncRunId = await repository.StartRunAsync(connectionInfo.Id, "deal:webhook-pending", SyncMode.Incremental, cancellationToken);
+        const string entityType = "deal:webhook-pending";
         var recordsRead = 0;
         var recordsWritten = 0;
+        Guid syncRunId = Guid.Empty;
 
         try
         {
+            var connectionInfo = await repository.GetActiveConnectionAsync(cancellationToken);
+            syncRunId = await repository.StartRunAsync(connectionInfo.Id, entityType, SyncMode.Incremental, cancellationToken);
             var events = await TakePendingEventsAsync(effectiveLimit, cancellationToken);
             foreach (var pendingEvent in events)
             {
@@ -36,14 +38,27 @@ public sealed class BitrixWebhookPendingSyncService(
             }
 
             await repository.FinishRunAsync(syncRunId, "succeeded", recordsRead, recordsWritten, null, CancellationToken.None);
-            return new SyncResult(syncRunId, "deal:webhook-pending", "incremental", "succeeded", recordsRead, recordsWritten);
+            return new SyncResult(syncRunId, entityType, "incremental", "succeeded", recordsRead, recordsWritten);
         }
         catch (Exception ex)
         {
-            await repository.FinishRunAsync(syncRunId, "failed", recordsRead, recordsWritten, ex.Message, CancellationToken.None);
-            return new SyncResult(syncRunId, "deal:webhook-pending", "incremental", "failed", recordsRead, recordsWritten, ex.Message);
+            if (IsActiveSyncConflict(ex))
+            {
+                return new SyncResult(syncRunId, entityType, "incremental", "succeeded", recordsRead, recordsWritten, ex.Message);
+            }
+
+            if (syncRunId != Guid.Empty)
+            {
+                await repository.FinishRunAsync(syncRunId, "failed", recordsRead, recordsWritten, ex.Message, CancellationToken.None);
+            }
+
+            return new SyncResult(syncRunId, entityType, "incremental", "failed", recordsRead, recordsWritten, ex.Message);
         }
     }
+
+    private static bool IsActiveSyncConflict(Exception exception) =>
+        exception is InvalidOperationException
+        && exception.Message.Contains("sincronizacion activa", StringComparison.OrdinalIgnoreCase);
 
     private async Task<IReadOnlyList<PendingDealEvent>> TakePendingEventsAsync(int limit, CancellationToken cancellationToken)
     {
