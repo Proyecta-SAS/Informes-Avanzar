@@ -116,6 +116,7 @@ let teamScope = null;
 let generalRadicatedData = null;
 let generalDashboardData = null;
 let commercialHierarchy = [];
+let coordinatorRadicatedData = [];
 const normalizeTeamValue = (value = "") => value.trim().toLocaleLowerCase("es-CO");
 const isTeamMember = (name) => !teamScope || new Set((teamScope.memberNames ?? []).map(normalizeTeamValue)).has(normalizeTeamValue(name));
 const isTeamDepartment = (name) => !teamScope || new Set((teamScope.departmentNames ?? []).map(normalizeTeamValue)).has(normalizeTeamValue(name));
@@ -555,7 +556,10 @@ const renderPipelineTable = (items, mode) => {
   return renderDataTable(headers, rows, `pipeline-table pipeline-table-${mode}`);
 };
 
-const renderMonthlyMatrix = (groupLabel, items, groupField) => {
+const renderMonthlyMatrix = (groupLabel, items, groupField, roundValues = false) => {
+  const valueFormatter = roundValues
+    ? new Intl.NumberFormat("es-CO", { maximumFractionDigits: 0 })
+    : formatNumber;
   const months = [...new Set(items.map((item) => item.month))]
     .sort((left, right) => Number.parseInt(left, 10) - Number.parseInt(right, 10));
   const groupedValues = new Map();
@@ -578,7 +582,7 @@ const renderMonthlyMatrix = (groupLabel, items, groupField) => {
         <tbody>${groups.map((group) => `
           <tr data-${groupField}="${encodeURIComponent(group)}"><td>${group}</td>${months.map((month) => {
             const value = groupedValues.get(group).get(month);
-            return `<td data-month="${month.slice(0, 2)}">${value ? formatNumber.format(value) : ""}</td>`;
+            return `<td data-month="${month.slice(0, 2)}">${value ? valueFormatter.format(value) : ""}</td>`;
           }).join("")}</tr>
         `).join("")}</tbody>
       </table>
@@ -590,6 +594,7 @@ const isCoordinatorGroupName = (value = "") => value.toLocaleUpperCase("es-CO").
 const isLeaderGroupName = (value = "") => value.toLocaleUpperCase("es-CO").includes("EQ. LIDER");
 
 const renderPerformanceTable = (items, groupField, coordinatorMode = false) => {
+  const groupLabel = groupField === "coordinator" ? "Coordinador" : "Líder";
   const grouped = new Map();
   items.forEach((item) => {
     const group = item[groupField] || `Sin ${groupField}`;
@@ -611,8 +616,8 @@ const renderPerformanceTable = (items, groupField, coordinatorMode = false) => {
     count: rows.length,
     html: `<div class="radicated-table-wrap performance-table-wrap">
       <table class="radicated-table synced-table performance-table">
-        <thead><tr><th>Mes</th><th>Meta</th><th>Valor alcanzado</th><th>% de cumplimiento</th></tr></thead>
-        <tbody>${rows.map((row) => `<tr data-group="${encodeURIComponent(row.group)}" data-${groupField}="${encodeURIComponent(row.group)}"><td>${row.month}</td><td>${formatNumber.format(row.goal)}</td><td>${formatNumber.format(row.total)}</td><td>${row.compliance.toLocaleString("es-CO", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</td></tr>`).join("")}</tbody>
+        <thead><tr><th>${groupLabel}</th><th>Mes</th><th>Meta</th><th>Valor alcanzado</th><th>% de cumplimiento</th></tr></thead>
+        <tbody>${rows.map((row) => `<tr data-group="${encodeURIComponent(row.group)}" data-${groupField}="${encodeURIComponent(row.group)}"><td>${row.group}</td><td>${row.month}</td><td>${formatNumber.format(row.goal)}</td><td>${formatNumber.format(row.total)}</td><td>${row.compliance.toLocaleString("es-CO", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</td></tr>`).join("")}</tbody>
       </table>
     </div>`
   };
@@ -823,19 +828,23 @@ const loadDiegoLeadershipAndCommissions = async () => {
   const response = await fetch(`/api/reports/fuerza-comercial-diego/liderazgo-comisiones?year=${encodeURIComponent(year)}`);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
+  data.coordinatorValues = data.coordinatorValues ?? [];
   if (teamScope) {
+    data.coordinatorValues = data.coordinatorValues.filter((item) => isTeamDepartment(item.coordinator));
     data.leadership = (data.leadership ?? []).filter((item) => isTeamDepartment(item.leader) || isTeamDepartment(item.coordinator));
     data.commissions = (data.commissions ?? []).filter((item) => isTeamMember(item.advisor));
     data.relationships = (data.relationships ?? []).filter((item) => isTeamMember(item.advisor));
   }
+  coordinatorRadicatedData = data.coordinatorValues;
+  const leaderRadicatedData = coordinatorRadicatedData.filter((item) => Boolean(item.leader));
   commercialHierarchy = data.relationships?.length ? data.relationships : (data.leadership ?? []);
 
-  const coordinatorItems = data.leadership.filter((item) => isCoordinatorGroupName(item.coordinator ?? ""));
-  const leaderItems = data.leadership.filter((item) => isLeaderGroupName(item.leader ?? ""));
+  const coordinatorItems = coordinatorRadicatedData.filter((item) => isCoordinatorGroupName(item.coordinator ?? ""));
+  const leaderItems = leaderRadicatedData.filter((item) => isLeaderGroupName(item.leader ?? ""));
   const leaderCount = new Set(leaderItems.map((item) => item.leader).filter(Boolean)).size;
   const coordinatorCount = new Set(coordinatorItems.map((item) => item.coordinator).filter(Boolean)).size;
-  replaceBlockPreview("Valores radicados por líder", renderMonthlyMatrix("Líder", leaderItems, "leader"), leaderCount);
-  replaceBlockPreview("Valores radicados por coordinador", renderMonthlyMatrix("Coordinador", coordinatorItems, "coordinator"), coordinatorCount);
+  replaceBlockPreview("Valores radicados por líder", renderMonthlyMatrix("Líder", leaderItems, "leader", true), leaderCount);
+  replaceBlockPreview("Valores radicados por coordinador", renderMonthlyMatrix("Coordinador", coordinatorItems, "coordinator", true), coordinatorCount);
   const coordinatorPerformance = renderPerformanceTable(coordinatorItems, "coordinator", true);
   const leaderPerformance = renderPerformanceTable(leaderItems, "leader");
   replaceBlockPreview("Detalle de coordinadores", coordinatorPerformance.html, coordinatorPerformance.count);

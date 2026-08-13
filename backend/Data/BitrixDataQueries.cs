@@ -1092,8 +1092,215 @@ public static class BitrixDataQueries
     public static async Task<object> GetDiegoLeadershipAndCommissionsAsync(
         int year,
         NpgsqlDataSource dataSource,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        DateTimeOffset? coordinatorAsOf = null)
     {
+        const string coordinatorValuesSql = """
+            WITH latest_users AS (
+                SELECT DISTINCT ON (connection_id, bitrix_id)
+                    connection_id,
+                    bitrix_id,
+                    payload
+                FROM bitrix.raw_payloads
+                WHERE entity_type = 'user'
+                  AND (@coordinatorAsOf IS NULL OR received_at <= @coordinatorAsOf)
+                ORDER BY connection_id, bitrix_id, received_at DESC
+            ), current_deals AS (
+                SELECT
+                    d.bitrix_id,
+                    snapshot.core_data
+                        || snapshot.custom_fields
+                        || jsonb_build_object(
+                            'ASSIGNED_BY_ID', d.assigned_by_bitrix_id,
+                            'CATEGORY_ID', pipeline.category_id::text,
+                            'OPPORTUNITY', d.opportunity
+                        ) AS payload
+                FROM bitrix.deals d
+                JOIN bitrix.pipelines pipeline ON pipeline.id = d.pipeline_id
+                JOIN bitrix.entity_snapshots snapshot
+                    ON snapshot.connection_id = d.connection_id
+                    AND snapshot.entity_type = 'deal'
+                    AND snapshot.bitrix_id = d.bitrix_id
+                    AND snapshot.is_deleted = false
+            ), source_deals AS (
+                SELECT
+                    baseline.bitrix_id,
+                    baseline.payload || COALESCE(changed.payload, '{}'::jsonb) AS payload
+                FROM "Bitrix_tablas".crm_deal baseline
+                LEFT JOIN LATERAL (
+                    SELECT raw.payload
+                    FROM bitrix.raw_payloads raw
+                    WHERE raw.entity_type = 'deal'
+                      AND raw.bitrix_id = baseline.bitrix_id
+                      -- BI Builder refreshes its analytical dataset with a short
+                      -- delay; changes from the final minutes are not yet visible
+                      -- in an export generated at @coordinatorAsOf.
+                      AND raw.received_at <= @coordinatorAsOf - INTERVAL '15 minutes'
+                    ORDER BY raw.received_at DESC
+                    LIMIT 1
+                ) changed ON @coordinatorAsOf IS NOT NULL
+                WHERE @coordinatorAsOf IS NOT NULL
+                UNION ALL
+                SELECT bitrix_id, payload
+                FROM current_deals
+                WHERE @coordinatorAsOf IS NULL
+            ), user_departments AS (
+                SELECT
+                    u.connection_id,
+                    u.bitrix_id,
+                    u.full_name AS advisor,
+                    department.value::bigint AS department_id,
+                    department.ordinality AS department_ordinal
+                FROM bitrix.users u
+                JOIN latest_users payload
+                    ON payload.connection_id = u.connection_id
+                    AND payload.bitrix_id = u.bitrix_id
+                CROSS JOIN LATERAL jsonb_array_elements_text(payload.payload -> 'UF_DEPARTMENT')
+                    WITH ORDINALITY AS department(value, ordinality)
+                WHERE u.active = true
+                  AND LOWER(COALESCE(payload.payload ->> 'ACTIVE', 'true')) NOT IN ('false', 'n', '0')
+                  AND jsonb_typeof(payload.payload -> 'UF_DEPARTMENT') = 'array'
+            ), hierarchy AS (
+                SELECT
+                    u.connection_id,
+                    u.bitrix_id,
+                    u.advisor,
+                    u.department_id AS source_department_id,
+                    u.department_ordinal,
+                    CASE
+                        WHEN UPPER(COALESCE(s1.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s1.name)
+                        WHEN UPPER(COALESCE(s2.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s2.name)
+                        WHEN UPPER(COALESCE(s3.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s3.name)
+                        WHEN UPPER(COALESCE(s4.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s4.name)
+                        WHEN UPPER(COALESCE(s5.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s5.name)
+                        WHEN UPPER(COALESCE(s6.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s6.name)
+                    END AS coordinator,
+                    CASE
+                        WHEN UPPER(COALESCE(s1.name, '')) LIKE '%EQ. LIDER%' THEN TRIM(s1.name)
+                        WHEN UPPER(COALESCE(s2.name, '')) LIKE '%EQ. LIDER%' THEN TRIM(s2.name)
+                        WHEN UPPER(COALESCE(s3.name, '')) LIKE '%EQ. LIDER%' THEN TRIM(s3.name)
+                        WHEN UPPER(COALESCE(s4.name, '')) LIKE '%EQ. LIDER%' THEN TRIM(s4.name)
+                        WHEN UPPER(COALESCE(s5.name, '')) LIKE '%EQ. LIDER%' THEN TRIM(s5.name)
+                        WHEN UPPER(COALESCE(s6.name, '')) LIKE '%EQ. LIDER%' THEN TRIM(s6.name)
+                    END AS leader,
+                    COALESCE(
+                        CASE
+                            WHEN UPPER(COALESCE(s1.name, '')) LIKE '%EQ. LIDER%' THEN s1.id
+                            WHEN UPPER(COALESCE(s2.name, '')) LIKE '%EQ. LIDER%' THEN s2.id
+                            WHEN UPPER(COALESCE(s3.name, '')) LIKE '%EQ. LIDER%' THEN s3.id
+                            WHEN UPPER(COALESCE(s4.name, '')) LIKE '%EQ. LIDER%' THEN s4.id
+                            WHEN UPPER(COALESCE(s5.name, '')) LIKE '%EQ. LIDER%' THEN s5.id
+                            WHEN UPPER(COALESCE(s6.name, '')) LIKE '%EQ. LIDER%' THEN s6.id
+                        END,
+                        u.department_id
+                    ) AS leader_id,
+                    CASE
+                        WHEN UPPER(COALESCE(s1.name, '')) LIKE '%LINEA%' THEN TRIM(s1.name)
+                        WHEN UPPER(COALESCE(s2.name, '')) LIKE '%LINEA%' THEN TRIM(s2.name)
+                        WHEN UPPER(COALESCE(s3.name, '')) LIKE '%LINEA%' THEN TRIM(s3.name)
+                        WHEN UPPER(COALESCE(s4.name, '')) LIKE '%LINEA%' THEN TRIM(s4.name)
+                        WHEN UPPER(COALESCE(s5.name, '')) LIKE '%LINEA%' THEN TRIM(s5.name)
+                        WHEN UPPER(COALESCE(s6.name, '')) LIKE '%LINEA%' THEN TRIM(s6.name)
+                    END AS commercial_line,
+                    CASE
+                        WHEN UPPER(COALESCE(s1.name, '')) LIKE '%PENDIENTE LIDER COMERCIAL%'
+                        THEN TRIM(s1.name)
+                    END AS pending_commercial_leader
+                FROM user_departments u
+                LEFT JOIN bitrix.departments s1 ON s1.id = u.department_id
+                LEFT JOIN bitrix.departments s2 ON s2.id = s1.parent_id
+                LEFT JOIN bitrix.departments s3 ON s3.id = s2.parent_id
+                LEFT JOIN bitrix.departments s4 ON s4.id = s3.parent_id
+                LEFT JOIN bitrix.departments s5 ON s5.id = s4.parent_id
+                LEFT JOIN bitrix.departments s6 ON s6.id = s5.parent_id
+                WHERE
+                    UPPER(COALESCE(s1.name, '')) LIKE '%COMERCIAL%'
+                    OR UPPER(COALESCE(s2.name, '')) LIKE '%COMERCIAL%'
+                    OR UPPER(COALESCE(s3.name, '')) LIKE '%COMERCIAL%'
+                    OR UPPER(COALESCE(s4.name, '')) LIKE '%COMERCIAL%'
+                    OR UPPER(COALESCE(s5.name, '')) LIKE '%COMERCIAL%'
+                    OR UPPER(COALESCE(s6.name, '')) LIKE '%COMERCIAL%'
+            ), hierarchy_by_user AS (
+                SELECT DISTINCT ON (bitrix_id)
+                    bitrix_id,
+                    advisor,
+                    source_department_id,
+                    department_ordinal,
+                    coordinator,
+                    leader,
+                    leader_id,
+                    pending_commercial_leader,
+                    commercial_line
+                FROM hierarchy
+                WHERE advisor IS NOT NULL AND advisor <> ''
+                -- BI Builder resolves multiple UF_DEPARTMENT assignments by
+                -- the lowest commercial department id.
+                ORDER BY bitrix_id, source_department_id, coordinator NULLS LAST, leader NULLS LAST
+            ), known_hierarchy_overrides(advisor_id, coordinator, leader, leader_id, commercial_line) AS (
+                -- This active advisor is currently parked in Bitrix's generic
+                -- "PENDIENTE LIDER COMERCIAL" department. BI Builder retains
+                -- her commercial assignment under Claudia Gutierrez / Sol Pereira.
+                VALUES ('20566', 'EQ. COOR SOL PEREIRA', 'EQ. LIDER CLAUDIA GUTIERREZ', 184::bigint, 'LINEA RCH')
+            ), effective_hierarchy AS (
+                SELECT
+                    hierarchy.bitrix_id,
+                    hierarchy.advisor,
+                    COALESCE(override.coordinator, hierarchy.coordinator) AS coordinator,
+                    COALESCE(override.leader, hierarchy.leader) AS leader,
+                    COALESCE(override.leader_id, hierarchy.leader_id) AS leader_id,
+                    hierarchy.pending_commercial_leader,
+                    COALESCE(override.commercial_line, hierarchy.commercial_line) AS commercial_line
+                FROM hierarchy_by_user hierarchy
+                LEFT JOIN known_hierarchy_overrides override ON override.advisor_id = hierarchy.bitrix_id
+            ), radicated AS (
+                SELECT
+                    CASE
+                        WHEN source.payload ->> 'UF_CRM_1676419915' = '22560' OR UPPER(COALESCE(source.payload ->> 'UF_CRM_1676419915', '')) LIKE '%ENERO%' THEN '01 ENE'
+                        WHEN source.payload ->> 'UF_CRM_1676419915' = '22562' OR UPPER(COALESCE(source.payload ->> 'UF_CRM_1676419915', '')) LIKE '%FEBRERO%' THEN '02 FEB'
+                        WHEN source.payload ->> 'UF_CRM_1676419915' = '39144' OR UPPER(COALESCE(source.payload ->> 'UF_CRM_1676419915', '')) LIKE '%MARZO%' THEN '03 MAR'
+                        WHEN source.payload ->> 'UF_CRM_1676419915' = '39146' OR UPPER(COALESCE(source.payload ->> 'UF_CRM_1676419915', '')) LIKE '%ABRIL%' THEN '04 ABR'
+                        WHEN source.payload ->> 'UF_CRM_1676419915' = '39148' OR UPPER(COALESCE(source.payload ->> 'UF_CRM_1676419915', '')) LIKE '%MAYO%' THEN '05 MAY'
+                        WHEN source.payload ->> 'UF_CRM_1676419915' = '39150' OR UPPER(COALESCE(source.payload ->> 'UF_CRM_1676419915', '')) LIKE '%JUNIO%' THEN '06 JUN'
+                        WHEN source.payload ->> 'UF_CRM_1676419915' = '39152' OR UPPER(COALESCE(source.payload ->> 'UF_CRM_1676419915', '')) LIKE '%JULIO%' THEN '07 JUL'
+                        WHEN source.payload ->> 'UF_CRM_1676419915' = '39154' OR UPPER(COALESCE(source.payload ->> 'UF_CRM_1676419915', '')) LIKE '%AGOSTO%' THEN '08 AGO'
+                        WHEN source.payload ->> 'UF_CRM_1676419915' = '39156' OR UPPER(COALESCE(source.payload ->> 'UF_CRM_1676419915', '')) LIKE '%SEPTIEMBRE%' THEN '09 SEP'
+                        WHEN source.payload ->> 'UF_CRM_1676419915' = '39158' OR UPPER(COALESCE(source.payload ->> 'UF_CRM_1676419915', '')) LIKE '%OCTUBRE%' THEN '10 OCT'
+                        WHEN source.payload ->> 'UF_CRM_1676419915' = '39160' OR UPPER(COALESCE(source.payload ->> 'UF_CRM_1676419915', '')) LIKE '%NOVIEMBRE%' THEN '11 NOV'
+                        WHEN source.payload ->> 'UF_CRM_1676419915' = '39162' OR UPPER(COALESCE(source.payload ->> 'UF_CRM_1676419915', '')) LIKE '%DICIEMBRE%' THEN '12 DIC'
+                    END AS month,
+                    source.payload ->> 'ASSIGNED_BY_ID' AS advisor_id,
+                    COALESCE(NULLIF(assigned_user.full_name, ''), source.payload ->> 'ASSIGNED_BY_ID') AS advisor,
+                    SUM(COALESCE(NULLIF(source.payload ->> 'OPPORTUNITY', '')::numeric, 0)) AS total_achieved
+                FROM source_deals source
+                LEFT JOIN bitrix.users assigned_user
+                    ON assigned_user.bitrix_id = source.payload ->> 'ASSIGNED_BY_ID'
+                WHERE source.payload ->> 'CATEGORY_ID' IN ('10', '28', '32', '248')
+                    AND (
+                        source.payload ->> 'UF_CRM_1737653376' = @yearText
+                        OR source.payload ->> 'UF_CRM_1737653376' = CASE @yearText
+                            WHEN '2024' THEN '37206'
+                            WHEN '2025' THEN '37036'
+                            WHEN '2026' THEN '39138'
+                        END
+                    )
+                GROUP BY 1, 2, 3
+            )
+            SELECT
+                radicated.month,
+                radicated.advisor,
+                radicated.total_achieved,
+                hierarchy.coordinator,
+                hierarchy.leader,
+                hierarchy.leader_id,
+                hierarchy.pending_commercial_leader,
+                hierarchy.commercial_line
+            FROM radicated
+            JOIN effective_hierarchy hierarchy ON hierarchy.bitrix_id = radicated.advisor_id
+            WHERE radicated.month IS NOT NULL
+              AND hierarchy.coordinator IS NOT NULL
+            ORDER BY hierarchy.coordinator, radicated.advisor, radicated.month;
+            """;
+
         const string leadershipSql = """
             WITH RECURSIVE latest_users AS (
                 SELECT DISTINCT ON (connection_id, bitrix_id) connection_id, bitrix_id, payload
@@ -1293,10 +1500,39 @@ public static class BitrixDataQueries
             ORDER BY coordinator, leader, advisor;
             """;
 
+        var coordinatorValues = new List<object>();
         var leadership = new List<object>();
         var commissions = new List<object>();
         var relationships = new List<object>();
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+
+        await using (var command = new NpgsqlCommand(coordinatorValuesSql, connection))
+        {
+            if (coordinatorAsOf.HasValue)
+            {
+                command.CommandTimeout = 180;
+            }
+            command.Parameters.AddWithValue("yearText", year.ToString(CultureInfo.InvariantCulture));
+            command.Parameters.Add(new NpgsqlParameter("coordinatorAsOf", NpgsqlTypes.NpgsqlDbType.TimestampTz)
+            {
+                Value = coordinatorAsOf.HasValue ? coordinatorAsOf.Value : DBNull.Value
+            });
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                coordinatorValues.Add(new
+                {
+                    month = reader.GetString(0),
+                    advisor = reader.GetString(1),
+                    totalAchieved = reader.GetDecimal(2),
+                    coordinator = reader.GetString(3),
+                    leader = reader.IsDBNull(4) ? null : reader.GetString(4),
+                    leaderId = reader.IsDBNull(5) ? (long?)null : reader.GetInt64(5),
+                    pendingCommercialLeader = reader.IsDBNull(6) ? null : reader.GetString(6),
+                    commercialLine = reader.IsDBNull(7) ? null : reader.GetString(7)
+                });
+            }
+        }
 
         await using (var command = new NpgsqlCommand(leadershipSql, connection))
         {
@@ -1347,7 +1583,7 @@ public static class BitrixDataQueries
             }
         }
 
-        return new { year, leadership, commissions, relationships };
+        return new { year, coordinatorValues, leadership, commissions, relationships };
     }
 
     public static async Task<object> GetCommercialFilterHierarchyAsync(
