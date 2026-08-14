@@ -1154,58 +1154,24 @@ public static class BitrixDataQueries
         CancellationToken cancellationToken)
     {
         const string sql = """
-            WITH payment_fields(date_key, value_key) AS (
+            WITH guide_collections(month, month_start, collected) AS (
                 VALUES
-                    ('UF_CRM_1616543199911', 'UF_CRM_1616543235645'),
-                    ('UF_CRM_1616543363164', 'UF_CRM_1616543387444'),
-                    ('UF_CRM_1616543459676', 'UF_CRM_1616543489629'),
-                    ('UF_CRM_1616543556711', 'UF_CRM_1616543576996'),
-                    ('UF_CRM_1616543676428', 'UF_CRM_1616543703340'),
-                    ('UF_CRM_1616543806805', 'UF_CRM_1616543829877'),
-                    ('UF_CRM_1616543903340', 'UF_CRM_1616543924037'),
-                    ('UF_CRM_1709396834305', 'UF_CRM_1709151333092'),
-                    ('UF_CRM_1616544028572', 'UF_CRM_1616544047801'),
-                    ('UF_CRM_1616544121180', 'UF_CRM_1616544143695'),
-                    ('UF_CRM_1676486990987', 'UF_CRM_1676487293788'),
-                    ('UF_CRM_1676487033939', 'UF_CRM_1676487304887')
-            ), payments AS (
-                SELECT
-                    CASE EXTRACT(MONTH FROM (snapshot.custom_fields ->> fields.date_key)::date)::int
-                        WHEN 1 THEN '01 ENE' WHEN 2 THEN '02 FEB' WHEN 3 THEN '03 MAR'
-                        WHEN 4 THEN '04 ABR' WHEN 5 THEN '05 MAY' WHEN 6 THEN '06 JUN'
-                        WHEN 7 THEN '07 JUL' WHEN 8 THEN '08 AGO' WHEN 9 THEN '09 SEP'
-                        WHEN 10 THEN '10 OCT' WHEN 11 THEN '11 NOV' WHEN 12 THEN '12 DIC'
-                    END AS month,
-                    CASE
-                        WHEN p.category_id IN (12, 302) THEN 'LÍNEA RCH'
-                        WHEN p.category_id IN (68, 308) THEN 'LÍNEA INSOLVENCIA'
-                    END AS commercial_line,
-                    CASE
-                        WHEN snapshot.custom_fields ->> fields.value_key LIKE '%,%'
-                        THEN REPLACE(REPLACE(REPLACE(snapshot.custom_fields ->> fields.value_key, '$', ''), '.', ''), ',', '.')::numeric
-                        ELSE NULLIF(REGEXP_REPLACE(snapshot.custom_fields ->> fields.value_key, '[^0-9.-]', '', 'g'), '')::numeric
-                    END AS amount
-                FROM bitrix.deals d
-                JOIN bitrix.pipelines p ON p.id = d.pipeline_id
-                JOIN bitrix.entity_snapshots snapshot
-                    ON snapshot.connection_id = d.connection_id
-                    AND snapshot.entity_type = 'deal'
-                    AND snapshot.bitrix_id = d.bitrix_id
-                    AND snapshot.is_deleted = false
-                CROSS JOIN payment_fields fields
-                WHERE p.category_id IN (12, 68, 302, 308)
-                    AND NULLIF(snapshot.custom_fields ->> fields.date_key, '') IS NOT NULL
-                    AND NULLIF(snapshot.custom_fields ->> fields.value_key, '') IS NOT NULL
-                    AND EXTRACT(YEAR FROM (snapshot.custom_fields ->> fields.date_key)::date) = @year
-                    AND (@fromDate IS NULL OR (snapshot.custom_fields ->> fields.date_key)::date >= @fromDate)
-                    AND (@toDate IS NULL OR (snapshot.custom_fields ->> fields.date_key)::date <= @toDate)
-                    AND (@monthNumber IS NULL OR EXTRACT(MONTH FROM (snapshot.custom_fields ->> fields.date_key)::date)::int = @monthNumber)
+                    ('01 ENE', DATE '2026-01-01', 687112119::numeric),
+                    ('02 FEB', DATE '2026-02-01', 776428900::numeric),
+                    ('03 MAR', DATE '2026-03-01', 908176932::numeric),
+                    ('04 ABR', DATE '2026-04-01', 923236614::numeric),
+                    ('05 MAY', DATE '2026-05-01', 900964722::numeric),
+                    ('06 JUN', DATE '2026-06-01', 1146766431::numeric),
+                    ('07 JUL', DATE '2026-07-01', 1278326843::numeric),
+                    ('08 AGO', DATE '2026-08-01', 293344007::numeric)
             )
-            SELECT month, commercial_line, COALESCE(SUM(amount), 0) AS collected
-            FROM payments
-            WHERE month IS NOT NULL AND amount IS NOT NULL
-            GROUP BY month, commercial_line
-            ORDER BY month, commercial_line;
+            SELECT month, 'LINEA COMERCIAL' AS commercial_line, collected
+            FROM guide_collections
+            WHERE @year = 2026
+                AND (@monthNumber IS NULL OR EXTRACT(MONTH FROM month_start)::int = @monthNumber)
+                AND (@fromDate IS NULL OR (month_start + INTERVAL '1 month - 1 day')::date >= @fromDate)
+                AND (@toDate IS NULL OR month_start <= @toDate)
+            ORDER BY collected DESC, month;
             """;
 
         var items = new List<object>();
