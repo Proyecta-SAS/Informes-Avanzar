@@ -775,7 +775,9 @@ const buildCommercialPossibleCloseGroups = (items) => {
     const line = commercialPossibleCloseLine({ pipeline });
     const rows = commercialPossibleCloseStages
       .map((stage) => grouped.get(`${pipeline}\u0001${stage}`) ?? { pipeline, stage, amount: 0, cases: 0, line });
-    return { pipeline, line, rows };
+    const amount = rows.reduce((sum, row) => sum + row.amount, 0);
+    const cases = rows.reduce((sum, row) => sum + row.cases, 0);
+    return { pipeline, line, rows, amount, cases };
   }).filter((group) => group.rows.some((row) => row.amount || row.cases));
   let grandAmount = 0;
   let grandCases = 0;
@@ -811,10 +813,9 @@ const renderCommercialPossibleClose = (items) => {
       html: `<div class="empty-block"><strong>Sin posibles cierres</strong><span>No hay negocios en las etapas configuradas.</span></div>`
     };
   }
-  const tables = grouped.pipelines.map((group, index) => {
-    const isLast = index === grouped.pipelines.length - 1;
-    return renderCommercialPossibleCloseTable(group, isLast ? { amount: grouped.grandAmount, cases: grouped.grandCases } : null);
-  });
+  const tables = grouped.pipelines.map((group) => (
+    renderCommercialPossibleCloseTable(group, { amount: group.amount, cases: group.cases })
+  ));
   return {
     count: grouped.count,
     html: `<div class="radicated-table-wrap synced-table-wrap commercial-possible-close-wrap">
@@ -914,7 +915,7 @@ const loadDiegoPortfolioCollections = async () => {
   }
   const portfolioRows = data.portfolio.map((item) => `<tr data-advisor="${encodeURIComponent(item.advisor)}" data-line="${normalizeFilterText(item.commercialLine).includes("insolvencia") ? "pnnc" : normalizeFilterText(item.commercialLine)}"><td>${item.advisor}</td><td><span class="portfolio-line ${normalizeFilterText(item.commercialLine)}">${item.commercialLine}</span></td><td>${formatNumber.format(item.receivable)}</td><td>${formatNumber.format(item.withNovelty)}</td><td>${formatNumber.format(item.successful)}</td></tr>`);
   const portfolioContent = portfolioRows.length
-    ? renderDataTable(["Asesor", "Línea", "Valor cartera por cobrar", "Valor cartera con novedad", "Valor cartera exitosa"], portfolioRows, "portfolio-state-table")
+    ? renderDataTable(["Asesor", "L&iacute;nea de negocio", "Valor cartera por cobrar", "Valor cartera con novedad", "Valor cartera exitosa"], portfolioRows, "portfolio-state-table")
     : `<div class="empty-block"><strong>Sin cartera disponible</strong><span>Sincronice las pipelines RCH Cartera e Insolvencia Cartera.</span></div>`;
   replaceBlockPreview("Estado de cartera", portfolioContent, data.portfolio.length);
   const collectionsByMonth = new Map();
