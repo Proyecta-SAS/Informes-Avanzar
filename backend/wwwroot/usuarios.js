@@ -8,7 +8,8 @@ const generalBlockGroups = [
   ["Radicación", [["radicated_values", "Valores radicados por asesor"], ["advisor_negotiations", "Total negociaciones por asesor"], ["coordinator_values", "Valores radicados por coordinador"], ["leader_values", "Valores radicados por líder"], ["coordinator_detail", "Detalle coordinadores"], ["leader_detail", "Radicaciones por líderes"]]],
   ["Comisiones", [["advisor_commissions", "Comisiones por asesor"]]],
   ["Carteras", [["portfolio_state", "Estado de cartera 2025"], ["portfolio_collected", "Cartera recaudada"]]],
-  ["Embudos", [["funnel_insolvency", "Embudo Insolvencia"], ["funnel_rch", "Embudo RCH"], ["commercial_possible_close_rch", "(COM) Posible Cierre RCH"], ["commercial_possible_close_pnnc", "(COM) Posible Cierre PNNC"]]]
+  ["Embudos", [["funnel_insolvency", "Embudo Insolvencia"], ["funnel_rch", "Embudo RCH"], ["commercial_possible_close_rch", "(COM) Posible Cierre RCH"], ["commercial_possible_close_pnnc", "(COM) Posible Cierre PNNC"]]],
+  ["Etapas RCH", [["stages_rch_commercial", "(COM) Etapas Comercial RCH"], ["stages_rch_operativa", "(COM) Etapas Operativa RCH"]]]
 ];
 const allGeneralBlockCodes = generalBlockGroups.flatMap(([, items]) => items.map(([code]) => code));
 const lineSpecificGeneralBlockCodes = new Set(["funnel_insolvency", "funnel_rch", "commercial_possible_close_rch", "commercial_possible_close_pnnc"]);
@@ -124,6 +125,34 @@ const renderWorkspace = () => {
   document.getElementById("roleAssignmentUser").innerHTML = `<option value="">Seleccionar usuario…</option>${accessData.users.map((user) => `<option value="${user.id}">${user.fullName} · ${user.email}</option>`).join("")}`;
 };
 
+const loadUserAssignment = (userId) => {
+  const form = document.getElementById("roleAssignmentForm");
+  const selectedUser = accessData.users.find((user) => user.id === userId);
+  const selectedRole = accessData.roles.find((role) => selectedUser?.roleIds?.includes(role.id));
+  const roleLabel = selectedRole?.code === "report_manager" ? "leader" : "viewer";
+  selectedCommercialRole = roleLabel;
+  document.querySelectorAll("#userRoleCards [data-role-label]").forEach((card) => {
+    card.classList.toggle("selected", card.dataset.roleLabel === roleLabel);
+  });
+  document.getElementById("selectedRoleName").textContent = roleLabel === "leader" ? "Líder" : "Consulta";
+
+  const reportAccess = new Set(accessData.reports.filter((report) => Boolean(report.userAccess?.[userId])).map((report) => report.code));
+  form.querySelectorAll('#roleAssignmentReports input[type="checkbox"]').forEach((input) => {
+    input.checked = reportAccess.has(input.value);
+  });
+
+  const storedBlocks = new Set(accessData.generalBlockAccess?.[userId] ?? []);
+  if (storedBlocks.has("commercial_possible_close")) storedBlocks.add("commercial_possible_close_rch");
+  form.querySelectorAll(".general-block-check").forEach((input) => {
+    input.checked = storedBlocks.has(input.value);
+  });
+  const tableCount = [...form.querySelectorAll(".general-block-check:checked")].length;
+  const state = document.getElementById("roleAssignmentState");
+  state.textContent = userId
+    ? `${reportAccess.size} informe(s) y ${tableCount} tabla(s) asignadas actualmente.`
+    : "";
+};
+
 const loadAccess = async () => {
   accessData = await api("/api/admin/access-management");
   renderWorkspace();
@@ -132,6 +161,7 @@ const loadAccess = async () => {
 document.getElementById("showCreateUser").addEventListener("click", () => document.getElementById("createUserPanel").hidden = false);
 document.getElementById("cancelCreateUser").addEventListener("click", () => document.getElementById("createUserPanel").hidden = true);
 document.getElementById("userSearch").addEventListener("input", (event) => renderUsers(event.target.value));
+document.getElementById("roleAssignmentUser").addEventListener("change", (event) => loadUserAssignment(event.target.value));
 
 document.getElementById("createUserForm").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -222,8 +252,10 @@ document.getElementById("roleAssignmentForm").addEventListener("submit", async (
   await api(`/api/admin/users/${userId}/role`, { method: "PUT", body: JSON.stringify({ roleId: systemRole?.id ?? null }) });
   await Promise.all(commercialReports.map((report) => api(`/api/admin/reports/${report.id}/users/${userId}`, { method: "PUT", body: JSON.stringify({ enabled: enabledReports.has(report.code), accessLevel: "viewer" }) })));
   await api(`/api/admin/reports/informe-general/users/${userId}/blocks`, { method: "PUT", body: JSON.stringify({ visibleBlocks }) });
-  state.textContent = "Rol y permisos guardados correctamente.";
   await loadAccess();
+  document.getElementById("roleAssignmentUser").value = userId;
+  loadUserAssignment(userId);
+  document.getElementById("roleAssignmentState").textContent = "Rol y permisos guardados correctamente.";
 });
 
 loadAccess().catch((exception) => {

@@ -190,6 +190,101 @@
   .session-account-identity, .session-account-chevron { display: none; }
   .session-account-menu { position: fixed; top: 70px; right: 14px; }
 }
+.single-report-session .topbar-actions > .search,
+.single-report-session .home-top-actions > .home-search { display: none; }
+
+/* Evita que el panel de filtros cubra la cuenta de la sesión */
+.topbar:has(.session-account),
+.home-topbar:has(.session-account) { z-index: 200; overflow: visible; }
+.topbar .session-account,
+.home-topbar .session-account { z-index: 210; }
+.report-has-filter-drawer .report-filter-drawer { z-index: 80; }
+
+/* Cabecera principal · acciones agrupadas y sin avatar duplicado */
+.home-topbar:has(.session-account) {
+  display: flex;
+  min-height: 82px;
+  gap: clamp(20px, 4vw, 56px);
+  padding: 12px 26px;
+}
+.home-topbar:has(.session-account) > div:first-child { flex: 0 0 auto; min-width: 205px; }
+.home-topbar:has(.session-account) .home-top-actions {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.home-top-actions:has(.session-account) > .home-avatar { display: none !important; }
+.home-topbar:has(.session-account) .home-search {
+  width: auto;
+  min-width: 210px;
+  max-width: 430px;
+  height: 44px;
+  flex: 1 1 300px;
+  border-radius: 13px;
+}
+.home-topbar:has(.session-account) .home-admin-link,
+.home-topbar:has(.session-account) .theme-toggle,
+.home-topbar:has(.session-account) .session-account-trigger { min-height: 44px; }
+.home-topbar:has(.session-account) .home-admin-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0 16px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+.home-topbar:has(.session-account) .theme-toggle { flex: 0 0 auto; box-shadow: none; }
+.home-topbar:has(.session-account) .session-account-trigger { width: min(285px, 24vw); box-shadow: none; }
+@media (max-width: 1100px) {
+  .home-topbar:has(.session-account) { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .home-topbar:has(.session-account) .home-top-actions { width: 100%; }
+  .home-topbar:has(.session-account) .session-account-trigger { width: min(285px, 32vw); }
+}
+
+/* Usuarios y roles · alineación final del espacio de trabajo */
+.access-app .access-overview { margin: 0 auto; }
+.access-app .access-hero {
+  position: relative;
+  isolation: isolate;
+  min-height: 142px;
+  overflow: hidden;
+  padding: 24px 30px;
+  background: linear-gradient(120deg, #fff 0%, #fbf7fa 62%, #f8e9ee 100%);
+}
+.access-app .access-hero::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: -115px;
+  right: -75px;
+  width: 330px;
+  height: 330px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(170,25,54,.15), rgba(72,27,77,.06) 48%, transparent 69%);
+}
+.access-app .access-hero > div { max-width: 720px; }
+.access-app .access-hero h2 { margin: 6px 0 8px; color: #14233c; font-size: clamp(25px, 2.4vw, 34px); line-height: 1.05; }
+.access-app .access-hero p { max-width: 670px; color: #65758d; font-size: 13px; line-height: 1.5; }
+.access-app .access-hero .section-kicker { color: #a71935; }
+.access-app .access-hero .sync-button { position: relative; min-width: 150px; min-height: 44px; border-radius: 12px; box-shadow: 0 10px 22px rgba(167,25,53,.18); }
+:root[data-theme="dark"] .access-app .access-hero { background: linear-gradient(120deg, #121c2d 0%, #171c31 62%, #301827 100%); }
+:root[data-theme="dark"] .access-app .access-hero h2 { color: var(--text); }
+:root[data-theme="dark"] .access-app .access-hero p { color: var(--muted); }
+@media (max-width: 900px) {
+  .access-app .access-hero { min-height: 0; padding: 22px; }
+  .access-app .access-hero .sync-button { width: 100%; }
+}
+@media (max-width: 720px) {
+  .home-topbar:has(.session-account) { padding: 12px 14px; }
+  .home-topbar:has(.session-account) .home-top-actions { flex-wrap: wrap; }
+  .home-topbar:has(.session-account) .home-search { max-width: none; flex-basis: 100%; }
+  .home-topbar:has(.session-account) .home-admin-link { flex: 1 1 auto; }
+  .home-topbar:has(.session-account) .session-account-trigger { width: 44px; }
+}
 
 * { box-sizing: border-box; }
 

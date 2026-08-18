@@ -20,7 +20,10 @@
       render();
     });
     render();
-    const host = document.querySelector(".topbar-actions, .home-top-actions, .topbar, .home-topbar");
+    const host = document.querySelector(".topbar-actions")
+      ?? document.querySelector(".home-top-actions")
+      ?? document.querySelector(".topbar")
+      ?? document.querySelector(".home-topbar");
     if (host) host.appendChild(button);
     else {
       button.classList.add("theme-toggle-floating");
@@ -136,7 +139,10 @@ if (sessionMenu) {
   sessionMenu.append(logoutButton);
 
   const mountAccountMenu = (session) => {
-    const host = document.querySelector(".topbar-actions, .home-top-actions, .topbar, .home-topbar");
+    const host = document.querySelector(".topbar-actions")
+      ?? document.querySelector(".home-top-actions")
+      ?? document.querySelector(".topbar")
+      ?? document.querySelector(".home-topbar");
     if (!host || host.querySelector(".session-account")) return;
 
     host.querySelectorAll(":scope > .profile, :scope > .home-avatar").forEach((item) => item.remove());
@@ -196,6 +202,8 @@ if (sessionMenu) {
   fetch("/api/auth/me").then((response) => response.ok ? response.json() : Promise.reject()).then((session) => {
     const allowed = new Set(session.accessibleReportCodes ?? []);
     const permissions = new Set(session.permissions ?? []);
+    const assignedReportCount = Number(session.assignedReportCount ?? allowed.size);
+    document.documentElement.classList.toggle("single-report-session", session.roleCode !== "admin" && assignedReportCount <= 1);
     sessionMenu.querySelectorAll("[data-superadmin-only]").forEach((item) => {
       if (!session.isSuperAdmin) item.remove();
     });

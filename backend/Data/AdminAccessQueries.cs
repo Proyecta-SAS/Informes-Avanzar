@@ -107,7 +107,20 @@ public static class AdminAccessQueries
         }
         }
 
-        return new { users, roles, permissions, reports };
+        var generalBlockAccess = new Dictionary<string, string[]>();
+        const string blockAccessSql = """
+            SELECT user_id, visible_blocks
+            FROM reporting.user_report_block_settings
+            WHERE report_code = 'informe_general_comercial';
+            """;
+        await using (var command = new NpgsqlCommand(blockAccessSql, connection))
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+                generalBlockAccess[reader.GetGuid(0).ToString()] = reader.GetFieldValue<string[]>(1);
+        }
+
+        return new { users, roles, permissions, reports, generalBlockAccess };
     }
 
     public static async Task<Guid> CreateUserAsync(string fullName, string email, string password, Guid? roleId, NpgsqlDataSource dataSource, CancellationToken cancellationToken)
