@@ -954,7 +954,14 @@ public static class BitrixDataQueries
                 SELECT DISTINCT
                     u.connection_id,
                     u.bitrix_id,
-                    u.full_name,
+                    COALESCE(
+                        NULLIF(TRIM(CONCAT_WS(' ',
+                            NULLIF(payload.payload ->> 'NAME', ''),
+                            NULLIF(payload.payload ->> 'LAST_NAME', '')
+                        )), ''),
+                        NULLIF(u.full_name, ''),
+                        u.bitrix_id
+                    ) AS full_name,
                     (jsonb_array_elements_text(payload.payload -> 'UF_DEPARTMENT'))::bigint AS department_id
                 FROM bitrix.users u
                 JOIN latest_users payload ON payload.connection_id = u.connection_id AND payload.bitrix_id = u.bitrix_id

@@ -123,6 +123,7 @@ let coordinatorRadicatedData = [];
 const normalizeTeamValue = (value = "") => value
   .normalize("NFD")
   .replace(/[\u0300-\u036f]/g, "")
+  .replace(/[._-]+/g, " ")
   .replace(/\s+/g, " ")
   .trim()
   .toLocaleLowerCase("es-CO");
