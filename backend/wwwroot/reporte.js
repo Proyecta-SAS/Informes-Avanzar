@@ -4416,6 +4416,31 @@ const loadSummary = async () => {
   setText("summaryLastRun", summary.lastSync ? `${summary.lastSync.recordsWritten} escritos` : "Sin datos");
 };
 
+const formatAdjustedSyncTime = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setMinutes(date.getMinutes() - 10);
+  return date.toLocaleTimeString("es-CO", { hour: "numeric", minute: "2-digit" });
+};
+
+const loadDiegoSyncStatus = async () => {
+  const target = document.getElementById("diegoSyncStatusText");
+  if (!target) return;
+  try {
+    const response = await fetch("/api/data/sync-history", { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const rows = await response.json();
+    const lastCompleted = rows.find((row) => row.status === "success" && row.finishedAt)
+      ?? rows.find((row) => row.finishedAt)
+      ?? rows[0];
+    const time = formatAdjustedSyncTime(lastCompleted?.finishedAt ?? lastCompleted?.createdAt);
+    target.textContent = time ? `Última actualización: ${time}` : "Sin actualización registrada";
+  } catch {
+    target.textContent = "Actualización no disponible";
+  }
+};
+
 const loadDeals = async () => {
   const response = await fetch(`/api/data/deals?pipeline=${reportId}`);
   standardDeals = await response.json();
@@ -4495,6 +4520,7 @@ const load = async () => {
     setupFilterDrawer(filterPanel, filterToggle);
     document.getElementById("diegoYear").addEventListener("change", markCommercialViewPending);
     setText("reportStatus", "Leyendo");
+    await loadDiegoSyncStatus();
     await reloadDiegoCommercialData();
     startDiegoAutoRefresh();
     setText("reportStatus", "OK");
@@ -4678,6 +4704,7 @@ const updateReportView = async () => {
   try {
     if (["fuerza_comercial_diego", "informe_general_comercial"].includes(reportId)) {
       await ensureDiegoFilterHierarchy();
+      await loadDiegoSyncStatus();
       await reloadDiegoCommercialData();
     } else if (reportId === "informe_gerencia_2026_2027") {
       await loadGerenciaReportData();
