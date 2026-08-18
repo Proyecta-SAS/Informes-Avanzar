@@ -92,8 +92,12 @@ WITH RECURSIVE department_ancestry AS (
     JOIN bitrix.departments d ON d.head_bitrix_id=head.bitrix_id
     LEFT JOIN reporting.organization_access oa ON oa.department_id=d.id::text
     WHERE panel_user.id=@userId
+      AND (UPPER(d.name) LIKE '%LIDER%' OR UPPER(d.name) LIKE '%COOR%')
+      AND EXISTS (SELECT 1 FROM department_ancestry a WHERE a.root_id=d.id AND a.id=646)
 ), assigned AS (
-    SELECT assigned_id,role_label FROM assigned_candidates ORDER BY priority,assigned_id LIMIT 1
+    SELECT DISTINCT ON (assigned_id) assigned_id,role_label
+    FROM assigned_candidates
+    ORDER BY assigned_id,priority
 ), root AS (
     SELECT COALESCE(CASE
         WHEN role_label='line_coordinator_rch' THEN (SELECT id FROM bitrix.departments WHERE parent_id=646 AND UPPER(name) LIKE '%RCH%' ORDER BY id LIMIT 1)
@@ -114,7 +118,11 @@ WITH RECURSIVE department_ancestry AS (
     WHERE jsonb_typeof(lu.payload->'UF_DEPARTMENT')='array'
       AND EXISTS (SELECT 1 FROM jsonb_array_elements_text(lu.payload->'UF_DEPARTMENT') value JOIN subtree s ON s.id=value::bigint)
 )
-SELECT (SELECT role_label FROM root_named),(SELECT name FROM root_named),COALESCE((SELECT array_agg(DISTINCT name ORDER BY name) FROM subtree),ARRAY[]::text[]),COALESCE((SELECT array_agg(DISTINCT name ORDER BY name) FROM members),ARRAY[]::text[]);
+SELECT
+    (SELECT role_label FROM root_named ORDER BY CASE WHEN role_label LIKE 'leader_%' THEN 0 ELSE 1 END,id LIMIT 1),
+    (SELECT string_agg(DISTINCT name,' / ' ORDER BY name) FROM root_named),
+    COALESCE((SELECT array_agg(DISTINCT name ORDER BY name) FROM subtree),ARRAY[]::text[]),
+    COALESCE((SELECT array_agg(DISTINCT name ORDER BY name) FROM members),ARRAY[]::text[]);
 """;await using var connection=await ds.OpenConnectionAsync(ct);await using var command=new NpgsqlCommand(sql,connection);command.Parameters.AddWithValue("userId",userId);await using var reader=await command.ExecuteReaderAsync(ct);if(!await reader.ReadAsync(ct)||reader.IsDBNull(0))return null;return new{roleLabel=reader.GetString(0),departmentName=reader.GetString(1),departmentNames=reader.GetFieldValue<string[]>(2),memberNames=reader.GetFieldValue<string[]>(3)};}
  public static async Task<object> GetCommercialStructureAsync(NpgsqlDataSource ds,CancellationToken ct){
   var source=new List<DepartmentItem>();await using var connection=await ds.OpenConnectionAsync(ct);await using(var departmentCommand=new NpgsqlCommand("SELECT id::text,name,parent_id::text,head_bitrix_id FROM bitrix.departments ORDER BY sort_order,name;",connection)){await using var reader=await departmentCommand.ExecuteReaderAsync(ct);while(await reader.ReadAsync(ct))source.Add(new DepartmentItem(reader.GetString(0),reader.GetString(1),reader.IsDBNull(2)?null:reader.GetString(2),reader.IsDBNull(3)?null:reader.GetString(3)));}
