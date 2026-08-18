@@ -5414,6 +5414,168 @@ td strong {
 :root[data-theme="dark"] :is(table,thead,tbody,tr,th,td) { border-color:var(--line); }
 :root[data-theme="dark"] :is(th,thead td) { color:#dbe6f5; background:#1a2940; }
 :root[data-theme="dark"] tbody tr:nth-child(odd) { background:#101a2a; }:root[data-theme="dark"] tbody tr:nth-child(even) { background:#142035; }:root[data-theme="dark"] tbody tr:hover { background:#20324d; }:root[data-theme="dark"] td { color:#dce7f5; }
+
+/* Informe general: acabado oscuro uniforme y legible. */
+:root[data-theme="dark"] main.app {
+  background:
+    radial-gradient(circle at 78% 4%, rgba(137, 34, 72, .1), transparent 28%),
+    linear-gradient(180deg, #091221 0%, #0b1424 100%);
+}
+:root[data-theme="dark"] .general-commercial-report .diego-section > header h2,
+:root[data-theme="dark"] .general-commercial-report .diego-block-title h3 {
+  color: #f4f7fc;
+}
+:root[data-theme="dark"] .general-commercial-report .diego-section > header p,
+:root[data-theme="dark"] .general-commercial-report .diego-block-title p {
+  color: #9fb0c8;
+}
+:root[data-theme="dark"] .general-commercial-report .diego-block,
+:root[data-theme="dark"] .diego-kpis article {
+  border-color: #263a56;
+  background: linear-gradient(145deg, #121e31, #0f1a2b);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .28);
+}
+:root[data-theme="dark"] .general-commercial-report .diego-block:hover {
+  border-color: #3c5578;
+  box-shadow: 0 17px 38px rgba(0, 0, 0, .34);
+}
+:root[data-theme="dark"] .general-commercial-report .diego-block-title em,
+:root[data-theme="dark"] .general-commercial-report .diego-block-title em:not(:empty) {
+  border-color: #314765;
+  background: #192940;
+  color: #aebed3;
+}
+:root[data-theme="dark"] .report-has-filter-drawer .report-filter-drawer {
+  border-color: #2a3d58;
+  background: rgba(13, 23, 39, .98);
+  box-shadow: -16px 0 38px rgba(0, 0, 0, .34);
+  scrollbar-color: #405675 #0d1727;
+}
+:root[data-theme="dark"] .report-has-filter-drawer .filter-panel-toggle {
+  border: 1px solid #2c405c;
+  background: #16243a;
+  color: #edf3fc;
+}
+:root[data-theme="dark"] .report-has-filter-drawer .filter-panel-toggle:hover {
+  border-color: #49617f;
+  background: #1b2b44;
+}
+:root[data-theme="dark"] .report-has-filter-drawer .filter-panel-toggle span {
+  background: #eef3fa;
+  color: #a91632;
+}
+:root[data-theme="dark"] .filter-panel-heading {
+  border-color: #263a55;
+}
+:root[data-theme="dark"] .filter-title {
+  color: #f0f4fb;
+}
+:root[data-theme="dark"] .general-commercial-report .diego-filters .filter-title::after {
+  color: #ef8da2;
+}
+:root[data-theme="dark"] .diego-filters select,
+:root[data-theme="dark"] .diego-filters input,
+:root[data-theme="dark"] .report-has-filter-drawer .gerencia-filters select,
+:root[data-theme="dark"] .report-has-filter-drawer .gerencia-filters .month-multiselect summary {
+  border-color: #304663;
+  background-color: #121f33;
+  color: #edf3fc;
+}
+:root[data-theme="dark"] .diego-filters select:hover,
+:root[data-theme="dark"] .diego-filters input:hover {
+  border-color: #506987;
+  background-color: #172740;
+}
+:root[data-theme="dark"] .diego-filters select:focus,
+:root[data-theme="dark"] .diego-filters input:focus {
+  border-color: #d45a73;
+  background-color: #172740;
+  box-shadow: 0 0 0 3px rgba(212, 90, 115, .16);
+}
+:root[data-theme="dark"] .filter-combobox-list {
+  border-color: #304663;
+  background: #111e31;
+  box-shadow: 0 16px 34px rgba(0, 0, 0, .38);
+}
+:root[data-theme="dark"] .filter-combobox-list button {
+  color: #dce6f4;
+  background: transparent;
+}
+:root[data-theme="dark"] .filter-combobox-list button:hover,
+:root[data-theme="dark"] .filter-combobox-list button.is-selected {
+  background: #213550;
+  color: #ff9aad;
+}
+:root[data-theme="dark"] #diegoDashboard #clearDiegoFilters,
+:root[data-theme="dark"] .clear-report-filters {
+  border-color: #6c3546;
+  background: #241824;
+  color: #f39aae;
+}
+:root[data-theme="dark"] #diegoDashboard #clearDiegoFilters:hover,
+:root[data-theme="dark"] .clear-report-filters:hover {
+  border-color: #bd4962;
+  background: #321b29;
+}
+:root[data-theme="dark"] :is(.radicated-matrix-wrap,.leadership-matrix-wrap,.performance-table-wrap,.commission-matrix-wrap,.gerencia-table-wrap) {
+  border-color: #2a3d58;
+  background: #0f1a2b;
+  scrollbar-color: #405675 #0d1727;
+}
+:root[data-theme="dark"] :is(.radicated-matrix,.leadership-matrix,.commission-matrix) :is(th,td),
+:root[data-theme="dark"] :is(.advisor-negotiations-table,.performance-table,.synced-table) :is(th,td) {
+  border-color: #2a3d58;
+}
+:root[data-theme="dark"] .general-commercial-report :is(.radicated-matrix,.leadership-matrix,.commission-matrix) thead th,
+:root[data-theme="dark"] :is(.advisor-negotiations-table,.performance-table) th {
+  background: #1a2a42;
+  color: #e6edf7;
+  box-shadow: inset 0 -1px 0 #344a68;
+}
+:root[data-theme="dark"] :is(.radicated-matrix,.leadership-matrix,.commission-matrix) :is(th:first-child,td:first-child),
+:root[data-theme="dark"] .commission-matrix :is(th:last-child,td:last-child) {
+  background: #111e31;
+}
+:root[data-theme="dark"] :is(.radicated-matrix,.leadership-matrix,.commission-matrix) thead th:first-child,
+:root[data-theme="dark"] .commission-matrix thead th:last-child {
+  background: #1a2a42;
+}
+:root[data-theme="dark"] :is(.radicated-matrix,.leadership-matrix,.commission-matrix) tbody tr:nth-child(odd) td,
+:root[data-theme="dark"] :is(.advisor-negotiations-table,.performance-table) tbody tr:nth-child(odd) {
+  background: #101c2e;
+}
+:root[data-theme="dark"] :is(.radicated-matrix,.leadership-matrix,.commission-matrix) tbody tr:nth-child(even) td,
+:root[data-theme="dark"] :is(.advisor-negotiations-table,.performance-table) tbody tr:nth-child(even) {
+  background: #142238;
+}
+:root[data-theme="dark"] :is(.radicated-matrix,.leadership-matrix,.commission-matrix) tbody tr:hover td,
+:root[data-theme="dark"] :is(.advisor-negotiations-table,.performance-table) tbody tr:hover {
+  background: #1d3451;
+}
+:root[data-theme="dark"] :is(.radicated-matrix,.leadership-matrix,.commission-matrix) tbody td:not(:first-child),
+:root[data-theme="dark"] :is(.radicated-matrix,.commission-matrix) tfoot td,
+:root[data-theme="dark"] .management-close-table td:not(:first-child) {
+  color: #5db5ff;
+}
+:root[data-theme="dark"] :is(.radicated-matrix,.commission-matrix) tfoot :is(th,td),
+:root[data-theme="dark"] .radicated-table tfoot[data-auto-totals] :is(th,td) {
+  border-color: #435a79;
+  background: #1a2940;
+  color: #f1f5fb;
+}
+:root[data-theme="dark"] .empty-block {
+  border-color: #3a506d;
+  background: #101d30;
+}
+:root[data-theme="dark"] .empty-block.error {
+  border-color: #76384a;
+  background: #281923;
+}
+:root[data-theme="dark"] .table-column-sort:hover,
+:root[data-theme="dark"] .table-column-sort:focus-visible {
+  background: rgba(112, 158, 211, .16);
+  color: #d9e8fa;
+}
 :root[data-theme="dark"] .login-page { background:#09111f; }:root[data-theme="dark"] .login-brand-panel { background:linear-gradient(145deg,#100b1f,#23102b 52%,#3b1022); }
 :root[data-theme="light"] .login-page { color:#14233c; background:radial-gradient(circle at 8% 10%,#f6d9dd 0,transparent 34%),radial-gradient(circle at 92% 8%,#dce9f8 0,transparent 38%),#f4f7fb; }
 :root[data-theme="light"] .login-shell { border-color:#d7e1ed; background:linear-gradient(135deg,#fff 0%,#f8fafc 58%,#eef4fb 100%); box-shadow:0 35px 90px rgba(31,55,91,.18),inset 0 1px #fff; }
