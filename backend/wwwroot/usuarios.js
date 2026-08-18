@@ -1,6 +1,15 @@
 let adminKey = sessionStorage.getItem("adminAccessKey") ?? "";
 let accessData = null;
 let selectedCommercialRole = "viewer";
+const commercialManagedReportCodes = [
+  "informe_general_comercial",
+  "fuerza_comercial_diego",
+  "rch_comercial",
+  "rch_operativa",
+  "pnnc_comercial",
+  "pnnc_operativa",
+  "informe_gerencia_2026_2027"
+];
 const generalBlockGroups = [
   ["Radicación", [["radicated_values", "Valores radicados por asesor"], ["advisor_negotiations", "Total negociaciones por asesor"], ["coordinator_values", "Valores radicados por coordinador"], ["leader_values", "Valores radicados por líder"], ["coordinator_detail", "Detalle coordinadores"], ["leader_detail", "Radicaciones por líderes"]]],
   ["Comisiones", [["advisor_commissions", "Comisiones por asesor"]]],
@@ -60,7 +69,7 @@ const renderReportMatrix = () => {
 };
 
 const renderCommercialAccess = () => {
-  const commercialReports = accessData.reports.filter((report) => ["informe_general_comercial"].includes(report.code));
+  const commercialReports = accessData.reports.filter((report) => commercialManagedReportCodes.includes(report.code));
   document.getElementById("commercialAccessMatrix").innerHTML = `
     <div class="commercial-access-grid" style="--commercial-report-count:${commercialReports.length}">
       <div class="commercial-grid-head user-column">Comercial</div>
@@ -84,10 +93,19 @@ const renderGeneralBlockAssignment = () => {
     </div>`).join(""));
 };
 
+const renderRoleAssignmentReports = () => {
+  const fieldset = document.getElementById("roleAssignmentReports");
+  const commercialReports = accessData.reports.filter((report) => commercialManagedReportCodes.includes(report.code));
+  fieldset.innerHTML = `<legend>2. Marca los paneles visibles</legend>${commercialReports.map((report) => `<label><input type="checkbox" value="${report.code}"> ${report.name}</label>`).join("")}`;
+};
+
 const applyCommercialRoleDefaults = () => {
   const form = document.getElementById("roleAssignmentForm");
   if (!["coordinator", "leader"].includes(selectedCommercialRole)) return;
-  form.querySelector('input[value="informe_general_comercial"]').checked = true;
+  commercialManagedReportCodes.forEach((code) => {
+    const input = form.querySelector(`input[value="${code}"]`);
+    if (input) input.checked = true;
+  });
   const defaultBlocks = selectedCommercialRole === "coordinator"
     ? new Set(allGeneralBlockCodes)
     : new Set(leaderGeneralBlockCodes);
@@ -100,6 +118,7 @@ const renderWorkspace = () => {
   renderPermissionMatrix();
   renderReportMatrix();
   renderCommercialAccess();
+  renderRoleAssignmentReports();
   renderGeneralBlockAssignment();
   applyCommercialRoleDefaults();
   document.getElementById("roleAssignmentUser").innerHTML = `<option value="">Seleccionar usuario…</option>${accessData.users.map((user) => `<option value="${user.id}">${user.fullName} · ${user.email}</option>`).join("")}`;
@@ -197,7 +216,7 @@ document.getElementById("roleAssignmentForm").addEventListener("submit", async (
   const systemRoleCode = ["director", "coordinator", "leader"].includes(selectedCommercialRole) ? "report_manager" : "report_viewer";
   const systemRole = accessData.roles.find((role) => role.code === systemRoleCode);
   const enabledReports = new Set([...event.target.querySelectorAll('input[type="checkbox"]:checked')].map((input) => input.value));
-  const commercialReports = accessData.reports.filter((report) => ["informe_general_comercial"].includes(report.code));
+  const commercialReports = accessData.reports.filter((report) => commercialManagedReportCodes.includes(report.code));
   const visibleBlocks = selectedCommercialRole === "coordinator"
     ? allGeneralBlockCodes
     : selectedCommercialRole === "leader"

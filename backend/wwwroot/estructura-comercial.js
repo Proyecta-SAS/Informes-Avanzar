@@ -1,5 +1,5 @@
 const escOrg=(v="")=>String(v).replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]);const initialsOrg=(n="")=>n.split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]).join("").toUpperCase()||"AV";
-const roleNames={viewer:"Consulta",coordinator:"Coordinador",leader:"Líder",advisor:"Asesor"};const reportOptions=[['informe_general_comercial','Informe general']];
+const roleNames={viewer:"Consulta",coordinator:"Coordinador",leader:"Líder",advisor:"Asesor"};const reportOptions=[['informe_general_comercial','Informe general'],['fuerza_comercial_diego','Fuerza comercial'],['rch_comercial','RCH Comercial'],['rch_operativa','RCH Operativa'],['pnnc_comercial','PNNC Comercial'],['pnnc_operativa','PNNC Operativa'],['informe_gerencia_2026_2027','Informe Gerencia']];
 const generalBlockGroups=[
   ["Radicación",[["radicated_values","Valores radicados por asesor"],["advisor_negotiations","Total negociaciones por asesor"],["coordinator_values","Valores radicados por coordinador"],["leader_values","Valores radicados por líder"],["coordinator_detail","Detalle coordinadores"],["leader_detail","Radicaciones por líderes"]]],
   ["Comisiones",[["advisor_commissions","Comisiones por asesor"]]],

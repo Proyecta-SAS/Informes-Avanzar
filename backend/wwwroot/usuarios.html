@@ -70,7 +70,7 @@
         </div>
         <form id="roleAssignmentForm" class="role-assignment-form">
           <label>1. Selecciona el usuario<select id="roleAssignmentUser" required></select></label>
-          <fieldset><legend>2. Marca los paneles visibles</legend><label><input type="checkbox" value="informe_general_comercial"> Informe General Comercial</label></fieldset>
+          <fieldset id="roleAssignmentReports"><legend>2. Marca los paneles visibles</legend></fieldset>
           <fieldset id="generalBlockAssignment"><legend>3. Tablas del Informe General</legend></fieldset>
           <div class="role-assignment-summary"><span>Rol seleccionado</span><strong id="selectedRoleName">Consulta</strong><small>Los permisos individuales complementan los accesos generales del rol.</small></div>
           <button class="sync-button" type="submit">Aplicar rol y permisos</button>
@@ -103,7 +103,7 @@
       </section>
     </div>
   </main>
-  <script src="/usuarios.js?v=20260813-possible-close-two-tables"></script>
+  <script src="/usuarios.js?v=20260818-report-options"></script>
   <script src="/auth-session.js?v=20260806-user-visibility"></script>
 </body>
 </html>

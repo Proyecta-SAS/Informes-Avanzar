@@ -77,7 +77,8 @@ const diegoSections = [
       ["Etapas Operativa RCH", "Radicación por validar y documentación pendiente o subsanada.", "bars"],
       ["Etapas Comercial PNNC", "Recopilación, anticipo y cuarentena.", "bars"],
       ["Etapas Operativa PNNC", "Validación y estado de la documentación comercial.", "bars"],
-      ["(COM) Posible Cierre", "Monto y casos por pipeline y etapa.", "table"]
+      ["(COM) Posible Cierre RCH", "Monto y casos por etapa de posible cierre RCH.", "table"],
+      ["(COM) Posible Cierre PNNC", "Monto y casos por etapa de posible cierre PNNC.", "table"]
     ]
   }
 ];
@@ -107,7 +108,8 @@ const generalBlockCodes = {
   "Cartera recaudada": "portfolio_collected",
   "Embudo Insolvencia": "funnel_insolvency",
   "Embudo RCH": "funnel_rch",
-  "(COM) Posible Cierre": "commercial_possible_close",
+  "(COM) Posible Cierre RCH": "commercial_possible_close",
+  "(COM) Posible Cierre PNNC": "commercial_possible_close",
   "Etapas Comercial RCH": "stages_rch_commercial",
   "Etapas Operativa RCH": "stages_rch_operativa",
   "Etapas Comercial PNNC": "stages_pnnc_commercial",
@@ -319,7 +321,8 @@ let customerServiceWithdrawals = {
 let customerServiceSummary = { compliance: 0, received: 0 };
 let diegoHierarchyLoaded = false;
 let diegoCommercialDataLoaded = false;
-let diegoManualRefreshRequested = false;
+let diegoAutoRefreshTimer = 0;
+const diegoAutoRefreshMs = 30 * 60 * 1000;
 
 const markCommercialViewPending = () => {
   if (["fuerza_comercial_diego", "informe_general_comercial"].includes(reportId)) {
@@ -338,13 +341,20 @@ const ensureDiegoFilterHierarchy = async () => {
   diegoHierarchyLoaded = true;
 };
 
+const startDiegoAutoRefresh = () => {
+  if (!["fuerza_comercial_diego", "informe_general_comercial"].includes(reportId) || diegoAutoRefreshTimer) return;
+  diegoAutoRefreshTimer = window.setInterval(() => {
+    if (document.visibilityState === "visible") updateReportView();
+  }, diegoAutoRefreshMs);
+};
+
 
 const loadDiegoRadicatedValues = async () => {
   const container = document.getElementById("diegoValoresRadicados");
   const queryString = getDiegoCommercialQueryString();
 
   try {
-    const response = await fetch(`/api/reports/fuerza-comercial-diego/valores-radicados?${queryString}`);
+    const response = await fetch(`/api/reports/fuerza-comercial-diego/valores-radicados?${queryString}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     if (teamScope) data.items = (data.items ?? []).filter((item) => isTeamMember(item.advisor));
@@ -403,7 +413,9 @@ const generalCommercialLabels = {
   "Etapas Comercial RCH": "(COM) ETAPAS COMERCIAL RCH",
   "Etapas Operativa RCH": "(COM) ETAPAS OPERATIVA RCH",
   "Etapas Comercial PNNC": "(COM) ETAPAS COMERCIAL PNNC",
-  "Etapas Operativa PNNC": "(COM) ETAPAS OPERATIVA PNNC"
+  "Etapas Operativa PNNC": "(COM) ETAPAS OPERATIVA PNNC",
+  "(COM) Posible Cierre RCH": "(COM) Posible Cierre RCH",
+  "(COM) Posible Cierre PNNC": "(COM) Posible Cierre PNNC"
 };
 
 const applyGeneralCommercialLabels = () => {
@@ -427,10 +439,13 @@ const parseTableNumber = (text = "") => {
   const isPercent = raw.includes("%");
   let normalized = raw.replace(/[^\d,.-]/g, "");
   if (!normalized || normalized === "-") return null;
-  if (isPercent) normalized = normalized.replace(/\./g, "").replace(",", ".");
-  else if (normalized.includes(",") && normalized.includes(".")) normalized = normalized.replace(/[.,]/g, "");
-  else if (/^-?\d+[.,]\d{1,2}$/.test(normalized)) normalized = normalized.replace(",", ".");
-  else normalized = normalized.replace(/[.,]/g, "");
+  if (normalized.includes(",") && normalized.includes(".")) {
+    normalized = normalized.replace(/\./g, "").replace(",", ".");
+  } else if (/^-?\d+[.,]\d{1,2}$/.test(normalized)) {
+    normalized = normalized.replace(",", ".");
+  } else {
+    normalized = normalized.replace(/[.,]/g, "");
+  }
   const value = Number(normalized);
   return Number.isFinite(value) ? { value, isPercent } : null;
 };
@@ -618,8 +633,12 @@ const renderMonthlyMatrix = (groupLabel, items, groupField, roundValues = false)
 };
 
 const monthlyLeaderGoal = (month) => Number.parseInt(month, 10) >= 7 ? 70000000 : 60000000;
-const isCoordinatorGroupName = (value = "") => value.toLocaleUpperCase("es-CO").includes("EQ. COOR");
-const isLeaderGroupName = (value = "") => value.toLocaleUpperCase("es-CO").includes("EQ. LIDER");
+const isKnownHierarchyGroupName = (value = "", fallbackLabel = "") => {
+  const normalized = normalizeFilterText(value);
+  return Boolean(normalized) && normalized !== normalizeFilterText(fallbackLabel);
+};
+const isCoordinatorGroupName = (value = "") => isKnownHierarchyGroupName(value, "Sin coordinador");
+const isLeaderGroupName = (value = "") => isKnownHierarchyGroupName(value, "Sin líder");
 
 const renderPerformanceTable = (items, groupField, coordinatorMode = false) => {
   const groupLabel = groupField === "coordinator" ? "Coordinador" : "Líder";
@@ -746,10 +765,13 @@ const renderGeneralPossibleClose = (items) => {
 };
 
 const commercialPossibleCloseLine = (item) => {
-  const source = normalizeFilterText(item.commercialLine || item.pipeline || "");
-  if (source.includes("rch")) return "rch";
-  if (source.includes("pnnc") || source.includes("insolvencia")) return "pnnc";
-  return source;
+  const pipeline = normalizeFilterText(item.pipeline || "");
+  if (pipeline.includes("rch")) return "rch";
+  if (pipeline.includes("pnnc") || pipeline.includes("insolvencia")) return "pnnc";
+  const commercialLine = normalizeFilterText(item.commercialLine || "");
+  if (commercialLine.includes("rch")) return "rch";
+  if (commercialLine.includes("pnnc") || commercialLine.includes("insolvencia")) return "pnnc";
+  return commercialLine || pipeline;
 };
 
 const commercialPossibleCloseStages = [
@@ -805,8 +827,11 @@ const renderCommercialPossibleCloseTable = (group, totals = null) => `
     </table>
   </div>`;
 
-const renderCommercialPossibleClose = (items) => {
-  const grouped = buildCommercialPossibleCloseGroups(items);
+const renderCommercialPossibleClose = (items, lineFilter = null) => {
+  const filteredItems = lineFilter
+    ? items.filter((item) => commercialPossibleCloseLine(item) === lineFilter)
+    : items;
+  const grouped = buildCommercialPossibleCloseGroups(filteredItems);
   if (!grouped.count) {
     return {
       count: 0,
@@ -852,7 +877,7 @@ const renderGeneralManagement = () => {
 
 const loadDiegoDashboardData = async () => {
   const queryString = getDiegoCommercialQueryString();
-  const response = await fetch(`/api/reports/fuerza-comercial-diego/dashboard?${queryString}`);
+  const response = await fetch(`/api/reports/fuerza-comercial-diego/dashboard?${queryString}`, { cache: "no-store" });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
   if (teamScope) {
@@ -900,13 +925,15 @@ const loadDiegoDashboardData = async () => {
     });
   });
   const possibleCloseItems = data.possibleCloseCommercial ?? [];
-  const possibleCloseView = renderCommercialPossibleClose(possibleCloseItems);
-  replaceBlockPreview("(COM) Posible Cierre", possibleCloseView.html, possibleCloseView.count);
+  const possibleCloseRchView = renderCommercialPossibleClose(possibleCloseItems, "rch");
+  const possibleClosePnncView = renderCommercialPossibleClose(possibleCloseItems, "pnnc");
+  replaceBlockPreview("(COM) Posible Cierre RCH", possibleCloseRchView.html, possibleCloseRchView.count);
+  replaceBlockPreview("(COM) Posible Cierre PNNC", possibleClosePnncView.html, possibleClosePnncView.count);
 };
 
 const loadDiegoPortfolioCollections = async () => {
   const queryString = getDiegoCommercialQueryString();
-  const response = await fetch(`/api/reports/fuerza-comercial-diego/cartera-recaudada?${queryString}`);
+  const response = await fetch(`/api/reports/fuerza-comercial-diego/cartera-recaudada?${queryString}`, { cache: "no-store" });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
   if (teamScope) {
@@ -935,7 +962,7 @@ const loadDiegoPortfolioCollections = async () => {
 
 const loadDiegoLeadershipAndCommissions = async () => {
   const queryString = getDiegoCommercialQueryString();
-  const response = await fetch(`/api/reports/fuerza-comercial-diego/liderazgo-comisiones?${queryString}`);
+  const response = await fetch(`/api/reports/fuerza-comercial-diego/liderazgo-comisiones?${queryString}`, { cache: "no-store" });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
   data.coordinatorValues = data.coordinatorValues ?? [];
@@ -965,8 +992,7 @@ const loadDiegoLeadershipAndCommissions = async () => {
 };
 
 const loadDiegoFilterHierarchy = async () => {
-  if (!diegoManualRefreshRequested) return;
-  const response = await fetch("/api/reports/fuerza-comercial-diego/jerarquia-filtros");
+  const response = await fetch("/api/reports/fuerza-comercial-diego/jerarquia-filtros", { cache: "no-store" });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
   commercialHierarchy = (data.items ?? []).filter((item) => !teamScope || isTeamMember(item.advisor));
@@ -1042,14 +1068,6 @@ const getDiegoCommercialQueryString = () => {
 };
 
 const reloadDiegoCommercialData = async () => {
-  if (!diegoManualRefreshRequested) {
-    diegoCommercialDataLoaded = false;
-    setText("reportStatus", "Sin cargar");
-    document.querySelectorAll("#diegoSections .empty-block, #diegoSections .radicated-values").forEach((block) => {
-      block.innerHTML = `<div class="empty-block"><strong>Vista sin cargar</strong><span>Use Actualizar vista para consultar los datos.</span></div>`;
-    });
-    return;
-  }
   await Promise.all([
     loadDiegoRadicatedValues(),
     loadDiegoDashboardData(),
@@ -1148,8 +1166,10 @@ const applyDiegoFilters = () => {
       const matchesTeam = belongsToSelectedHierarchy(item.advisor, item.leader, item.coordinator);
       return matchesLine && matchesTeam;
     });
-    const possibleCloseView = renderCommercialPossibleClose(possibleCloseItems);
-    replaceBlockPreview("(COM) Posible Cierre", possibleCloseView.html, possibleCloseView.count);
+    const possibleCloseRchView = renderCommercialPossibleClose(possibleCloseItems, "rch");
+    const possibleClosePnncView = renderCommercialPossibleClose(possibleCloseItems, "pnnc");
+    replaceBlockPreview("(COM) Posible Cierre RCH", possibleCloseRchView.html, possibleCloseRchView.count);
+    replaceBlockPreview("(COM) Posible Cierre PNNC", possibleClosePnncView.html, possibleClosePnncView.count);
   }
 
   document.querySelectorAll(".diego-block").forEach((block) => {
@@ -4096,7 +4116,7 @@ const renderDiegoDashboard = () => {
       </header>
       <div class="diego-block-grid">
         ${section.blocks.map(([title, description, type]) => `
-          <article data-block-title="${title}" data-block-code="${generalBlockCodes[title]}" class="diego-block diego-block-${type}${["Total de negociaciones por asesor", "Cartera recaudada", "(COM) Posible Cierre"].includes(title) ? " diego-block-wide-table" : ""}">
+          <article data-block-title="${title}" data-block-code="${generalBlockCodes[title]}" class="diego-block diego-block-${type}${["Total de negociaciones por asesor", "Cartera recaudada"].includes(title) ? " diego-block-wide-table" : ""}">
             <div class="diego-block-title"><div><h3>${title}</h3><p>${description}</p></div><em>Sin datos</em></div>
             ${blockPreview(type)}
           </article>
@@ -4474,7 +4494,10 @@ const load = async () => {
     const filterToggle = document.getElementById("toggleDiegoFilters");
     setupFilterDrawer(filterPanel, filterToggle);
     document.getElementById("diegoYear").addEventListener("change", markCommercialViewPending);
+    setText("reportStatus", "Leyendo");
     await reloadDiegoCommercialData();
+    startDiegoAutoRefresh();
+    setText("reportStatus", "OK");
     return;
   }
   if (reportId === "informe_gerencia_2026_2027") {
@@ -4654,7 +4677,6 @@ const updateReportView = async () => {
   setText("reportStatus", "Leyendo");
   try {
     if (["fuerza_comercial_diego", "informe_general_comercial"].includes(reportId)) {
-      diegoManualRefreshRequested = true;
       await ensureDiegoFilterHierarchy();
       await reloadDiegoCommercialData();
     } else if (reportId === "informe_gerencia_2026_2027") {
