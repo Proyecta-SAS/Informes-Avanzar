@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Usuarios y roles</title>
   <link rel="icon" href="https://avanzarsoluciones.com/wp-content/uploads/2025/01/cropped-favico-Avanzar-180x180.jpg" sizes="180x180">
-  <link rel="stylesheet" href="/styles.css?v=20260818-dark-report-v2">
+  <link rel="stylesheet" href="/styles.css?v=20260818-users-visual-v3">
 </head>
 <body>
   <aside class="sidebar">
@@ -36,9 +36,9 @@
       </section>
 
       <section class="access-overview" aria-label="Resumen de accesos">
-        <div><span>Usuarios registrados</span><strong id="accessUserCount">—</strong><small>Perfiles activos en el panel</small></div>
-        <div><span>Roles disponibles</span><strong id="accessRoleCount">—</strong><small>Funciones y niveles de acceso</small></div>
-        <div><span>Informes configurados</span><strong id="accessReportCount">—</strong><small>Paneles administrables</small></div>
+        <div class="access-stat access-stat-users"><i aria-hidden="true">👥</i><span>Usuarios registrados</span><strong id="accessUserCount">—</strong><small>Perfiles activos en el panel</small></div>
+        <div class="access-stat access-stat-roles"><i aria-hidden="true">🛡</i><span>Roles disponibles</span><strong id="accessRoleCount">—</strong><small>Funciones y niveles de acceso</small></div>
+        <div class="access-stat access-stat-reports"><i aria-hidden="true">▦</i><span>Informes configurados</span><strong id="accessReportCount">—</strong><small>Paneles administrables</small></div>
         <nav class="access-quick-nav" aria-label="Secciones de administración">
           <a href="#accessUsers">Usuarios</a><a href="#commercialRoles">Asignar acceso</a><a href="#advancedPermissions">Configuración avanzada</a>
         </nav>

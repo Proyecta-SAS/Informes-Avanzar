@@ -17,6 +17,102 @@
   --shadow: 0 12px 30px rgba(31, 55, 91, 0.12);
 }
 
+/* Usuarios y roles · jerarquía visual compacta */
+.access-app #accessWorkspace { gap: 14px; }
+.access-app .access-overview,
+.access-app .access-section,
+.access-app .access-create-panel,
+.access-app .access-hero { width: min(1440px, calc(100% - 48px)); }
+.access-app .access-overview { grid-template-columns: repeat(3, minmax(210px, 1fr)); gap: 14px; }
+.access-app .access-overview > .access-stat {
+  position: relative;
+  min-height: 104px;
+  grid-template-columns: 50px 1fr auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 14px;
+  padding: 18px 20px;
+  overflow: hidden;
+}
+.access-app .access-overview > .access-stat::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0;
+  height: 3px;
+  background: linear-gradient(90deg, #671634, #c31d3c);
+}
+.access-app .access-overview > .access-stat:nth-child(2)::after { background: linear-gradient(90deg, #244a72, #6291bf); }
+.access-app .access-overview > .access-stat:nth-child(3)::after { background: linear-gradient(90deg, #28735f, #58aa8d); }
+.access-stat i {
+  grid-row: 1 / 3;
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 14px;
+  background: #f8edf1;
+  color: #a71935;
+  font-size: 20px;
+  font-style: normal;
+}
+.access-stat:nth-child(2) i { background: #edf4fb; color: #315f91; }
+.access-stat:nth-child(3) i { background: #edf8f4; color: #28735f; }
+.access-app .access-overview .access-stat span { align-self: end; font-size: 11px; }
+.access-app .access-overview .access-stat strong { grid-column: 3; grid-row: 1 / 3; font-size: 34px; }
+.access-app .access-overview .access-stat small { grid-column: 2; align-self: start; font-size: 12px; }
+.access-app .access-quick-nav {
+  grid-column: 1 / -1;
+  display: flex;
+  min-height: auto;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 14px;
+}
+.access-app .access-quick-nav a {
+  display: flex;
+  min-height: 42px;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  text-align: center;
+}
+.access-app .access-quick-nav a:hover { border-color: #e8bdc7; }
+.access-app .access-users-section { padding: 22px; }
+.access-app .access-users-section .access-section-title { margin-bottom: 18px; }
+.access-app .access-users-section .access-section-title h2 { font-size: 24px; }
+.access-app .access-search {
+  padding: 6px 6px 6px 14px;
+  border: 1px solid #dbe4ef;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+.access-app .access-search input { height: 38px; border: 0; background: transparent; outline: 0; }
+.access-app .access-table-wrap { border-radius: 14px; box-shadow: inset 0 1px rgba(255,255,255,.6); }
+.access-app .access-users-table th { height: 48px; color: #61738f; font-size: 11px; letter-spacing: .045em; text-transform: uppercase; }
+.access-app .access-users-table td { height: 62px; border-bottom-color: #e7ecf2; }
+.access-app .access-users-table tbody tr { transition: background-color .16s ease; }
+.access-app .access-users-table tbody tr:hover { background: #f3f7fb; }
+
+@media (max-width: 1050px) {
+  .access-app .access-overview { grid-template-columns: 1fr; }
+  .access-app .access-quick-nav { grid-column: 1; }
+}
+@media (max-width: 640px) {
+  .access-app .access-overview,
+  .access-app .access-section,
+  .access-app .access-create-panel,
+  .access-app .access-hero { width: calc(100% - 24px); }
+  .access-app .access-quick-nav { flex-direction: column; }
+  .access-app .access-overview > .access-stat { grid-template-columns: 44px 1fr auto; padding: 15px; }
+  .access-app .access-search { align-items: stretch; padding: 8px 10px; }
+}
+:root[data-theme="dark"] .access-stat i { background: #351727; color: #f08ca2; }
+:root[data-theme="dark"] .access-stat:nth-child(2) i { background: #142a43; color: #82b2df; }
+:root[data-theme="dark"] .access-stat:nth-child(3) i { background: #15342d; color: #79c4aa; }
+:root[data-theme="dark"] .access-app .access-search { border-color: var(--line); background: var(--surface-2); }
+:root[data-theme="dark"] .access-app .access-users-table tbody tr:hover { background: #182840; }
+
 * { box-sizing: border-box; }
 
 body {
