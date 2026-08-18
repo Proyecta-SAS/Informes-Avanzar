@@ -30,6 +30,43 @@ Se ejecuta cada hora desde las 07:00 hasta las 23:00 y también a las 00:00 y 01
 
 Se ejecuta diariamente a las 03:15, dejando más de dos horas desde la incremental de la 01:00.
 
+### Comercial nocturna de produccion
+
+- Job: `informes-bitrix-commercial-nightly`.
+- Scheduler: `scheduler-informes-bitrix-commercial-nightly`.
+- Variable adicional: `BITRIX_SYNC_MODE=commercial-nightly`.
+- Ano objetivo: `BITRIX_COMMERCIAL_SYNC_YEAR=2026`.
+- Timeout: 8 horas.
+- Tareas: 1.
+- Reintentos del job: 0.
+- Cron: `0 3 * * *`.
+- Zona horaria: `America/Bogota`.
+
+Se ejecuta diariamente a las 03:00. Este job no sincroniza usuarios, etapas, actividades ni todas las pipelines activas. Solo ejecuta:
+
+- `rch_comercial`
+- `pnnc_comercial`
+- `rch_operativa`
+- `pnnc_operativa`
+
+En comerciales 2026 no borra registros locales que Bitrix no devuelva en la corrida (`reconcileMissing=false`). Esta proteccion evita borrados erroneos cuando Bitrix corta una consulta grande o devuelve error a mitad de paginacion. Si aparecen registros extra en produccion, primero se deben comparar IDs y validar una muestra en Bitrix antes de eliminar o reconciliar.
+
+Comando manual:
+
+```powershell
+gcloud.cmd run jobs execute informes-bitrix-commercial-nightly --project=db-mensajeria --region=europe-west1
+```
+
+Validacion rapida:
+
+```powershell
+gcloud.cmd run jobs executions list --job=informes-bitrix-commercial-nightly --project=db-mensajeria --region=europe-west1 --limit=5
+```
+
+```powershell
+gcloud.cmd logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="informes-bitrix-commercial-nightly"' --project=db-mensajeria --freshness=18h --limit=160 --format='value(timestamp,severity,textPayload)'
+```
+
 ## Variables y secretos
 
 Cada job requiere:

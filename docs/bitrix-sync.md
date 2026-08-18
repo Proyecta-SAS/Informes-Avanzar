@@ -74,6 +74,32 @@ Una pipeline sin cursor requiere una carga completa inicial de esa pipeline. Las
 
 La incremental no elimina registros que salieron de la pipeline. Por eso debe correr una completa periodica.
 
+## Sincronizacion comercial nocturna en produccion
+
+El job de produccion `informes-bitrix-commercial-nightly` se ejecuta con:
+
+```text
+BITRIX_SYNC_MODE=commercial-nightly
+BITRIX_COMMERCIAL_SYNC_YEAR=2026
+```
+
+Este modo no es una sincronizacion global completa. Solo sincroniza estas pipelines:
+
+| Slug | Categoria Bitrix | Tipo |
+| --- | ---: | --- |
+| `rch_comercial` | 8 | comercial 2026 |
+| `pnnc_comercial` | 26 | comercial 2026 |
+| `rch_operativa` | 10 | operativa |
+| `pnnc_operativa` | 28 | operativa |
+
+Para las pipelines comerciales 2026 se usa `reconcileMissing=false`. Esto significa que el job inserta o actualiza los negocios que Bitrix devuelve, pero no borra automaticamente registros locales que ya no aparezcan en ese filtro.
+
+La razon es operativa: Bitrix puede cortar respuestas extensas por limites de tiempo o errores transitorios de red. Si se reconciliara mientras una respuesta llega incompleta, el sistema podria borrar datos validos en produccion. Antes de borrar o marcar como ausentes registros comerciales, se deben comparar IDs contra Bitrix y validar una muestra con `crm.deal.get`.
+
+El `entity_type` con sufijo `nightly-2026`, por ejemplo `deal:rch_comercial:nightly-2026`, es solo el nombre del run en `bitrix.sync_runs`. Los negocios se guardan en las mismas tablas locales (`bitrix.deals`, `bitrix.raw_payloads`, `bitrix.entity_snapshots`); no se crean tablas duplicadas.
+
+Los errores transitorios de lectura, timeout o connection reset se reintentan en este modo. En las comerciales 2026 el reintento puede continuar desde el ultimo bloque de 50 registros leido.
+
 ## Campos personalizados
 
 Los `UF_CRM_*` deben manejarse por pipeline o dominio. En este proyecto se reserva `bitrix.pipelines.field_map` como JSONB para mapear campos sin recompilar la aplicacion.

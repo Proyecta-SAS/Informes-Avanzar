@@ -1260,6 +1260,30 @@ app.MapPost("/api/bitrix/sync/reports/comercial/quick", async (
     });
 });
 
+app.MapPost("/api/bitrix/sync/reports/comercial/meta-goals", async (
+    int? year,
+    IBitrixSynchronizer synchronizer,
+    CancellationToken cancellationToken) =>
+{
+    var selectedYear = year is >= 2020 and <= 2100
+        ? year.Value
+        : DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).Year;
+    var results = await synchronizer.RunCommercialMetaCoordinatorGoalsAsync(selectedYear, cancellationToken);
+    var succeeded = results.Count > 0
+        && results.All(result => string.Equals(result.Status, "succeeded", StringComparison.OrdinalIgnoreCase));
+
+    return Results.Ok(new
+    {
+        report = "commercial-meta-coordinator-goals",
+        year = selectedYear,
+        status = succeeded ? "succeeded" : "failed",
+        stages = 3,
+        recordsRead = results.Sum(result => result.RecordsRead),
+        recordsWritten = results.Sum(result => result.RecordsWritten),
+        results
+    });
+});
+
 app.MapPost("/api/bitrix/sync/reports/comercial/commissions", async (
     int? year,
     IBitrixDealSyncService dealSyncService,
@@ -1597,12 +1621,39 @@ if (!string.IsNullOrWhiteSpace(jobMode))
         return;
     }
 
+    if (normalizedJobMode == "commercial-meta-goals")
+    {
+        var reportYear = builder.Configuration.GetValue<int?>("BITRIX_COMMERCIAL_SYNC_YEAR") ?? DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).Year;
+        app.Logger.LogInformation("Starting Bitrix commercial meta coordinator goals job for {Year}.", reportYear);
+        await using var metaScope = app.Services.CreateAsyncScope();
+        var metaSynchronizer = metaScope.ServiceProvider.GetRequiredService<IBitrixSynchronizer>();
+        var metaResults = await metaSynchronizer.RunCommercialMetaCoordinatorGoalsAsync(reportYear, CancellationToken.None);
+
+        foreach (var result in metaResults)
+        {
+            app.Logger.LogInformation(
+                "Bitrix commercial meta goals result: {EntityType} {Status}, read {RecordsRead}, wrote {RecordsWritten}, error {ErrorMessage}",
+                result.EntityType,
+                result.Status,
+                result.RecordsRead,
+                result.RecordsWritten,
+                result.ErrorMessage);
+        }
+
+        if (metaResults.Any(result => !string.Equals(result.Status, "succeeded", StringComparison.OrdinalIgnoreCase)))
+        {
+            Environment.ExitCode = 1;
+        }
+
+        return;
+    }
+
     var mode = normalizedJobMode switch
     {
         "full" => SyncMode.Full,
         "incremental" => SyncMode.Incremental,
         _ => throw new InvalidOperationException(
-            "BITRIX_SYNC_MODE must be 'full', 'incremental', 'webhook-pending' or 'commercial-nightly'.")
+            "BITRIX_SYNC_MODE must be 'full', 'incremental', 'webhook-pending', 'commercial-nightly' or 'commercial-meta-goals'.")
     };
 
     app.Logger.LogInformation("Starting Bitrix synchronization job in {Mode} mode.", mode);

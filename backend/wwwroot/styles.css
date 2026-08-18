@@ -2145,6 +2145,8 @@ main.app .radicated-total {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
+.diego-block-grid.is-single > .diego-block,
+.diego-block.is-row-single { grid-column: 1 / -1; }
 
 .diego-block-radicated { grid-column: 1 / -1; }
 .diego-block-wide-table { grid-column: 1 / -1; }
@@ -5459,6 +5461,8 @@ body>.organization-settings:not([hidden]){position:fixed;z-index:8300;top:50%;le
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
+.diego-block-grid.is-single > .diego-block,
+.diego-block.is-row-single { grid-column: 1 / -1; }
 
 .diego-block {
   min-height: 250px;

@@ -11,16 +11,52 @@ public sealed class BitrixStageSyncService(
     NpgsqlDataSource dataSource) : IBitrixStageSyncService
 {
     public async Task<SyncResult> SyncStagesAsync(CancellationToken cancellationToken)
+        => await SyncStagesInternalAsync(null, null, "deal_category_stage", null, cancellationToken);
+
+    public async Task<SyncResult> SyncPipelineStagesAsync(
+        string pipelineSlug,
+        IReadOnlySet<string> stageNames,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(pipelineSlug))
+        {
+            throw new ArgumentException("Pipeline slug is required.", nameof(pipelineSlug));
+        }
+
+        if (stageNames.Count == 0)
+        {
+            throw new ArgumentException("At least one stage name is required.", nameof(stageNames));
+        }
+
+        var normalizedStageNames = stageNames
+            .Select(NormalizeStageName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        return await SyncStagesInternalAsync(
+            pipelineSlug,
+            normalizedStageNames,
+            $"deal_category_stage:{pipelineSlug}",
+            $"deal_category_stage:{pipelineSlug}",
+            cancellationToken);
+    }
+
+    private async Task<SyncResult> SyncStagesInternalAsync(
+        string? pipelineSlug,
+        IReadOnlySet<string>? normalizedStageNames,
+        string entityType,
+        string? concurrencyKey,
+        CancellationToken cancellationToken)
     {
         var connectionInfo = await repository.GetActiveConnectionAsync(cancellationToken);
-        var syncRunId = await repository.StartRunAsync(connectionInfo.Id, "deal_category_stage", SyncMode.Full, cancellationToken);
+        var syncRunId = await repository.StartRunAsync(connectionInfo.Id, entityType, SyncMode.Full, cancellationToken, concurrencyKey);
 
         var recordsRead = 0;
         var recordsWritten = 0;
 
         try
         {
-            var pipelines = await ListPipelinesAsync(cancellationToken);
+            var pipelines = await ListPipelinesAsync(pipelineSlug, cancellationToken);
 
             foreach (var pipeline in pipelines)
             {
@@ -47,33 +83,41 @@ public sealed class BitrixStageSyncService(
                 foreach (var stage in result.EnumerateArray())
                 {
                     recordsRead++;
+                    var stageName = GetString(stage, "NAME") ?? GetString(stage, "STATUS_ID") ?? GetString(stage, "ID") ?? string.Empty;
+                    if (normalizedStageNames is not null && !normalizedStageNames.Contains(NormalizeStageName(stageName)))
+                    {
+                        continue;
+                    }
+
                     await UpsertStageAsync(pipeline.Id, stage, cancellationToken);
                     recordsWritten++;
                 }
             }
 
             await repository.FinishRunAsync(syncRunId, "succeeded", recordsRead, recordsWritten, null, CancellationToken.None);
-            return new SyncResult(syncRunId, "deal_category_stage", "full", "succeeded", recordsRead, recordsWritten);
+            return new SyncResult(syncRunId, entityType, "full", "succeeded", recordsRead, recordsWritten);
         }
         catch (Exception ex)
         {
             await repository.FinishRunAsync(syncRunId, "failed", recordsRead, recordsWritten, ex.Message, CancellationToken.None);
-            return new SyncResult(syncRunId, "deal_category_stage", "full", "failed", recordsRead, recordsWritten, ex.Message);
+            return new SyncResult(syncRunId, entityType, "full", "failed", recordsRead, recordsWritten, ex.Message);
         }
     }
 
-    private async Task<IReadOnlyList<PipelineRecord>> ListPipelinesAsync(CancellationToken cancellationToken)
+    private async Task<IReadOnlyList<PipelineRecord>> ListPipelinesAsync(string? pipelineSlug, CancellationToken cancellationToken)
     {
         const string sql = """
             SELECT id, slug, name, category_id
             FROM bitrix.pipelines
             WHERE is_active = true
+              AND (@pipelineSlug IS NULL OR slug = @pipelineSlug)
             ORDER BY sync_order, category_id;
             """;
 
         var pipelines = new List<PipelineRecord>();
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.Add("pipelineSlug", NpgsqlDbType.Text).Value = (object?)pipelineSlug ?? DBNull.Value;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
         while (await reader.ReadAsync(cancellationToken))
@@ -156,6 +200,8 @@ public sealed class BitrixStageSyncService(
             ? parsed
             : null;
     }
+
+    private static string NormalizeStageName(string value) => value.Trim().ToUpperInvariant();
 
     private sealed record PipelineRecord(Guid Id, string Slug, string Name, int CategoryId);
 }

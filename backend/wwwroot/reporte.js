@@ -950,27 +950,37 @@ const loadDiegoPortfolioCollections = async () => {
   const data = await response.json();
   if (teamScope) {
     data.portfolio = (data.portfolio ?? []).filter((item) => isTeamMember(item.advisor));
-    data.items = (data.items ?? []).filter((item) => !item.advisor || isTeamMember(item.advisor));
+    data.items = (data.items ?? []).filter((item) => !item.coordinator || isTeamDepartment(item.coordinator));
   }
   const portfolioRows = data.portfolio.map((item) => `<tr data-advisor="${encodeURIComponent(item.advisor)}" data-line="${normalizeFilterText(item.commercialLine).includes("insolvencia") ? "pnnc" : normalizeFilterText(item.commercialLine)}"><td>${item.advisor}</td><td><span class="portfolio-line ${normalizeFilterText(item.commercialLine)}">${item.commercialLine}</span></td><td>${formatNumber.format(item.receivable)}</td><td>${formatNumber.format(item.withNovelty)}</td><td>${formatNumber.format(item.successful)}</td></tr>`);
   const portfolioContent = portfolioRows.length
     ? renderDataTable(["Asesor", "L&iacute;nea de negocio", "Valor cartera por cobrar", "Valor cartera con novedad", "Valor cartera exitosa"], portfolioRows, "portfolio-state-table")
     : `<div class="empty-block"><strong>Sin cartera disponible</strong><span>Sincronice las pipelines RCH Cartera e Insolvencia Cartera.</span></div>`;
   replaceBlockPreview("Estado de cartera", portfolioContent, data.portfolio.length);
-  const collectionsByMonth = new Map();
-  data.items.forEach((item) => {
-    const monthKey = item.month.slice(0, 2);
-    const current = collectionsByMonth.get(monthKey) ?? { collected: 0, goal: 0 };
-    current.collected += Number(item.collected ?? 0);
-    current.goal += Number(item.goal ?? 0);
-    collectionsByMonth.set(monthKey, current);
-  });
-  const rows = [...collectionsByMonth.entries()]
-    .map(([month, values]) => ({ month, collected: values.collected, goal: values.goal }))
-    .sort((left, right) => Number.parseInt(left.month, 10) - Number.parseInt(right.month, 10))
-    .map((item) => `<tr><td>${spanishMonthLabels[item.month]}</td><td>${formatNumber.format(item.goal)}</td><td>${formatNumber.format(item.collected)}</td></tr>`);
+  const rows = [...(data.items ?? [])]
+    .sort((left, right) => {
+      const monthDiff = Number.parseInt(String(left.month ?? "").slice(0, 2), 10) - Number.parseInt(String(right.month ?? "").slice(0, 2), 10);
+      if (monthDiff !== 0) return monthDiff;
+      const lineDiff = String(left.commercialLine ?? "").localeCompare(String(right.commercialLine ?? ""), "es", { sensitivity: "base" });
+      if (lineDiff !== 0) return lineDiff;
+      return String(left.coordinator ?? "").localeCompare(String(right.coordinator ?? ""), "es", { sensitivity: "base" });
+    })
+    .map((item) => {
+      const goal = Number(item.goal ?? 0);
+      const collected = Number(item.collected ?? 0);
+      const compliance = goal ? percentFormatter.format(collected / goal) : "N/A";
+      return `<tr data-coordinator="${encodeURIComponent(item.coordinator ?? "")}" data-line="${normalizeFilterText(item.commercialLine).includes("insolvencia") ? "pnnc" : normalizeFilterText(item.commercialLine)}">
+        <td>${escapeHtml(item.month ?? "")}</td>
+        <td>${escapeHtml(item.commercialLine ?? "")}</td>
+        <td>${formatNumber.format(goal)}</td>
+        <td>${formatNumber.format(collected)}</td>
+        <td>${compliance}</td>
+        <td>${escapeHtml(item.coordinator ?? "")}</td>
+        <td>${escapeHtml(item.coordinatorId ?? "")}</td>
+      </tr>`;
+    });
   const content = rows.length
-    ? renderDataTable(["Mes", "Meta", "Recaudo"], rows, "portfolio-collection-table")
+    ? renderDataTable(["Mes", "L&iacute;nea comercial", "Meta", "$ Recaudo", "%", "Coordinador", "ID Coordinador"], rows, "portfolio-collection-table")
     : `<div class="empty-block"><strong>Sin recaudos para ${data.year}</strong><span>Las pipelines de cartera aún se están sincronizando.</span></div>`;
   replaceBlockPreview("Cartera recaudada", content, data.items.length);
 };
@@ -1345,6 +1355,7 @@ const applyDiegoFilters = () => {
     if (badge) badge.textContent = `${visibleRows} registros`;
     decorateTableTotals(block);
   });
+  applyDiegoGridPacking();
 };
 
 const setupDiegoFilters = () => {
@@ -4203,7 +4214,7 @@ const renderDiegoDashboard = () => {
         <span>${section.icon}</span>
         <div><h2>${section.title}</h2><p>${section.description}</p></div>
       </header>
-      <div class="diego-block-grid">
+      <div class="diego-block-grid ${section.blocks.length === 1 ? "is-single" : ""}">
         ${section.blocks.map(([title, description, type]) => `
           <article data-block-title="${title}" data-block-code="${generalBlockCodes[title]}" class="diego-block diego-block-${type}${["Total de negociaciones por asesor", "Cartera recaudada"].includes(title) ? " diego-block-wide-table" : ""}">
             <div class="diego-block-title"><div><h3>${title}</h3><p>${description}</p></div><em>Sin datos</em></div>
@@ -4213,6 +4224,26 @@ const renderDiegoDashboard = () => {
       </div>
     </section>
   `).join("");
+  applyDiegoGridPacking();
+};
+
+const applyDiegoGridPacking = () => {
+  document.querySelectorAll(".diego-block-grid").forEach((grid) => {
+    const visibleBlocks = [...grid.querySelectorAll(".diego-block")].filter((block) => !block.hidden);
+    visibleBlocks.forEach((block) => block.classList.remove("is-row-single"));
+    const standardBlocks = visibleBlocks.filter((block) =>
+      !block.classList.contains("diego-block-radicated")
+      && !block.classList.contains("diego-block-wide-table")
+      && !block.classList.contains("diego-block-commissions")
+      && !block.classList.contains("diego-block-donut")
+      && !block.classList.contains("diego-block-management-kpis")
+      && !block.classList.contains("diego-block-management-close")
+    );
+    grid.classList.toggle("is-single", visibleBlocks.length === 1);
+    if (standardBlocks.length % 2 === 1) {
+      standardBlocks[standardBlocks.length - 1].classList.add("is-row-single");
+    }
+  });
 };
 
 const loadGerenciaReportData = async () => {

@@ -1211,7 +1211,15 @@ public static class BitrixDataQueries
                         WHEN UPPER(COALESCE(s4.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s4.name)
                         WHEN UPPER(COALESCE(s5.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s5.name)
                         WHEN UPPER(COALESCE(s6.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s6.name)
-                    END AS coordinator
+                    END AS coordinator,
+                    CASE
+                        WHEN UPPER(COALESCE(s1.name, '')) LIKE '%EQ. COOR%' THEN s1.id::text
+                        WHEN UPPER(COALESCE(s2.name, '')) LIKE '%EQ. COOR%' THEN s2.id::text
+                        WHEN UPPER(COALESCE(s3.name, '')) LIKE '%EQ. COOR%' THEN s3.id::text
+                        WHEN UPPER(COALESCE(s4.name, '')) LIKE '%EQ. COOR%' THEN s4.id::text
+                        WHEN UPPER(COALESCE(s5.name, '')) LIKE '%EQ. COOR%' THEN s5.id::text
+                        WHEN UPPER(COALESCE(s6.name, '')) LIKE '%EQ. COOR%' THEN s6.id::text
+                    END AS coordinator_id
                 FROM user_departments u
                 LEFT JOIN bitrix.departments s1 ON s1.id = u.department_id
                 LEFT JOIN bitrix.departments s2 ON s2.id = s1.parent_id
@@ -1229,15 +1237,17 @@ public static class BitrixDataQueries
             ), hierarchy_by_user AS (
                 SELECT DISTINCT ON (bitrix_id)
                     bitrix_id,
-                    coordinator
+                    coordinator,
+                    coordinator_id
                 FROM hierarchy
                 ORDER BY bitrix_id, source_department_id, coordinator NULLS LAST
-            ), known_hierarchy_overrides(advisor_id, coordinator) AS (
-                VALUES ('20566', 'EQ. COOR SOL PEREIRA')
+            ), known_hierarchy_overrides(advisor_id, coordinator, coordinator_id) AS (
+                VALUES ('20566', 'EQ. COOR SOL PEREIRA', '100')
             ), effective_hierarchy AS (
                 SELECT
                     hierarchy_by_user.bitrix_id,
-                    COALESCE(known_hierarchy_overrides.coordinator, hierarchy_by_user.coordinator) AS coordinator
+                    COALESCE(known_hierarchy_overrides.coordinator, hierarchy_by_user.coordinator) AS coordinator,
+                    COALESCE(known_hierarchy_overrides.coordinator_id, hierarchy_by_user.coordinator_id) AS coordinator_id
                 FROM hierarchy_by_user
                 LEFT JOIN known_hierarchy_overrides ON known_hierarchy_overrides.advisor_id = hierarchy_by_user.bitrix_id
             ), payment_rows AS (
@@ -1285,19 +1295,22 @@ public static class BitrixDataQueries
                             WHEN 4 THEN 'ABR' WHEN 5 THEN 'MAY' WHEN 6 THEN 'JUN'
                             WHEN 7 THEN 'JUL' WHEN 8 THEN 'AGO' WHEN 9 THEN 'SEP'
                             WHEN 10 THEN 'OCT' WHEN 11 THEN 'NOV' WHEN 12 THEN 'DIC'
-                        END AS month,
+                    END AS month,
+                    payment_rows.commercial_line,
                     hierarchy.coordinator,
+                    hierarchy.coordinator_id,
                     SUM(collected) AS collected
                 FROM payment_rows
                 JOIN effective_hierarchy hierarchy ON hierarchy.bitrix_id = payment_rows.advisor_id
                 WHERE payment_date IS NOT NULL
                   AND collected IS NOT NULL
+                  AND payment_rows.commercial_line IS NOT NULL
                   AND hierarchy.coordinator IS NOT NULL
                   AND EXTRACT(YEAR FROM payment_date)::int = @yearNumber
                   AND (@monthNumber IS NULL OR EXTRACT(MONTH FROM payment_date)::int = @monthNumber)
                   AND (@fromDate IS NULL OR payment_date >= @fromDate)
                   AND (@toDate IS NULL OR payment_date <= @toDate)
-                GROUP BY 1, 2, 3
+                GROUP BY 1, 2, 3, 4, 5
             ), meta_pipeline AS (
                 SELECT id
                 FROM bitrix.pipelines
@@ -1330,26 +1343,33 @@ public static class BitrixDataQueries
                     ON meta_stage.pipeline_id = meta_pipeline.id
                     AND meta_stage.bitrix_stage_id = meta.payload ->> 'STAGE_ID'
                 WHERE meta.payload ->> 'CATEGORY_ID' = '224'
-                  AND meta.payload ->> 'UF_CRM_1737653376' = @yearText
-                  AND meta_stage.name IN ('Meta RCH Coordinadores', 'Meta INS Coordinadores')
+                  AND (
+                      meta.payload ->> 'UF_CRM_1737653376' = @yearText
+                      OR (
+                          @yearText = '2026'
+                          AND meta.payload ->> 'UF_CRM_1737653376' = '39138'
+                      )
+                  )
+                  AND meta_stage.name IN ('Meta RCH Coordinadores', 'Meta INS Coordinadores', 'Meta 1116 Coordinadores')
                   AND meta.payload ->> 'TITLE' IN ('01 ENE', '02 FEB', '03 MAR', '04 ABR', '05 MAY', '06 JUN', '07 JUL', '08 AGO', '09 SEP', '10 OCT', '11 NOV', '12 DIC')
                 GROUP BY 1, 2, 3
-            ), monthly AS (
+            ), detail AS (
                 SELECT
                     collections.month_number,
                     collections.month,
-                    'LINEA COMERCIAL' AS commercial_line,
-                    SUM(collections.collected) AS collected,
-                    COALESCE(SUM(goals.goal), 0) AS goal
+                    collections.commercial_line,
+                    collections.coordinator,
+                    collections.coordinator_id,
+                    collections.collected,
+                    COALESCE(goals.goal, 0) AS goal
                 FROM collections
                 LEFT JOIN goals
                     ON goals.month_number = collections.month_number
                     AND goals.coordinator = collections.coordinator
-                GROUP BY collections.month_number, collections.month
             )
-            SELECT month, commercial_line, goal, collected
-            FROM monthly
-            ORDER BY month_number;
+            SELECT month, commercial_line, goal, collected, coordinator, coordinator_id
+            FROM detail
+            ORDER BY month_number, commercial_line, coordinator;
             """;
 
         var items = new List<object>();
@@ -1372,7 +1392,10 @@ public static class BitrixDataQueries
                 month = reader.GetString(0),
                 commercialLine = reader.GetString(1),
                 goal,
-                collected
+                collected,
+                compliance = goal == 0 ? (decimal?)null : collected / goal,
+                coordinator = reader.IsDBNull(4) ? null : reader.GetString(4),
+                coordinatorId = reader.IsDBNull(5) ? null : reader.GetString(5)
             });
         }
 
