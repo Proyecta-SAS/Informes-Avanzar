@@ -134,6 +134,11 @@ const isTeamMember = (name) => {
   return !members || new Set(members.map(normalizeTeamValue)).has(normalizeTeamValue(name));
 };
 const isTeamDepartment = (name) => !teamScope || new Set((teamScope.departmentNames ?? []).map(normalizeTeamValue)).has(normalizeTeamValue(name));
+const isScopedTeamMember = (name) => {
+  if (!teamScope) return true;
+  const hierarchyMembers = new Set(commercialHierarchy.map((item) => normalizeTeamValue(item.advisor ?? "")).filter(Boolean));
+  return hierarchyMembers.size ? hierarchyMembers.has(normalizeTeamValue(name)) : isTeamMember(name);
+};
 
 const blockPreview = (type) => {
   if (type.startsWith("management-")) return `<div class="management-placeholder"><span></span><span></span><span></span></div>`;
@@ -349,7 +354,7 @@ const loadDiegoRadicatedValues = async () => {
     const response = await fetch(`/api/reports/fuerza-comercial-diego/valores-radicados?${queryString}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    if (teamScope) data.items = (data.items ?? []).filter((item) => isTeamMember(item.advisor));
+    if (teamScope) data.items = (data.items ?? []).filter((item) => isScopedTeamMember(item.advisor));
     generalRadicatedData = data;
 
     if (!data.items?.length) {
@@ -906,9 +911,9 @@ const loadDiegoDashboardData = async () => {
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
   if (teamScope) {
-    data.advisors = (data.advisors ?? []).filter((item) => isTeamMember(item.advisor));
+    data.advisors = (data.advisors ?? []).filter((item) => isScopedTeamMember(item.advisor));
     data.departments = (data.departments ?? []).filter((item) => isTeamDepartment(item.department));
-    data.possibleCloseCommercial = (data.possibleCloseCommercial ?? []).filter((item) => isTeamMember(item.advisor));
+    data.possibleCloseCommercial = (data.possibleCloseCommercial ?? []).filter((item) => isScopedTeamMember(item.advisor));
   }
   generalDashboardData = data;
 
@@ -951,7 +956,7 @@ const loadDiegoPortfolioCollections = async () => {
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
   if (teamScope) {
-    data.portfolio = (data.portfolio ?? []).filter((item) => isTeamMember(item.advisor));
+    data.portfolio = (data.portfolio ?? []).filter((item) => isScopedTeamMember(item.advisor));
     data.items = (data.items ?? []).filter((item) => !item.coordinator || isTeamDepartment(item.coordinator));
   }
   const portfolioRows = data.portfolio.map((item) => `<tr data-advisor="${encodeURIComponent(item.advisor)}" data-line="${normalizeFilterText(item.commercialLine).includes("insolvencia") ? "pnnc" : normalizeFilterText(item.commercialLine)}"><td>${item.advisor}</td><td><span class="portfolio-line ${normalizeFilterText(item.commercialLine)}">${item.commercialLine}</span></td><td>${formatNumber.format(item.receivable)}</td><td>${formatNumber.format(item.withNovelty)}</td><td>${formatNumber.format(item.successful)}</td></tr>`);
@@ -995,15 +1000,15 @@ const loadDiegoLeadershipAndCommissions = async () => {
   data.coordinatorValues = data.coordinatorValues ?? [];
   if (teamScope) {
     data.coordinatorValues = isAdvisorTeamScope()
-      ? data.coordinatorValues.filter((item) => isTeamMember(item.advisor))
+      ? data.coordinatorValues.filter((item) => isScopedTeamMember(item.advisor))
       : isLeaderTeamScope()
-        ? data.coordinatorValues.filter((item) => isTeamDepartment(item.leader) || isTeamMember(item.advisor))
+        ? data.coordinatorValues.filter((item) => isTeamDepartment(item.leader) || isScopedTeamMember(item.advisor))
         : data.coordinatorValues.filter((item) => isTeamDepartment(item.coordinator));
     data.leadership = isAdvisorTeamScope()
-      ? (data.leadership ?? []).filter((item) => isTeamMember(item.advisor))
+      ? (data.leadership ?? []).filter((item) => isScopedTeamMember(item.advisor))
       : (data.leadership ?? []).filter((item) => isTeamDepartment(item.leader) || isTeamDepartment(item.coordinator));
-    data.commissions = (data.commissions ?? []).filter((item) => isTeamMember(item.advisor));
-    data.relationships = (data.relationships ?? []).filter((item) => isTeamMember(item.advisor));
+    data.commissions = (data.commissions ?? []).filter((item) => isScopedTeamMember(item.advisor));
+    data.relationships = (data.relationships ?? []).filter((item) => isScopedTeamMember(item.advisor));
   }
   coordinatorRadicatedData = data.coordinatorValues;
   const leaderRadicatedData = coordinatorRadicatedData.filter((item) => Boolean(item.leader));
@@ -1028,7 +1033,12 @@ const loadDiegoFilterHierarchy = async () => {
   const response = await fetch("/api/reports/fuerza-comercial-diego/jerarquia-filtros", { cache: "no-store" });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const data = await response.json();
-  commercialHierarchy = (data.items ?? []).filter((item) => !teamScope || isTeamMember(item.advisor));
+  commercialHierarchy = (data.items ?? []).filter((item) => {
+    if (!teamScope) return true;
+    if (isAdvisorTeamScope()) return isTeamMember(item.advisor);
+    if (isLeaderTeamScope()) return isTeamDepartment(item.leader);
+    return isTeamDepartment(item.coordinator);
+  });
   setupDiegoFilters();
 };
 
@@ -1112,7 +1122,7 @@ const availableAdvisorValues = (selection) => {
     ...coordinatorRadicatedData.map((item) => item.advisor)
   ].filter(Boolean);
   const allowedFallbackValues = teamScope
-    ? fallbackValues.filter((advisor) => isTeamMember(advisor))
+    ? fallbackValues.filter((advisor) => isScopedTeamMember(advisor))
     : fallbackValues;
   const hasHierarchyFilters = selection.line !== "all"
     || !isFilterSelectionAll(selection.coordinator)
