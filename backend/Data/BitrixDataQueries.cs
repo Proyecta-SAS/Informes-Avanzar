@@ -196,6 +196,7 @@ public static class BitrixDataQueries
                         d.assigned_by_bitrix_id,
                         'Sin asesor'
                     ) AS advisor,
+                    d.assigned_by_bitrix_id AS advisor_id,
                     d.opportunity AS amount,
                     REGEXP_REPLACE(
                         REGEXP_REPLACE(
@@ -246,7 +247,7 @@ public static class BitrixDataQueries
                         )
                     )
             ), radicated AS (
-                SELECT month, pipeline, advisor, amount
+                SELECT month, pipeline, advisor, advisor_id, amount
                 FROM (
                     SELECT
                         eligible_deals.*,
@@ -257,14 +258,63 @@ public static class BitrixDataQueries
                     FROM eligible_deals
                 ) ranked
                 WHERE row_number = 1
+            ), user_departments AS (
+                SELECT
+                    u.connection_id,
+                    u.bitrix_id,
+                    u.full_name AS advisor,
+                    department.value::bigint AS department_id
+                FROM bitrix.users u
+                JOIN latest_users payload
+                    ON payload.connection_id = u.connection_id
+                    AND payload.bitrix_id = u.bitrix_id
+                CROSS JOIN LATERAL jsonb_array_elements_text(payload.payload -> 'UF_DEPARTMENT') AS department(value)
+                WHERE u.active = true
+                  AND LOWER(COALESCE(payload.payload ->> 'ACTIVE', 'true')) NOT IN ('false', 'n', '0')
+                  AND jsonb_typeof(payload.payload -> 'UF_DEPARTMENT') = 'array'
+            ), hierarchy AS (
+                SELECT DISTINCT ON (u.bitrix_id)
+                    u.bitrix_id,
+                    CASE
+                        WHEN UPPER(COALESCE(s1.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s1.name)
+                        WHEN UPPER(COALESCE(s2.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s2.name)
+                        WHEN UPPER(COALESCE(s3.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s3.name)
+                        WHEN UPPER(COALESCE(s4.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s4.name)
+                        WHEN UPPER(COALESCE(s5.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s5.name)
+                        WHEN UPPER(COALESCE(s6.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s6.name)
+                    END AS coordinator,
+                    CASE
+                        WHEN UPPER(COALESCE(s1.name, '')) LIKE '%EQ. LIDER%' THEN TRIM(s1.name)
+                        WHEN UPPER(COALESCE(s2.name, '')) LIKE '%EQ. LIDER%' THEN TRIM(s2.name)
+                        WHEN UPPER(COALESCE(s3.name, '')) LIKE '%EQ. LIDER%' THEN TRIM(s3.name)
+                        WHEN UPPER(COALESCE(s4.name, '')) LIKE '%EQ. LIDER%' THEN TRIM(s4.name)
+                        WHEN UPPER(COALESCE(s5.name, '')) LIKE '%EQ. LIDER%' THEN TRIM(s5.name)
+                        WHEN UPPER(COALESCE(s6.name, '')) LIKE '%EQ. LIDER%' THEN TRIM(s6.name)
+                    END AS leader
+                FROM user_departments u
+                LEFT JOIN bitrix.departments s1 ON s1.id = u.department_id
+                LEFT JOIN bitrix.departments s2 ON s2.id = s1.parent_id
+                LEFT JOIN bitrix.departments s3 ON s3.id = s2.parent_id
+                LEFT JOIN bitrix.departments s4 ON s4.id = s3.parent_id
+                LEFT JOIN bitrix.departments s5 ON s5.id = s4.parent_id
+                LEFT JOIN bitrix.departments s6 ON s6.id = s5.parent_id
+                WHERE
+                    UPPER(COALESCE(s1.name, '')) LIKE '%COMERCIAL%'
+                    OR UPPER(COALESCE(s2.name, '')) LIKE '%COMERCIAL%'
+                    OR UPPER(COALESCE(s3.name, '')) LIKE '%COMERCIAL%'
+                    OR UPPER(COALESCE(s4.name, '')) LIKE '%COMERCIAL%'
+                    OR UPPER(COALESCE(s5.name, '')) LIKE '%COMERCIAL%'
+                    OR UPPER(COALESCE(s6.name, '')) LIKE '%COMERCIAL%'
+                ORDER BY u.bitrix_id, u.department_id
             )
-            SELECT month, pipeline, advisor, COALESCE(SUM(amount), 0) AS total_achieved
+            SELECT radicated.month, radicated.pipeline, radicated.advisor, COALESCE(SUM(radicated.amount), 0) AS total_achieved, hierarchy.coordinator, hierarchy.leader
             FROM radicated
+            LEFT JOIN hierarchy ON hierarchy.bitrix_id = radicated.advisor_id
             WHERE month IS NOT NULL
               AND (@monthNumber IS NULL OR LEFT(month, 2)::int = @monthNumber)
               AND (@fromDate IS NULL OR (make_date(@yearNumber, LEFT(month, 2)::int, 1) + INTERVAL '1 month' - INTERVAL '1 day')::date >= @fromDate)
               AND (@toDate IS NULL OR make_date(@yearNumber, LEFT(month, 2)::int, 1) <= @toDate)
-            GROUP BY month, pipeline, advisor
+            GROUP BY radicated.month, radicated.pipeline, radicated.advisor, hierarchy.coordinator, hierarchy.leader
             ORDER BY total_achieved DESC, month, pipeline, advisor;
             """;
 
@@ -289,7 +339,9 @@ public static class BitrixDataQueries
                 month = reader.GetString(0),
                 pipeline = reader.GetString(1),
                 advisor = reader.GetString(2),
-                totalAchieved = amount
+                totalAchieved = amount,
+                coordinator = reader.IsDBNull(4) ? null : reader.GetString(4),
+                leader = reader.IsDBNull(5) ? null : reader.GetString(5)
             });
         }
 
@@ -951,7 +1003,7 @@ public static class BitrixDataQueries
                 WHERE entity_type = 'deal'
                 ORDER BY connection_id, bitrix_id, updated_at DESC, created_at DESC
             ), user_departments AS (
-                SELECT DISTINCT
+                SELECT DISTINCT ON (u.bitrix_id)
                     u.connection_id,
                     u.bitrix_id,
                     COALESCE(
@@ -967,6 +1019,7 @@ public static class BitrixDataQueries
                 JOIN latest_users payload ON payload.connection_id = u.connection_id AND payload.bitrix_id = u.bitrix_id
                 WHERE u.active = true
                   AND jsonb_typeof(payload.payload -> 'UF_DEPARTMENT') = 'array'
+                ORDER BY u.bitrix_id, department_id
             ), hierarchy AS (
                 SELECT
                     ud.connection_id,
@@ -1787,7 +1840,7 @@ public static class BitrixDataQueries
                   AND is_deleted = false
                 ORDER BY connection_id, bitrix_id, updated_at DESC
             ), user_departments AS (
-                SELECT DISTINCT
+                SELECT DISTINCT ON (u.bitrix_id)
                     u.connection_id,
                     u.bitrix_id,
                     u.full_name,
@@ -1795,6 +1848,7 @@ public static class BitrixDataQueries
                 FROM bitrix.users u
                 JOIN latest_users payload ON payload.connection_id = u.connection_id AND payload.bitrix_id = u.bitrix_id
                 WHERE u.active = true AND jsonb_typeof(payload.payload -> 'UF_DEPARTMENT') = 'array'
+                ORDER BY u.bitrix_id, department_id
             ), hierarchy AS (
                 SELECT
                     ud.connection_id, ud.bitrix_id, ud.full_name,
@@ -1973,7 +2027,7 @@ public static class BitrixDataQueries
                 WHERE entity_type = 'user'
                 ORDER BY connection_id, bitrix_id, received_at DESC
             ), user_departments AS (
-                SELECT DISTINCT
+                SELECT DISTINCT ON (u.bitrix_id)
                     u.connection_id,
                     u.bitrix_id,
                     u.full_name,
@@ -1982,6 +2036,7 @@ public static class BitrixDataQueries
                 JOIN latest_users payload ON payload.connection_id = u.connection_id AND payload.bitrix_id = u.bitrix_id
                 WHERE u.active = true
                   AND jsonb_typeof(payload.payload -> 'UF_DEPARTMENT') = 'array'
+                ORDER BY u.bitrix_id, department_id
             ), hierarchy AS (
                 SELECT
                     ud.connection_id, ud.bitrix_id, ud.full_name,
@@ -2117,7 +2172,7 @@ public static class BitrixDataQueries
                 WHERE entity_type = 'user'
                 ORDER BY connection_id, bitrix_id, received_at DESC
             ), user_departments AS (
-                SELECT DISTINCT
+                SELECT DISTINCT ON (u.bitrix_id)
                     u.connection_id,
                     u.bitrix_id,
                     COALESCE(
@@ -2133,6 +2188,7 @@ public static class BitrixDataQueries
                 JOIN latest_users payload ON payload.connection_id = u.connection_id AND payload.bitrix_id = u.bitrix_id
                 WHERE u.active = true
                   AND jsonb_typeof(payload.payload -> 'UF_DEPARTMENT') = 'array'
+                ORDER BY u.bitrix_id, department_id
             ), hierarchy AS (
                 SELECT ud.connection_id, ud.bitrix_id, ud.full_name, department.id, department.name, department.parent_id, 1 AS depth
                 FROM user_departments ud

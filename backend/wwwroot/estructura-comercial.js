@@ -10,16 +10,18 @@ const initialsOrg = (name = "") =>
   name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "AV";
 
 const commercialRoles = [
+  ["line_coordinator_rch", "Coordinador de linea RCH", "Visualiza toda la linea RCH con consolidado de coordinadores."],
   ["coordinator_rch", "Coordinador RCH", "Coordina equipos y lideres de la linea RCH."],
   ["leader_rch", "Lider RCH", "Gestiona un equipo comercial RCH."],
+  ["line_coordinator_pnnc", "Coordinador de linea Insolvencia PNNC", "Visualiza toda la linea Insolvencia PNNC con consolidado de coordinadores."],
   ["coordinator_pnnc", "Coordinador Insolvencia PNNC", "Coordina equipos y lideres de la linea Insolvencia PNNC."],
   ["leader_pnnc", "Lider Insolvencia PNNC", "Gestiona un equipo comercial Insolvencia PNNC."],
   ["custom", "Personalizado", "Permite elegir manualmente paneles y tablas visibles."]
 ];
 
 const commercialRoleGroups = [
-  ["Linea RCH", ["coordinator_rch", "leader_rch"]],
-  ["Linea Insolvencia PNNC", ["coordinator_pnnc", "leader_pnnc"]],
+  ["Linea RCH", ["line_coordinator_rch", "coordinator_rch", "leader_rch"]],
+  ["Linea Insolvencia PNNC", ["line_coordinator_pnnc", "coordinator_pnnc", "leader_pnnc"]],
   ["Otros", ["custom"]]
 ];
 
@@ -83,7 +85,8 @@ const blockCodesForRole = (role) => {
   const isPnnc = normalized.endsWith("_pnnc");
   const sharedBlocks = normalized.startsWith("leader_")
     ? sharedGeneralBlockCodes.filter((code) => code !== "leader_values")
-    : sharedGeneralBlockCodes;
+    : [...sharedGeneralBlockCodes];
+  if (normalized.startsWith("line_coordinator_")) sharedBlocks.push("coordinator_values");
   return [
     ...sharedBlocks,
     isPnnc ? "funnel_insolvency" : "funnel_rch",

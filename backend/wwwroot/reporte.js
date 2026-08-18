@@ -120,7 +120,7 @@ let generalRadicatedData = null;
 let generalDashboardData = null;
 let commercialHierarchy = [];
 let coordinatorRadicatedData = [];
-const normalizeTeamValue = (value = "") => value
+const normalizeTeamValue = (value = "") => String(value ?? "")
   .normalize("NFD")
   .replace(/[\u0300-\u036f]/g, "")
   .replace(/[._-]+/g, " ")
@@ -355,7 +355,12 @@ const loadDiegoRadicatedValues = async () => {
     const response = await fetch(`/api/reports/fuerza-comercial-diego/valores-radicados?${queryString}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    if (teamScope) data.items = (data.items ?? []).filter((item) => isScopedTeamMember(item.advisor));
+    if (teamScope) {
+      data.items = (data.items ?? []).filter((item) =>
+        isTeamDepartment(item.coordinator)
+        || isTeamDepartment(item.leader)
+        || isScopedTeamMember(item.advisor));
+    }
     generalRadicatedData = data;
 
     if (!data.items?.length) {
