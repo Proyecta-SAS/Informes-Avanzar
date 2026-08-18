@@ -11,9 +11,16 @@ const initialsOrg = (name = "") =>
 
 const commercialRoles = [
   ["coordinator_rch", "Coordinador RCH", "Coordina equipos y lideres de la linea RCH."],
-  ["coordinator_pnnc", "Coordinador PNNC", "Coordina equipos y lideres de la linea PNNC."],
   ["leader_rch", "Lider RCH", "Gestiona un equipo comercial RCH."],
-  ["leader_pnnc", "Lider PNNC", "Gestiona un equipo comercial PNNC."]
+  ["coordinator_pnnc", "Coordinador Insolvencia PNNC", "Coordina equipos y lideres de la linea Insolvencia PNNC."],
+  ["leader_pnnc", "Lider Insolvencia PNNC", "Gestiona un equipo comercial Insolvencia PNNC."],
+  ["custom", "Personalizado", "Permite elegir manualmente paneles y tablas visibles."]
+];
+
+const commercialRoleGroups = [
+  ["Linea RCH", ["coordinator_rch", "leader_rch"]],
+  ["Linea Insolvencia PNNC", ["coordinator_pnnc", "leader_pnnc"]],
+  ["Otros", ["custom"]]
 ];
 
 const roleNames = Object.fromEntries(commercialRoles.map(([code, name]) => [code, name]));
@@ -54,35 +61,62 @@ const generalBlockGroups = [
 
 const allReportCodes = reportOptions.map(([code]) => code);
 const allGeneralBlockCodes = generalBlockGroups.flatMap(([, items]) => items.map(([code]) => code));
-const sharedGeneralBlockCodes = allGeneralBlockCodes.filter((code) => !code.startsWith("commercial_possible_close_"));
+const lineSpecificBlockCodes = new Set([
+  "funnel_insolvency",
+  "funnel_rch",
+  "commercial_possible_close_rch",
+  "commercial_possible_close_pnnc"
+]);
+const restrictedCommercialBlockCodes = new Set([
+  "coordinator_values",
+  "coordinator_detail",
+  "leader_detail"
+]);
+const sharedGeneralBlockCodes = allGeneralBlockCodes.filter((code) =>
+  !lineSpecificBlockCodes.has(code) && !restrictedCommercialBlockCodes.has(code)
+);
 const normalizeCommercialRole = (role) => roleNames[role] ? role : "leader_rch";
 const getRoleName = (role) => roleNames[role] ?? legacyRoleNames[role] ?? "Lider RCH";
 const blockCodesForRole = (role) => {
   const normalized = normalizeCommercialRole(role);
+  if (normalized === "custom") return [];
+  const isPnnc = normalized.endsWith("_pnnc");
+  const sharedBlocks = normalized.startsWith("leader_")
+    ? sharedGeneralBlockCodes.filter((code) => code !== "leader_values")
+    : sharedGeneralBlockCodes;
   return [
-    ...sharedGeneralBlockCodes,
-    normalized.endsWith("_pnnc") ? "commercial_possible_close_pnnc" : "commercial_possible_close_rch"
+    ...sharedBlocks,
+    isPnnc ? "funnel_insolvency" : "funnel_rch",
+    isPnnc ? "commercial_possible_close_pnnc" : "commercial_possible_close_rch"
   ];
 };
 
 const applyPresetAccess = (settings) => {
+  const role = normalizeCommercialRole(settings.querySelector(".organization-role")?.value);
+  const isCustom = role === "custom";
   const blocks = new Set(blockCodesForRole(settings.querySelector(".organization-role")?.value));
   settings.querySelectorAll(".organization-report-check").forEach((input) => {
-    input.checked = true;
+    input.disabled = !isCustom;
+    if (!isCustom) input.checked = true;
   });
   settings.querySelectorAll(".organization-block-check").forEach((input) => {
-    input.checked = blocks.has(input.value);
+    input.disabled = !isCustom;
+    if (!isCustom) input.checked = blocks.has(input.value);
   });
 };
 
-const roleOptionsMarkup = (selectedRole) => commercialRoles
-  .map(([code, name]) => `<option value="${code}" ${normalizeCommercialRole(selectedRole) === code ? "selected" : ""}>${name}</option>`)
-  .join("");
+const roleOptionsMarkup = (selectedRole) => {
+  const normalized = normalizeCommercialRole(selectedRole);
+  return commercialRoleGroups.map(([group, codes]) => `
+    <optgroup label="${group}">
+      ${codes.map((code) => `<option value="${code}" ${normalized === code ? "selected" : ""}>${roleNames[code]}</option>`).join("")}
+    </optgroup>`).join("");
+};
 
 const orgCard = (department, children) => {
   const role = normalizeCommercialRole(department.roleLabel);
-  const selectedReports = new Set([...(department.visibleReports ?? []), ...allReportCodes]);
-  const selectedBlocks = new Set([...(department.visibleBlocks ?? []), ...blockCodesForRole(role)]);
+  const selectedReports = new Set(role === "custom" ? (department.visibleReports ?? []) : [...(department.visibleReports ?? []), ...allReportCodes]);
+  const selectedBlocks = new Set(role === "custom" ? (department.visibleBlocks ?? []) : [...(department.visibleBlocks ?? []), ...blockCodesForRole(role)]);
 
   return `
     <article class="organization-card ${children.length ? "has-children" : ""}" data-department-id="${department.id}" data-head-name="${escOrg(department.headName ?? "")}" data-head-email="${escOrg(department.headEmail ?? "")}">
@@ -107,19 +141,19 @@ const orgCard = (department, children) => {
         <label>Rol comercial predefinido<select class="organization-role">${roleOptionsMarkup(role)}</select></label>
         <fieldset>
           <legend>Paneles visibles incluidos</legend>
-          ${reportOptions.map(([code, name]) => `<label><input class="organization-report-check" type="checkbox" value="${code}" ${selectedReports.has(code) ? "checked" : ""} disabled>${name}</label>`).join("")}
+          ${reportOptions.map(([code, name]) => `<label><input class="organization-report-check" type="checkbox" value="${code}" ${selectedReports.has(code) ? "checked" : ""} ${role === "custom" ? "" : "disabled"}>${name}</label>`).join("")}
         </fieldset>
         <div class="organization-block-access">
           <div><strong>Tablas del Informe General incluidas</strong><span class="organization-preset-note">Predefinido</span></div>
           ${generalBlockGroups.map(([group, items]) => `
             <fieldset>
               <legend>${group}</legend>
-              ${items.map(([code, name]) => `<label><input class="organization-block-check" type="checkbox" value="${code}" ${selectedBlocks.has(code) ? "checked" : ""} disabled>${name}</label>`).join("")}
+              ${items.map(([code, name]) => `<label><input class="organization-block-check" type="checkbox" value="${code}" ${selectedBlocks.has(code) ? "checked" : ""} ${role === "custom" ? "" : "disabled"}>${name}</label>`).join("")}
             </fieldset>
           `).join("")}
         </div>
         <button class="organization-save" type="button">Guardar rol</button>
-        <small class="organization-save-state">Este rol ve todos los paneles vigentes. Lo eliminado o archivado no se incluye en el catalogo.</small>
+        <small class="organization-save-state">${role === "custom" ? "Selecciona manualmente los paneles y tablas visibles." : "Este rol usa permisos predefinidos. Lo eliminado o archivado no se incluye en el catalogo."}</small>
       </div>
       <footer>${children.length ? `<button class="organization-toggle" type="button" aria-expanded="false"><span>${children.length} departamentos</span><b>⌄</b></button>` : "Sin subdepartamentos"}</footer>
     </article>`;
@@ -183,13 +217,18 @@ const closeOrganizationSettings = () => {
 
 const getSettingsPayload = (card, settings) => {
   const role = normalizeCommercialRole(settings.querySelector(".organization-role").value);
+  const isCustom = role === "custom";
   return {
     email: card.dataset.headEmail,
     roleLabel: role,
-    visibleReports: allReportCodes,
-    visibleBlocks: blockCodesForRole(role)
+    visibleReports: isCustom ? [...settings.querySelectorAll(".organization-report-check:checked")].map((input) => input.value) : allReportCodes,
+    visibleBlocks: isCustom ? [...settings.querySelectorAll(".organization-block-check:checked")].map((input) => input.value) : blockCodesForRole(role)
   };
 };
+
+const getActiveSettingsForCard = (card) =>
+  document.querySelector(`.organization-settings[data-origin-department="${card.dataset.departmentId}"]`)
+  ?? card.querySelector(".organization-settings");
 
 const saveOrganizationSettings = async (card, settings, state, save) => {
   save.disabled = true;
@@ -284,13 +323,16 @@ organizationTrees.addEventListener("click", async (event) => {
   if (create) {
     const card = create.closest(".organization-card");
     const result = card.querySelector(".organization-user-result");
-    const role = normalizeCommercialRole(card.querySelector(".organization-role")?.value ?? card.querySelector(".organization-role-badge")?.classList[1]);
+    const settings = getActiveSettingsForCard(card);
+    const payload = settings
+      ? getSettingsPayload(card, settings)
+      : { roleLabel: normalizeCommercialRole(card.querySelector(".organization-role-badge")?.classList[1]), visibleReports: allReportCodes, visibleBlocks: [] };
     create.disabled = true;
     create.textContent = "Creando...";
     const response = await fetch(`/api/admin/organization/${card.dataset.departmentId}/create-user`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fullName: card.dataset.headName, email: card.dataset.headEmail, roleLabel: role })
+      body: JSON.stringify({ fullName: card.dataset.headName, email: card.dataset.headEmail, ...payload })
     });
     const data = await response.json().catch(() => ({}));
     create.textContent = response.ok ? "Usuario creado" : "Crear usuario";
@@ -351,8 +393,8 @@ organizationTrees.insertAdjacentHTML("afterend", `
   <section class="organization-help">
     <div class="organization-help-heading">
       <span class="section-kicker">Guia de acceso</span>
-      <h2>Roles predefinidos de estructura comercial</h2>
-      <p>Selecciona uno de los cuatro roles principales. Cada rol habilita automaticamente todos los paneles y tablas vigentes del catalogo comercial; lo eliminado o archivado queda fuera.</p>
+      <h2>Roles de estructura comercial</h2>
+      <p>Selecciona el rol segun la linea y el nivel del responsable. RCH e Insolvencia PNNC tienen coordinador y lider separados; Personalizado permite escoger manualmente.</p>
     </div>
     <div class="organization-role-guide">
       ${commercialRoles.map(([code, name, description], index) => `
@@ -366,10 +408,10 @@ organizationTrees.insertAdjacentHTML("afterend", `
       <ol>
         <li><b>Ubica el equipo</b><span>Busca el coordinador, lider o departamento en el organigrama.</span></li>
         <li><b>Abre Gestionar acceso</b><span>Despliega la configuracion dentro de la tarjeta.</span></li>
-        <li><b>Selecciona el rol</b><span>Elige Coordinador RCH, Coordinador PNNC, Lider RCH o Lider PNNC.</span></li>
+        <li><b>Selecciona el rol</b><span>Elige la linea correcta: RCH o Insolvencia PNNC, y luego coordinador o lider.</span></li>
         <li><b>Guarda</b><span>La configuracion queda registrada con todos los paneles vigentes.</span></li>
         <li><b>Crea usuario</b><span>Si falta la cuenta, usa el boton Crear usuario para generar acceso.</span></li>
       </ol>
-      <div class="organization-permission-note"><b>Importante:</b> estos roles son predefinidos. Para excepciones finas se revisara una segunda etapa.</div>
+      <div class="organization-permission-note"><b>Importante:</b> usa Personalizado solo cuando el responsable necesita una combinacion distinta de tablas.</div>
     </div>
   </section>`);

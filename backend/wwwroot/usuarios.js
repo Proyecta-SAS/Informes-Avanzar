@@ -11,8 +11,13 @@ const generalBlockGroups = [
   ["Embudos", [["funnel_insolvency", "Embudo Insolvencia"], ["funnel_rch", "Embudo RCH"], ["commercial_possible_close_rch", "(COM) Posible Cierre RCH"], ["commercial_possible_close_pnnc", "(COM) Posible Cierre PNNC"]]]
 ];
 const allGeneralBlockCodes = generalBlockGroups.flatMap(([, items]) => items.map(([code]) => code));
-const leaderExcludedGeneralBlockCodes = new Set(["coordinator_values", "coordinator_detail"]);
+const lineSpecificGeneralBlockCodes = new Set(["funnel_insolvency", "funnel_rch", "commercial_possible_close_rch", "commercial_possible_close_pnnc"]);
+const commercialRestrictedBlockCodes = new Set(["coordinator_values", "coordinator_detail", "leader_detail"]);
+const leaderExcludedGeneralBlockCodes = new Set(["coordinator_values", "coordinator_detail", "leader_values"]);
 const leaderGeneralBlockCodes = allGeneralBlockCodes.filter((code) => !leaderExcludedGeneralBlockCodes.has(code));
+const generalDefaultBlockCodes = allGeneralBlockCodes.filter((code) =>
+  !lineSpecificGeneralBlockCodes.has(code) && !commercialRestrictedBlockCodes.has(code)
+);
 
 const api = async (url, options = {}) => {
   const response = await fetch(url, {
@@ -99,8 +104,8 @@ const applyCommercialRoleDefaults = () => {
     if (input) input.checked = true;
   });
   const defaultBlocks = selectedCommercialRole === "coordinator"
-    ? new Set(allGeneralBlockCodes)
-    : new Set(leaderGeneralBlockCodes);
+    ? new Set(generalDefaultBlockCodes)
+    : new Set(leaderGeneralBlockCodes.filter((code) => !lineSpecificGeneralBlockCodes.has(code) && !commercialRestrictedBlockCodes.has(code)));
   form.querySelectorAll(".general-block-check").forEach((input) => input.checked = defaultBlocks.has(input.value));
 };
 

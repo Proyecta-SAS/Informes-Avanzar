@@ -364,6 +364,12 @@ adminApi.MapPost("/organization/{departmentId}/create-user", async (string depar
     var fullName = body.TryGetProperty("fullName", out var nameProperty) ? nameProperty.GetString() : null;
     var email = body.TryGetProperty("email", out var emailProperty) ? emailProperty.GetString() : null;
     var roleLabel = OrganizationQueries.NormalizeCommercialRoleLabel(body.TryGetProperty("roleLabel", out var roleProperty) ? roleProperty.GetString() : null);
+    var requestedReports = body.TryGetProperty("visibleReports", out var reportsProperty) && reportsProperty.ValueKind == JsonValueKind.Array
+        ? reportsProperty.EnumerateArray().Select(item => item.GetString()).Where(item => !string.IsNullOrWhiteSpace(item)).Cast<string>().ToArray()
+        : Array.Empty<string>();
+    var requestedBlocks = body.TryGetProperty("visibleBlocks", out var blocksProperty) && blocksProperty.ValueKind == JsonValueKind.Array
+        ? blocksProperty.EnumerateArray().Select(item => item.GetString()).Where(item => !string.IsNullOrWhiteSpace(item)).Cast<string>().ToArray()
+        : Array.Empty<string>();
     if (string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(email)) return Results.BadRequest(new { message = "El responsable debe tener nombre y correo en Bitrix." });
     await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
     await using (var existsCommand = new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM auth.users WHERE lower(email)=lower(@email) AND deleted_at IS NULL);", connection))
@@ -378,7 +384,7 @@ adminApi.MapPost("/organization/{departmentId}/create-user", async (string depar
         roleCommand.Parameters.AddWithValue("code", roleCode);
         roleId = await roleCommand.ExecuteScalarAsync(cancellationToken) as Guid?;
     }
-    var rolePrefix = roleLabel switch { "coordinator_rch" => "CoordRCH", "coordinator_pnnc" => "CoordPNNC", "leader_rch" => "LiderRCH", "leader_pnnc" => "LiderPNNC", _ => "Comercial" };
+    var rolePrefix = roleLabel switch { "coordinator_rch" => "CoordRCH", "coordinator_pnnc" => "CoordPNNC", "leader_rch" => "LiderRCH", "leader_pnnc" => "LiderPNNC", "custom" => "Personalizado", _ => "Comercial" };
     var password = $"Avz-{rolePrefix}-{Convert.ToHexString(RandomNumberGenerator.GetBytes(7))}!";
     var userId = await AdminAccessQueries.CreateUserAsync(fullName, email, password, roleId, dataSource, cancellationToken);
     string[] savedReports = Array.Empty<string>();
@@ -393,7 +399,14 @@ adminApi.MapPost("/organization/{departmentId}/create-user", async (string depar
             savedBlocks = reader.GetFieldValue<string[]>(1);
         }
     }
-    await OrganizationQueries.SetSettingsAsync(departmentId, email, roleLabel, savedReports, savedBlocks, dataSource, cancellationToken);
+    await OrganizationQueries.SetSettingsAsync(
+        departmentId,
+        email,
+        roleLabel,
+        requestedReports.Length > 0 ? requestedReports : savedReports,
+        requestedBlocks.Length > 0 ? requestedBlocks : savedBlocks,
+        dataSource,
+        cancellationToken);
     return Results.Created($"/api/admin/users/{userId}", new { id = userId, temporaryPassword = password, roleCode, departmentId });
 });
 
