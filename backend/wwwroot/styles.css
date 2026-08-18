@@ -2406,6 +2406,10 @@ main.app .radicated-total {
 .organization-role-badge.leader_rch,
 .organization-role-badge.leader_pnnc{background:#e9f2fa;color:#174d79}
 .organization-role-badge.custom{background:#eef2ff;color:#3730a3}
+.organization-role-badge.line_coordinator_rch,
+.organization-role-badge.line_coordinator_pnnc{background:#fde9d7;color:#9a4a04}
+.organization-role-guide .line_coordinator_rch>span,
+.organization-role-guide .line_coordinator_pnnc>span{background:#fde9d7;color:#9a4a04}
 .organization-settings input:disabled{opacity:.82}
 .organization-preset-note{border-radius:999px;background:#edf2f7;color:#6b7b90;padding:4px 7px;font-size:8px;font-weight:900;text-transform:uppercase}
 .commercial-possible-close-section {

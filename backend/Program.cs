@@ -384,7 +384,7 @@ adminApi.MapPost("/organization/{departmentId}/create-user", async (string depar
         roleCommand.Parameters.AddWithValue("code", roleCode);
         roleId = await roleCommand.ExecuteScalarAsync(cancellationToken) as Guid?;
     }
-    var rolePrefix = roleLabel switch { "coordinator_rch" => "CoordRCH", "coordinator_pnnc" => "CoordPNNC", "leader_rch" => "LiderRCH", "leader_pnnc" => "LiderPNNC", "custom" => "Personalizado", _ => "Comercial" };
+    var rolePrefix = roleLabel switch { "line_coordinator_rch" => "CoordLineaRCH", "line_coordinator_pnnc" => "CoordLineaPNNC", "coordinator_rch" => "CoordRCH", "coordinator_pnnc" => "CoordPNNC", "leader_rch" => "LiderRCH", "leader_pnnc" => "LiderPNNC", "custom" => "Personalizado", _ => "Comercial" };
     var password = $"Avz-{rolePrefix}-{Convert.ToHexString(RandomNumberGenerator.GetBytes(7))}!";
     var userId = await AdminAccessQueries.CreateUserAsync(fullName, email, password, roleId, dataSource, cancellationToken);
     string[] savedReports = Array.Empty<string>();
