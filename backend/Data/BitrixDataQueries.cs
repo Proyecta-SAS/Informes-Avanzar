@@ -1409,13 +1409,12 @@ public static class BitrixDataQueries
         await reader.DisposeAsync();
         const string portfolioSql = """
             WITH latest_users AS (
-                SELECT DISTINCT ON (connection_id, bitrix_id)
-                    connection_id,
+                SELECT DISTINCT ON (bitrix_id)
                     bitrix_id,
                     payload
                 FROM bitrix.raw_payloads
                 WHERE entity_type = 'user'
-                ORDER BY connection_id, bitrix_id, received_at DESC
+                ORDER BY bitrix_id, received_at DESC
             ), portfolio AS (
                 SELECT
                     COALESCE(
@@ -1424,37 +1423,31 @@ public static class BitrixDataQueries
                             NULLIF(user_payload.payload ->> 'LAST_NAME', '')
                         )), ''),
                         NULLIF(users.full_name, ''),
-                        deals.assigned_by_bitrix_id,
+                        source.payload ->> 'ASSIGNED_BY_ID',
                         'Sin asesor'
                     ) AS advisor,
                     CASE
                         WHEN pipelines.category_id = 68 THEN 'Insolvencia'
                         WHEN pipelines.category_id = 12 THEN 'RCH'
                     END AS commercial_line,
-                    UPPER(TRIM(COALESCE(stages.name, deals.stage_id, ''))) AS stage_name,
-                    COALESCE(deals.opportunity, 0) AS amount
-                FROM bitrix.deals deals
-                JOIN bitrix.pipelines pipelines ON pipelines.id = deals.pipeline_id
+                    UPPER(TRIM(COALESCE(stages.name, source.payload ->> 'STAGE_ID', ''))) AS stage_name,
+                    COALESCE(
+                        NULLIF(source.payload ->> 'OPPORTUNITY_ACCOUNT', '')::numeric,
+                        NULLIF(source.payload ->> 'OPPORTUNITY', '')::numeric,
+                        0
+                    ) AS amount
+                FROM "Bitrix_tablas".crm_deal source
+                JOIN bitrix.pipelines pipelines
+                    ON pipelines.category_id = (source.payload ->> 'CATEGORY_ID')::int
                 LEFT JOIN bitrix.pipeline_stages stages
                     ON stages.pipeline_id = pipelines.id
-                    AND stages.bitrix_stage_id = deals.stage_id
+                    AND stages.bitrix_stage_id = source.payload ->> 'STAGE_ID'
                 LEFT JOIN bitrix.users users
-                    ON users.connection_id = deals.connection_id
-                    AND users.bitrix_id = deals.assigned_by_bitrix_id
+                    ON users.bitrix_id = source.payload ->> 'ASSIGNED_BY_ID'
                 LEFT JOIN latest_users user_payload
-                    ON user_payload.connection_id = deals.connection_id
-                    AND user_payload.bitrix_id = deals.assigned_by_bitrix_id
-                JOIN bitrix.entity_snapshots snapshot
-                    ON snapshot.connection_id = deals.connection_id
-                    AND snapshot.entity_type = 'deal'
-                    AND snapshot.bitrix_id = deals.bitrix_id
-                    AND snapshot.is_deleted = false
+                    ON user_payload.bitrix_id = source.payload ->> 'ASSIGNED_BY_ID'
                 WHERE pipelines.category_id IN (68, 12)
-                    AND EXTRACT(YEAR FROM deals.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @portfolioYear
-                    AND (@fromDate IS NULL OR (deals.bitrix_created_at AT TIME ZONE 'America/Bogota')::date >= @fromDate)
-                    AND (@toDate IS NULL OR (deals.bitrix_created_at AT TIME ZONE 'America/Bogota')::date <= @toDate)
-                    AND (@monthNumber IS NULL OR EXTRACT(MONTH FROM deals.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @monthNumber)
-                    AND UPPER(TRIM(COALESCE(stages.name, deals.stage_id, ''))) IN (
+                    AND UPPER(TRIM(COALESCE(stages.name, source.payload ->> 'STAGE_ID', ''))) IN (
                         'VERIFICACION CASO EXITOSO',
                         'CASOS CON NOVEDAD',
                         'NOTIFICADO',
@@ -1515,8 +1508,6 @@ public static class BitrixDataQueries
         var portfolio = new List<object>();
         await using (var portfolioCommand = new NpgsqlCommand(portfolioSql, connection))
         {
-            portfolioCommand.Parameters.AddWithValue("portfolioYear", 2025);
-            AddDiegoDateFilterParameters(portfolioCommand, null, null, null);
             await using var portfolioReader = await portfolioCommand.ExecuteReaderAsync(cancellationToken);
             while (await portfolioReader.ReadAsync(cancellationToken))
             {
