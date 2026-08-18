@@ -105,11 +105,7 @@ const generalBlockCodes = {
   "Embudo Insolvencia": "funnel_insolvency",
   "Embudo RCH": "funnel_rch",
   "(COM) Posible Cierre RCH": "commercial_possible_close_rch",
-  "(COM) Posible Cierre PNNC": "commercial_possible_close_pnnc",
-  "Posible cierre general": "management_possible_close",
-  "Detalle cumplimiento PNNC 2025": "management_compliance_pnnc",
-  "Detalle cumplimiento RCH 2026": "management_compliance_rch",
-  "Detalle cumplimiento 1116 2026": "management_compliance_1116"
+  "(COM) Posible Cierre PNNC": "commercial_possible_close_pnnc"
 };
 let generalBlockAccess = { configured: false, codes: new Set() };
 const isGeneralBlockVisible = (title) => {
@@ -4194,9 +4190,7 @@ const handleGerenciaMonthFilterChange = (event) => {
 
 
 const renderDiegoDashboard = () => {
-  const sourceSections = reportId === "informe_general_comercial"
-    ? [...diegoSections, generalManagementSection]
-    : diegoSections;
+  const sourceSections = diegoSections;
   const sections = sourceSections.map((section) => {
     const reportBlocks = section.blocks;
     return { ...section, blocks: reportId === "informe_general_comercial" && generalBlockAccess.configured
