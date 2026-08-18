@@ -2007,7 +2007,9 @@ public static class BitrixDataQueries
             )
             SELECT
                 COALESCE(NULLIF(full_name, ''), bitrix_id, 'Sin asesor') AS advisor,
-                COALESCE((ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%EQ. LIDER%'))[1], 'Sin líder') AS leader,
+                COALESCE((ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (
+                    WHERE UPPER(REPLACE(TRIM(name), 'EQ.LIDER', 'EQ. LIDER')) LIKE '%EQ. LIDER%'
+                ))[1], 'Sin líder') AS leader,
                 COALESCE((ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%EQ. COOR%'))[1], 'Sin coordinador') AS coordinator,
                 CASE
                     WHEN BOOL_OR(UPPER(TRIM(name)) LIKE '%RCH%') THEN 'RCH'
@@ -2017,7 +2019,9 @@ public static class BitrixDataQueries
             FROM hierarchy
             GROUP BY connection_id, bitrix_id, full_name
             HAVING (ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%EQ. COOR%'))[1] IS NOT NULL
-                OR (ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%EQ. LIDER%'))[1] IS NOT NULL
+                OR (ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (
+                    WHERE UPPER(REPLACE(TRIM(name), 'EQ.LIDER', 'EQ. LIDER')) LIKE '%EQ. LIDER%'
+                ))[1] IS NOT NULL
             ORDER BY coordinator, leader, advisor;
             """;
 
@@ -2125,7 +2129,14 @@ public static class BitrixDataQueries
                 SELECT DISTINCT
                     u.connection_id,
                     u.bitrix_id,
-                    u.full_name,
+                    COALESCE(
+                        NULLIF(TRIM(CONCAT_WS(' ',
+                            NULLIF(payload.payload ->> 'NAME', ''),
+                            NULLIF(payload.payload ->> 'LAST_NAME', '')
+                        )), ''),
+                        NULLIF(u.full_name, ''),
+                        u.bitrix_id
+                    ) AS full_name,
                     (jsonb_array_elements_text(payload.payload -> 'UF_DEPARTMENT'))::bigint AS department_id
                 FROM bitrix.users u
                 JOIN latest_users payload ON payload.connection_id = u.connection_id AND payload.bitrix_id = u.bitrix_id
