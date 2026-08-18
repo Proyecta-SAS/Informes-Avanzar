@@ -5986,3 +5986,48 @@ td strong {
 :root[data-theme] .panel-login-form label { color:var(--login-label); }
 :root[data-theme] .panel-login-form input { background:var(--login-input-bg); color:var(--login-input-text); border-color:var(--login-input-border); }
 :root[data-theme] .login-network-node { background:var(--login-node-bg); color:var(--login-node-text); }
+
+/* Filtros contraidos: deja visible unicamente la flecha de apertura. */
+.report-has-filter-drawer .report-filter-drawer.is-collapsed,
+:root[data-theme="dark"] .report-has-filter-drawer .report-filter-drawer.is-collapsed {
+  right: 10px;
+  bottom: auto;
+  width: 34px;
+  height: 42px;
+  min-height: 0;
+  max-height: 42px;
+  overflow: visible;
+  gap: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.report-has-filter-drawer .report-filter-drawer.is-collapsed .filter-panel-toggle,
+:root[data-theme="dark"] .report-has-filter-drawer .report-filter-drawer.is-collapsed .filter-panel-toggle {
+  width: 34px;
+  min-height: 42px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.report-has-filter-drawer .report-filter-drawer.is-collapsed .filter-panel-toggle:hover,
+:root[data-theme="dark"] .report-has-filter-drawer .report-filter-drawer.is-collapsed .filter-panel-toggle:hover {
+  border: 0;
+  background: transparent;
+}
+
+.report-has-filter-drawer .report-filter-drawer.is-collapsed .filter-panel-toggle span,
+:root[data-theme="dark"] .report-has-filter-drawer .report-filter-drawer.is-collapsed .filter-panel-toggle span {
+  width: 34px;
+  height: 42px;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  font-size: 34px;
+}
