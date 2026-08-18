@@ -135,6 +135,64 @@ if (sessionMenu) {
   });
   sessionMenu.append(logoutButton);
 
+  const mountAccountMenu = (session) => {
+    const host = document.querySelector(".topbar-actions, .home-top-actions, .topbar, .home-topbar");
+    if (!host || host.querySelector(".session-account")) return;
+
+    host.querySelectorAll(":scope > .profile, :scope > .home-avatar").forEach((item) => item.remove());
+    const fullName = session.fullName?.trim() || "Usuario del panel";
+    const email = session.email?.trim() || "Correo no disponible";
+    const escapeHtml = (value) => String(value).replace(/[&<>'"]/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[character]);
+    const initials = fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "U";
+    const roleNames = { admin: "Administrador", report_manager: "Gestor de informes", report_viewer: "Usuario de consulta" };
+    const roleName = session.isSuperAdmin ? "Superadministrador" : (roleNames[session.roleCode] || "Usuario del panel");
+
+    const account = document.createElement("div");
+    account.className = "session-account";
+    account.innerHTML = `
+      <button class="session-account-trigger" type="button" aria-expanded="false" aria-haspopup="menu">
+        <span class="session-account-avatar" aria-hidden="true">${escapeHtml(initials)}</span>
+        <span class="session-account-identity"><strong>${escapeHtml(fullName)}</strong><small>${escapeHtml(email)}</small></span>
+        <svg class="session-account-chevron" viewBox="0 0 20 20" aria-hidden="true"><path d="m6 8 4 4 4-4"/></svg>
+      </button>
+      <div class="session-account-menu" role="menu" hidden>
+        <div class="session-account-summary">
+          <span class="session-account-avatar large" aria-hidden="true">${escapeHtml(initials)}</span>
+          <div><strong>${escapeHtml(fullName)}</strong><span>${escapeHtml(roleName)}</span></div>
+        </div>
+        <div class="session-account-email"><span>Correo de la sesión</span><strong>${escapeHtml(email)}</strong></div>
+        <button class="session-account-logout" type="button" role="menuitem">${icon("logout")}<span>Cerrar sesión</span></button>
+      </div>`;
+
+    const trigger = account.querySelector(".session-account-trigger");
+    const menu = account.querySelector(".session-account-menu");
+    const close = () => {
+      menu.hidden = true;
+      account.classList.remove("open");
+      trigger.setAttribute("aria-expanded", "false");
+    };
+    const toggle = () => {
+      const open = menu.hidden;
+      menu.hidden = !open;
+      account.classList.toggle("open", open);
+      trigger.setAttribute("aria-expanded", String(open));
+    };
+    trigger.addEventListener("click", (event) => { event.stopPropagation(); toggle(); });
+    menu.addEventListener("click", (event) => event.stopPropagation());
+    document.addEventListener("click", close);
+    document.addEventListener("keydown", (event) => { if (event.key === "Escape") { close(); trigger.focus(); } });
+    account.querySelector(".session-account-logout").addEventListener("click", async () => {
+      const button = account.querySelector(".session-account-logout");
+      button.disabled = true;
+      button.querySelector("span").textContent = "Cerrando sesión…";
+      try { await fetch("/api/auth/logout", { method: "POST" }); } finally {
+        sessionStorage.removeItem("adminAccessKey");
+        location.replace("/login.html");
+      }
+    });
+    host.appendChild(account);
+  };
+
   fetch("/api/auth/me").then((response) => response.ok ? response.json() : Promise.reject()).then((session) => {
     const allowed = new Set(session.accessibleReportCodes ?? []);
     const permissions = new Set(session.permissions ?? []);
@@ -154,6 +212,7 @@ if (sessionMenu) {
     sessionMenu.querySelectorAll(".sidebar-group").forEach((group) => {
       if (!group.querySelector(".sidebar-group-items a, .sidebar-coming, .sidebar-empty")) group.remove();
     });
+    mountAccountMenu(session);
   }).catch(() => {}).finally(() => {
     sessionMenu.style.visibility = "visible";
   });
