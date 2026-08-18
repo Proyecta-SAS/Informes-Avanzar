@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard</title>
   <link rel="icon" href="https://avanzarsoluciones.com/wp-content/uploads/2025/01/cropped-favico-Avanzar-180x180.jpg" sizes="180x180">
-  <link rel="stylesheet" href="/styles.css?v=20260818-filter-arrow-v1">
+  <link rel="stylesheet" href="/styles.css?v=20260818-penultimate-sync-v1">
 </head>
 <body>
   <aside class="sidebar">
@@ -112,7 +112,10 @@
           <h2>Visión ejecutiva de la fuerza comercial</h2>
           <p>Consulta el desempeño de radicación, cartera y conversión por equipo en un solo lugar.</p>
         </div>
-        <div class="diego-overview-status"><i></i><span>Datos sincronizados</span></div>
+        <div class="diego-overview-sync">
+          <div class="diego-overview-status"><i></i><span>Datos sincronizados</span></div>
+          <time id="diegoSyncStatusText" class="diego-overview-sync-time" aria-live="polite">Consultando actualización…</time>
+        </div>
       </section>
 
       <section class="diego-filters report-filter-drawer" aria-label="Filtros del informe">
@@ -994,7 +997,7 @@
     </section>
   </main>
 
-  <script src="/reporte.js?v=20260818-line-coordinator-role"></script>
+  <script src="/reporte.js?v=20260818-penultimate-sync-v1"></script>
   <script src="/auth-session.js?v=20260818-account-menu-v3"></script>
 </body>
 </html>

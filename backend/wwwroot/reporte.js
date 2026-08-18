@@ -4611,12 +4611,19 @@ const loadSummary = async () => {
   setText("summaryLastRun", summary.lastSync ? `${summary.lastSync.recordsWritten} escritos` : "Sin datos");
 };
 
-const formatAdjustedSyncTime = (value) => {
+const formatSyncDateTime = (value) => {
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  date.setMinutes(date.getMinutes() - 10);
-  return date.toLocaleTimeString("es-CO", { hour: "numeric", minute: "2-digit" });
+  return new Intl.DateTimeFormat("es-CO", {
+    timeZone: "America/Bogota",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true
+  }).format(date);
 };
 
 const loadDiegoSyncStatus = async () => {
@@ -4626,13 +4633,16 @@ const loadDiegoSyncStatus = async () => {
     const response = await fetch("/api/data/sync-history", { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const rows = await response.json();
-    const lastCompleted = rows.find((row) => row.status === "success" && row.finishedAt)
-      ?? rows.find((row) => row.finishedAt)
-      ?? rows[0];
-    const time = formatAdjustedSyncTime(lastCompleted?.finishedAt ?? lastCompleted?.createdAt);
-    target.textContent = time ? `Última actualización: ${time}` : "Sin actualización registrada";
+    const completed = rows.filter((row) => row.status === "success" && (row.finishedAt || row.createdAt));
+    const penultimateCompleted = completed[1] ?? completed[0]
+      ?? rows.filter((row) => row.finishedAt || row.createdAt)[1]
+      ?? rows.find((row) => row.finishedAt || row.createdAt);
+    const time = formatSyncDateTime(penultimateCompleted?.finishedAt ?? penultimateCompleted?.createdAt);
+    target.textContent = time ? `Penúltima actualización: ${time}` : "Sin actualización registrada";
+    target.dateTime = penultimateCompleted?.finishedAt ?? penultimateCompleted?.createdAt ?? "";
   } catch {
     target.textContent = "Actualización no disponible";
+    target.removeAttribute("datetime");
   }
 };
 
