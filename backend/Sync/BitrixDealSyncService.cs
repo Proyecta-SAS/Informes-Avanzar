@@ -31,6 +31,7 @@ public sealed class BitrixDealSyncService(
         "UF_CRM_1676419915",
         "UF_CRM_1737653376",
         "UF_CRM_1737654190",
+        "UF_CRM_1648503084848",
         "UF_CRM_1628266904138",
         "UF_CRM_1628267643816",
         "UF_CRM_1584496415",

@@ -5574,4 +5574,3 @@ public static class BitrixDataQueries
         public List<StageInventoryItem> Stages { get; } = [];
     }
 }
-
