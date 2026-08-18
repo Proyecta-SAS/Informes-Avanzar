@@ -1401,9 +1401,25 @@ public static class BitrixDataQueries
 
         await reader.DisposeAsync();
         const string portfolioSql = """
-            WITH portfolio AS (
+            WITH latest_users AS (
+                SELECT DISTINCT ON (connection_id, bitrix_id)
+                    connection_id,
+                    bitrix_id,
+                    payload
+                FROM bitrix.raw_payloads
+                WHERE entity_type = 'user'
+                ORDER BY connection_id, bitrix_id, received_at DESC
+            ), portfolio AS (
                 SELECT
-                    COALESCE(NULLIF(users.full_name, ''), deals.assigned_by_bitrix_id, 'Sin asesor') AS advisor,
+                    COALESCE(
+                        NULLIF(TRIM(CONCAT_WS(' ',
+                            NULLIF(user_payload.payload ->> 'NAME', ''),
+                            NULLIF(user_payload.payload ->> 'LAST_NAME', '')
+                        )), ''),
+                        NULLIF(users.full_name, ''),
+                        deals.assigned_by_bitrix_id,
+                        'Sin asesor'
+                    ) AS advisor,
                     CASE
                         WHEN pipelines.category_id = 68 THEN 'Insolvencia'
                         WHEN pipelines.category_id = 12 THEN 'RCH'
@@ -1418,13 +1434,16 @@ public static class BitrixDataQueries
                 LEFT JOIN bitrix.users users
                     ON users.connection_id = deals.connection_id
                     AND users.bitrix_id = deals.assigned_by_bitrix_id
+                LEFT JOIN latest_users user_payload
+                    ON user_payload.connection_id = deals.connection_id
+                    AND user_payload.bitrix_id = deals.assigned_by_bitrix_id
                 JOIN bitrix.entity_snapshots snapshot
                     ON snapshot.connection_id = deals.connection_id
                     AND snapshot.entity_type = 'deal'
                     AND snapshot.bitrix_id = deals.bitrix_id
                     AND snapshot.is_deleted = false
                 WHERE pipelines.category_id IN (68, 12)
-                    AND EXTRACT(YEAR FROM deals.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @year
+                    AND EXTRACT(YEAR FROM deals.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @portfolioYear
                     AND (@fromDate IS NULL OR (deals.bitrix_created_at AT TIME ZONE 'America/Bogota')::date >= @fromDate)
                     AND (@toDate IS NULL OR (deals.bitrix_created_at AT TIME ZONE 'America/Bogota')::date <= @toDate)
                     AND (@monthNumber IS NULL OR EXTRACT(MONTH FROM deals.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @monthNumber)
@@ -1489,8 +1508,8 @@ public static class BitrixDataQueries
         var portfolio = new List<object>();
         await using (var portfolioCommand = new NpgsqlCommand(portfolioSql, connection))
         {
-            portfolioCommand.Parameters.AddWithValue("year", year);
-            AddDiegoDateFilterParameters(portfolioCommand, from, to, month);
+            portfolioCommand.Parameters.AddWithValue("portfolioYear", 2025);
+            AddDiegoDateFilterParameters(portfolioCommand, null, null, null);
             await using var portfolioReader = await portfolioCommand.ExecuteReaderAsync(cancellationToken);
             while (await portfolioReader.ReadAsync(cancellationToken))
             {
