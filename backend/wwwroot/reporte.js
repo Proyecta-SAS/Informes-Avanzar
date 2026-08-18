@@ -4655,6 +4655,12 @@ const load = async () => {
   setText("reportArea", current.area);
   if (["fuerza_comercial_diego", "informe_general_comercial"].includes(reportId)) {
     const isGeneralCommercial = reportId === "informe_general_comercial";
+    // Safari can restore date values from the previous page state even when
+    // the HTML inputs have no value. A restored single-day range makes the
+    // report look empty, so commercial reports always start with the full
+    // selected year unless the user explicitly chooses a range afterwards.
+    document.getElementById("diegoDateFrom").value = "";
+    document.getElementById("diegoDateTo").value = "";
     const session = await fetch("/api/auth/me").then((response) => response.json());
     teamScope = session.roleCode === "admin"
       ? null
