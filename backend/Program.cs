@@ -48,6 +48,13 @@ var app = builder.Build();
 
 var panelSigningKey = app.Configuration["PANEL_AUTH_SIGNING_KEY"] ?? app.Configuration["ADMIN_API_KEY"] ?? throw new InvalidOperationException("Configure PANEL_AUTH_SIGNING_KEY o ADMIN_API_KEY.");
 var superAdminEmail = app.Configuration["SUPERADMIN_EMAIL"] ?? "superadmin@avanzarsoluciones.com";
+static string ResolvePanelStartUrl(PanelUser user, bool isSuperAdmin, IReadOnlyCollection<string> reportCodes)
+{
+    if (isSuperAdmin || user.RoleCode == "admin") return "/";
+    if (reportCodes.Count == 0) return "/informes.html?access=none";
+    if (reportCodes.Count == 1) return $"/reporte.html?id={Uri.EscapeDataString(reportCodes.First())}";
+    return "/informes.html";
+}
 app.Use(async (context, next) =>
 {
     try
@@ -82,9 +89,16 @@ app.Use(async (context, next) =>
         context.Response.Redirect($"/login.html?returnUrl={Uri.EscapeDataString(path)}");
         return;
     }
-    if (path == "/login.html" && panelUser is not null) { context.Response.Redirect("/"); return; }
-
     var isSuperAdmin = panelUser is not null && string.Equals(panelUser.Email, superAdminEmail, StringComparison.OrdinalIgnoreCase);
+    if (path == "/login.html" && panelUser is not null)
+    {
+        var reportCodes = panelUser.RoleCode == "admin"
+            ? Array.Empty<string>()
+            : await context.RequestServices.GetRequiredService<IReportAccessService>().GetAccessibleReportCodesAsync(panelUser.Id, context.RequestAborted);
+        context.Response.Redirect(ResolvePanelStartUrl(panelUser, isSuperAdmin, reportCodes));
+        return;
+    }
+
     var isSuperAdminPage = path is "/usuarios.html" or "/estructura-comercial.html";
     var isSuperAdminApi = path.StartsWith("/api/admin") || path.StartsWith("/api/organization/commercial");
     if ((isSuperAdminPage || isSuperAdminApi) && !isSuperAdmin)
@@ -210,7 +224,8 @@ app.MapGet("/api/auth/me", async (HttpContext context, IReportAccessService repo
         ? null
         : await OrganizationQueries.GetUserTeamScopeAsync(user.Id, dataSource, cancellationToken);
     var isSuperAdmin = string.Equals(user.Email, superAdminEmail, StringComparison.OrdinalIgnoreCase);
-    return Results.Ok(new { user.Id, user.Email, user.FullName, user.RoleCode, isSuperAdmin, accessibleReportCodes = reportCodes, permissions, teamScope, generalCommercialBlocksConfigured = user.RoleCode != "admin" || blockAccess.Configured, generalCommercialBlockCodes = blockAccess.Blocks });
+    var startUrl = ResolvePanelStartUrl(user, isSuperAdmin, reportCodes);
+    return Results.Ok(new { user.Id, user.Email, user.FullName, user.RoleCode, isSuperAdmin, startUrl, assignedReportCount = reportCodes.Length, accessibleReportCodes = reportCodes, permissions, teamScope, generalCommercialBlocksConfigured = user.RoleCode != "admin" || blockAccess.Configured, generalCommercialBlockCodes = blockAccess.Blocks });
 });
 app.MapGet("/api/organization/commercial", async (NpgsqlDataSource dataSource, CancellationToken cancellationToken) => Results.Ok(await OrganizationQueries.GetCommercialStructureAsync(dataSource, cancellationToken)));
 app.MapPut("/api/organization/commercial/{departmentId}/settings", async (string departmentId, JsonElement body, NpgsqlDataSource dataSource, CancellationToken cancellationToken) => { var role=body.TryGetProperty("roleLabel",out var roleProperty)?roleProperty.GetString()??"viewer":"viewer";var email=body.TryGetProperty("email",out var emailProperty)?emailProperty.GetString():null;var reports=body.TryGetProperty("visibleReports",out var reportsProperty)&&reportsProperty.ValueKind==JsonValueKind.Array?reportsProperty.EnumerateArray().Select(item=>item.GetString()).Where(item=>!string.IsNullOrWhiteSpace(item)).Cast<string>().ToArray():Array.Empty<string>();var blocks=body.TryGetProperty("visibleBlocks",out var blocksProperty)&&blocksProperty.ValueKind==JsonValueKind.Array?blocksProperty.EnumerateArray().Select(item=>item.GetString()).Where(item=>!string.IsNullOrWhiteSpace(item)).Cast<string>().ToArray():Array.Empty<string>();await OrganizationQueries.SetSettingsAsync(departmentId,email,role,reports,blocks,dataSource,cancellationToken);return Results.NoContent(); });

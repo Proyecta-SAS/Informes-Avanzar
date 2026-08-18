@@ -6,7 +6,10 @@ const reportAreas = [
     tone: "violet",
     description: "Seguimiento de oportunidades, radicación y desempeño de la fuerza comercial.",
     reports: [
-      { id: "informe_general_comercial", title: "Informe General Comercial", badge: "Informe general", description: "Radicación, negociaciones, comisiones, cartera, embudos y etapas en una sola vista." }
+      { id: "informe_general_comercial", title: "Informe General Comercial", badge: "Informe general", description: "Radicación, negociaciones, comisiones, cartera, embudos y etapas en una sola vista." },
+      { id: "fuerza_comercial_diego", title: "Fuerza Comercial", badge: "Informe ejecutivo", description: "Radicación, cartera, comisiones, embudos y liderazgo comercial." },
+      { id: "rch_comercial", title: "RCH Comercial", badge: "Pipeline", description: "Negociaciones y avance de la pipeline comercial RCH." },
+      { id: "pnnc_comercial", title: "PNNC Comercial", badge: "Comercial", description: "Prospectos, seguimiento y conversión comercial PNNC." }
     ]
   },
   {
@@ -74,8 +77,13 @@ const renderReports = (query = "") => {
   }).join("");
 
   document.getElementById("visibleReports").textContent = visibleReports;
-  document.getElementById("dashboardGrid").innerHTML = content
-    || `<div class="catalog-empty"><strong>No encontramos informes</strong><span>Prueba con otro nombre o área.</span></div>`;
+  const accessState = new URLSearchParams(location.search).get("access");
+  const emptyMessage = accessState === "none"
+    ? `<div class="catalog-empty access-empty"><strong>Aún no tienes informes asignados</strong><span>Solicita al superadministrador que habilite al menos un informe para tu usuario.</span></div>`
+    : accessState === "denied"
+      ? `<div class="catalog-empty access-empty"><strong>No tienes acceso a ese informe</strong><span>Selecciona uno de los informes que aparecen disponibles para tu usuario.</span></div>`
+      : `<div class="catalog-empty"><strong>No encontramos informes</strong><span>Prueba con otro nombre o área.</span></div>`;
+  document.getElementById("dashboardGrid").innerHTML = content || emptyMessage;
 };
 
 document.getElementById("dashboardSearch").addEventListener("input", (event) => renderReports(event.target.value));
