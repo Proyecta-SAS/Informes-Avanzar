@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Usuarios y roles</title>
   <link rel="icon" href="https://avanzarsoluciones.com/wp-content/uploads/2025/01/cropped-favico-Avanzar-180x180.jpg" sizes="180x180">
-  <link rel="stylesheet" href="/styles.css?v=20260805-area-blocks">
+  <link rel="stylesheet" href="/styles.css?v=20260818-access-workspace">
 </head>
 <body>
   <aside class="sidebar">
@@ -31,8 +31,17 @@
 
     <div id="accessWorkspace">
       <section class="access-hero">
-        <div><span class="section-kicker">Administración</span><h2>Permisos de acceso</h2><p>Gestiona usuarios, roles y acceso a los paneles desde una sola vista.</p></div>
+        <div><span class="section-kicker">Administración</span><h2>Control de accesos</h2><p>Crea usuarios, asigna responsabilidades y define exactamente qué información puede consultar cada persona.</p></div>
         <button id="showCreateUser" class="sync-button" type="button">+ Crear usuario</button>
+      </section>
+
+      <section class="access-overview" aria-label="Resumen de accesos">
+        <div><span>Usuarios registrados</span><strong id="accessUserCount">—</strong><small>Perfiles activos en el panel</small></div>
+        <div><span>Roles disponibles</span><strong id="accessRoleCount">—</strong><small>Funciones y niveles de acceso</small></div>
+        <div><span>Informes configurados</span><strong id="accessReportCount">—</strong><small>Paneles administrables</small></div>
+        <nav class="access-quick-nav" aria-label="Secciones de administración">
+          <a href="#accessUsers">Usuarios</a><a href="#commercialRoles">Asignar acceso</a><a href="#advancedPermissions">Configuración avanzada</a>
+        </nav>
       </section>
 
       <section id="createUserPanel" class="access-create-panel" hidden>
@@ -47,35 +56,32 @@
         </form>
       </section>
 
-      <section class="access-section">
+      <section id="accessUsers" class="access-section access-users-section">
         <div class="access-section-title"><div><span class="access-section-icon">👥</span><h2>Usuarios</h2></div><label class="access-search">Buscar<input id="userSearch" type="search" placeholder="Nombre o correo"></label></div>
         <div class="access-table-wrap"><table class="access-users-table"><thead><tr><th>Usuario</th><th>Correo</th><th>Estado</th><th>Rol asignado</th><th>Acciones</th></tr></thead><tbody id="accessUserRows"></tbody></table></div>
       </section>
 
-      <section class="access-section commercial-access-section">
+      <section id="commercialRoles" class="access-section user-role-wizard">
         <div class="access-section-title">
-          <div><span class="access-section-icon commercial-access-icon">↗</span><div><h2>Roles y permisos comerciales</h2><p>Administra el perfil y el acceso individual de cada comercial.</p></div></div>
-          <span class="connection-pill">Acceso comercial</span>
+          <div><span class="access-section-icon commercial-access-icon">↗</span><div><h2>Asignar rol y visualización</h2><p>Elige el usuario, su función y únicamente las tablas que podrá consultar.</p></div></div>
+          <span class="connection-pill">Configuración individual</span>
         </div>
-        <div id="commercialAccessMatrix" class="commercial-access-matrix"></div>
-      </section>
-
-      <section class="access-section user-role-wizard">
-        <div class="organization-help-heading"><span class="section-kicker">Guía de acceso</span><h2>Roles y asignación de permisos</h2><p>Selecciona un usuario, define su función y configura exactamente qué paneles comerciales puede consultar.</p></div>
-        <div id="userRoleCards" class="organization-role-guide functional-role-guide">
-          <button type="button" data-role-label="coordinator"><span>01</span><div><h3>Coordinador</h3><p>Supervisa varios equipos y recibe acceso a informes consolidados.</p></div></button>
-          <button type="button" data-role-label="leader"><span>02</span><div><h3>Líder</h3><p>Gestiona un equipo específico y sus indicadores comerciales.</p></div></button>
-          <button type="button" data-role-label="advisor"><span>03</span><div><h3>Asesor</h3><p>Consulta indicadores relacionados con su gestión individual.</p></div></button>
-          <button type="button" data-role-label="viewer" class="selected"><span>04</span><div><h3>Consulta</h3><p>Perfil de solo lectura para visualizar información autorizada.</p></div></button>
+        <div class="role-workspace">
+          <div><span class="section-kicker">1 · Función comercial</span><div id="userRoleCards" class="organization-role-guide functional-role-guide">
+            <button type="button" data-role-label="coordinator"><span>01</span><div><h3>Coordinador</h3><p>Supervisa varios equipos y recibe acceso a informes consolidados.</p></div></button>
+            <button type="button" data-role-label="leader"><span>02</span><div><h3>Líder</h3><p>Gestiona un equipo específico y sus indicadores comerciales.</p></div></button>
+            <button type="button" data-role-label="advisor"><span>03</span><div><h3>Asesor</h3><p>Consulta indicadores relacionados con su gestión individual.</p></div></button>
+            <button type="button" data-role-label="viewer" class="selected"><span>04</span><div><h3>Consulta</h3><p>Perfil de solo lectura para visualizar información autorizada.</p></div></button>
+          </div></div>
+          <form id="roleAssignmentForm" class="role-assignment-form">
+            <div class="role-assignment-heading"><span class="section-kicker">2 · Alcance visible</span><h3>Configura el acceso</h3><p>Las casillas seleccionadas serán las únicas tablas visibles para el usuario.</p></div>
+            <label class="role-user-field">Selecciona el usuario<select id="roleAssignmentUser" required></select></label>
+            <fieldset class="role-report-field"><legend>Panel visible</legend><label><input type="checkbox" value="informe_general_comercial"> Informe General Comercial</label></fieldset>
+            <fieldset id="generalBlockAssignment"><legend>Tablas del Informe General</legend></fieldset>
+            <div class="role-assignment-footer"><div class="role-assignment-summary"><span>Rol seleccionado</span><strong id="selectedRoleName">Consulta</strong><small>La selección de tablas se guarda individualmente.</small></div><button class="sync-button" type="submit">Guardar acceso</button></div>
+            <p id="roleAssignmentState" class="role-assignment-state"></p>
+          </form>
         </div>
-        <form id="roleAssignmentForm" class="role-assignment-form">
-          <label>1. Selecciona el usuario<select id="roleAssignmentUser" required></select></label>
-          <fieldset><legend>2. Marca los paneles visibles</legend><label><input type="checkbox" value="informe_general_comercial"> Informe General Comercial</label></fieldset>
-          <fieldset id="generalBlockAssignment"><legend>3. Tablas del Informe General</legend></fieldset>
-          <div class="role-assignment-summary"><span>Rol seleccionado</span><strong id="selectedRoleName">Consulta</strong><small>Los permisos individuales complementan los accesos generales del rol.</small></div>
-          <button class="sync-button" type="submit">Aplicar rol y permisos</button>
-          <p id="roleAssignmentState" class="role-assignment-state"></p>
-        </form>
       </section>
 
       <section id="editUserPanel" class="access-create-panel" hidden>
@@ -92,18 +98,28 @@
         </form>
       </section>
 
-      <section class="access-section">
+      <details id="advancedPermissions" class="access-section access-advanced">
+        <summary><span class="access-section-icon">⚙</span><div><h2>Configuración avanzada</h2><p>Permisos generales por rol y acceso directo a informes.</p></div><b>Ver matrices</b></summary>
+        <div class="access-advanced-content">
+      <section class="access-subsection commercial-access-section">
+        <div class="access-section-title"><div><h3>Acceso comercial por usuario</h3><p>Consulta rápida del rol y acceso individual.</p></div></div>
+        <div id="commercialAccessMatrix" class="commercial-access-matrix"></div>
+      </section>
+
+      <section class="access-subsection">
         <div class="access-section-title"><div><span class="access-section-icon">⚙</span><h2>Permisos por rol</h2></div><p>Los cambios se guardan inmediatamente.</p></div>
         <div id="permissionMatrix" class="permission-matrix"></div>
       </section>
 
-      <section class="access-section">
+      <section class="access-subsection">
         <div class="access-section-title"><div><span class="access-section-icon">▦</span><h2>Acceso a informes</h2></div><p>Define qué roles pueden abrir cada informe.</p></div>
         <div id="reportAccessMatrix" class="permission-matrix"></div>
       </section>
+        </div>
+      </details>
     </div>
   </main>
-  <script src="/usuarios.js?v=20260813-possible-close-two-tables"></script>
+  <script src="/usuarios.js?v=20260818-access-workspace"></script>
   <script src="/auth-session.js?v=20260806-user-visibility"></script>
 </body>
 </html>

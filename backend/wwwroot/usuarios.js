@@ -6,8 +6,8 @@ const generalBlockGroups = [
   ["Comisiones", [["advisor_commissions", "Comisiones por asesor"]]],
   ["Carteras", [["portfolio_state", "Estado de cartera 2025"], ["portfolio_collected", "Cartera recaudada"]]],
   ["Embudos", [["funnel_insolvency", "Embudo Insolvencia"], ["funnel_rch", "Embudo RCH"], ["commercial_possible_close", "(COM) Posible Cierre"]]],
-  ["Etapas", [["stages_rch_commercial", "Etapas Comercial RCH"], ["stages_rch_operativa", "Etapas Operativa RCH"], ["stages_pnnc_commercial", "Etapas Comercial PNNC"], ["stages_pnnc_operativa", "Etapas Operativa PNNC"], ["possible_close_pnnc", "Posible cierre PNC"]]],
-  ["Gerencial", [["management_summary", "Resumen gerencial comercial"], ["management_possible_close", "Posible cierre general"], ["management_compliance_pnnc", "Detalle cumplimiento PNNC 2025"], ["management_compliance_rch", "Detalle cumplimiento RCH 2026"], ["management_compliance_1116", "Detalle cumplimiento 1116 2026"]]]
+  ["Etapas", [["stages_rch_commercial", "Etapas Comercial RCH"], ["stages_rch_operativa", "Etapas Operativa RCH"], ["stages_pnnc_commercial", "Etapas Comercial PNNC"], ["stages_pnnc_operativa", "Etapas Operativa PNNC"]]],
+  ["Gerencial", [["management_possible_close", "Posible cierre general"], ["management_compliance_pnnc", "Detalle cumplimiento PNNC 2025"], ["management_compliance_rch", "Detalle cumplimiento RCH 2026"], ["management_compliance_1116", "Detalle cumplimiento 1116 2026"]]]
 ];
 const allGeneralBlockCodes = generalBlockGroups.flatMap(([, items]) => items.map(([code]) => code));
 const leaderExcludedGeneralBlockCodes = new Set(["coordinator_values", "coordinator_detail"]);
@@ -95,6 +95,9 @@ const applyCommercialRoleDefaults = () => {
 };
 
 const renderWorkspace = () => {
+  document.getElementById("accessUserCount").textContent = accessData.users.length.toLocaleString("es-CO");
+  document.getElementById("accessRoleCount").textContent = accessData.roles.length.toLocaleString("es-CO");
+  document.getElementById("accessReportCount").textContent = accessData.reports.length.toLocaleString("es-CO");
   document.getElementById("newUserRole").innerHTML = roleOptions();
   renderUsers();
   renderPermissionMatrix();
@@ -198,11 +201,7 @@ document.getElementById("roleAssignmentForm").addEventListener("submit", async (
   const systemRole = accessData.roles.find((role) => role.code === systemRoleCode);
   const enabledReports = new Set([...event.target.querySelectorAll('input[type="checkbox"]:checked')].map((input) => input.value));
   const commercialReports = accessData.reports.filter((report) => ["informe_general_comercial"].includes(report.code));
-  const visibleBlocks = selectedCommercialRole === "coordinator"
-    ? allGeneralBlockCodes
-    : selectedCommercialRole === "leader"
-      ? leaderGeneralBlockCodes
-    : [...event.target.querySelectorAll(".general-block-check:checked")].map((input) => input.value);
+  const visibleBlocks = [...event.target.querySelectorAll(".general-block-check:checked")].map((input) => input.value);
   state.textContent = "Aplicando configuración…";
   await api(`/api/admin/users/${userId}/role`, { method: "PUT", body: JSON.stringify({ roleId: systemRole?.id ?? null }) });
   await Promise.all(commercialReports.map((report) => api(`/api/admin/reports/${report.id}/users/${userId}`, { method: "PUT", body: JSON.stringify({ enabled: enabledReports.has(report.code), accessLevel: "viewer" }) })));

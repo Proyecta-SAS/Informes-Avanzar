@@ -111,14 +111,17 @@ const generalBlockCodes = {
   "Etapas Comercial RCH": "stages_rch_commercial",
   "Etapas Operativa RCH": "stages_rch_operativa",
   "Etapas Comercial PNNC": "stages_pnnc_commercial",
-  "Etapas Operativa PNNC": "stages_pnnc_operativa"
+  "Etapas Operativa PNNC": "stages_pnnc_operativa",
+  "Posible cierre general": "management_possible_close",
+  "Detalle cumplimiento PNNC 2025": "management_compliance_pnnc",
+  "Detalle cumplimiento RCH 2026": "management_compliance_rch",
+  "Detalle cumplimiento 1116 2026": "management_compliance_1116"
 };
 let generalBlockAccess = { configured: false, codes: new Set() };
 const isGeneralBlockVisible = (title) => {
   const code = generalBlockCodes[title];
   if (!generalBlockAccess.configured) return true;
-  if (generalBlockAccess.codes.has(code)) return true;
-  return code === "commercial_possible_close";
+  return Boolean(code) && generalBlockAccess.codes.has(code);
 };
 let teamScope = null;
 let generalRadicatedData = null;
@@ -4081,7 +4084,9 @@ const handleGerenciaMonthFilterChange = (event) => {
 
 
 const renderDiegoDashboard = () => {
-  const sourceSections = diegoSections;
+  const sourceSections = reportId === "informe_general_comercial"
+    ? [...diegoSections, generalManagementSection]
+    : diegoSections;
   const sections = sourceSections.map((section) => {
     const reportBlocks = section.blocks;
     return { ...section, blocks: reportId === "informe_general_comercial" && generalBlockAccess.configured
@@ -4709,4 +4714,3 @@ const reportTotalsObserver = new MutationObserver((mutations) => {
 reportTotalsObserver.observe(document.querySelector("main") ?? document.body, { childList: true, subtree: true });
 
 load().finally(scheduleAllTableTotals);
-

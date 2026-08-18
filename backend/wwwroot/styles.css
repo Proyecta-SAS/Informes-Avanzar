@@ -5339,3 +5339,61 @@ td strong {
   .operativa-rch-panel { padding: 12px; }
   .gerencia-kpi-card strong { margin-top: 80px; }
 }
+
+/* Usuarios y roles · espacio de trabajo 2026-08-18 */
+.access-app #accessWorkspace { display: grid; gap: 18px; padding-bottom: 36px; }
+.access-app .access-hero { background: linear-gradient(120deg, #fff 55%, #f9edf1 100%); border: 1px solid #dbe4ef; box-shadow: 0 18px 48px rgba(31, 48, 77, .08); }
+.access-overview { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) 1.25fr; gap: 12px; }
+.access-overview > div, .access-quick-nav { min-height: 116px; padding: 18px; border: 1px solid #dbe4ef; border-radius: 18px; background: #fff; box-shadow: 0 12px 32px rgba(31, 48, 77, .06); }
+.access-overview > div { display: grid; align-content: center; gap: 5px; }
+.access-overview span { color: #7183a0; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.access-overview strong { color: #14233c; font-size: 30px; line-height: 1; }
+.access-overview small { color: #7183a0; }
+.access-quick-nav { display: grid; grid-template-columns: 1fr; gap: 6px; align-content: center; }
+.access-quick-nav a { padding: 8px 12px; border-radius: 10px; color: #314765; font-weight: 750; text-decoration: none; background: #f4f7fb; }
+.access-quick-nav a:hover { color: #a71935; background: #fbeff2; }
+.access-users-section .access-table-wrap { max-height: 440px; }
+.role-workspace { display: grid; grid-template-columns: minmax(260px, .72fr) minmax(520px, 1.5fr); gap: 20px; align-items: start; }
+.role-workspace > div, .role-assignment-form { padding: 20px; border: 1px solid #dbe4ef; border-radius: 18px; background: #f8fafc; }
+.role-workspace .functional-role-guide { grid-template-columns: 1fr; margin-top: 14px; }
+.role-workspace .functional-role-guide button { min-height: 78px; text-align: left; transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease; }
+.role-workspace .functional-role-guide button:hover { transform: translateY(-1px); border-color: #c9a6af; }
+.role-workspace .functional-role-guide button.selected { border-color: #bd1f3c; background: #fff; box-shadow: 0 8px 22px rgba(167, 25, 53, .1); }
+.role-assignment-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; background: #fff; }
+.role-assignment-heading, .role-assignment-form #generalBlockAssignment, .role-assignment-footer, .role-assignment-state { grid-column: 1 / -1; }
+.role-assignment-heading h3 { margin: 5px 0; color: #14233c; font-size: 22px; }
+.role-assignment-heading p { margin: 0; color: #7183a0; }
+.role-assignment-form label, .role-assignment-form legend { color: #314765; font-weight: 750; }
+.role-assignment-form select { width: 100%; margin-top: 8px; }
+.role-report-field { margin: 0; }
+#generalBlockAssignment { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+#generalBlockAssignment > legend { grid-column: 1 / -1; }
+#generalBlockAssignment .role-assignment-block-group { margin: 0; background: #f8fafc; }
+.role-assignment-footer { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding-top: 16px; border-top: 1px solid #e2e8f0; }
+.role-assignment-summary { display: grid; gap: 2px; }
+.role-assignment-summary span { color: #7183a0; font-size: 11px; font-weight: 800; text-transform: uppercase; }
+.role-assignment-summary strong { color: #14233c; font-size: 18px; }
+.role-assignment-summary small { color: #7183a0; }
+.access-advanced { padding: 0; overflow: hidden; }
+.access-advanced > summary { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; padding: 20px 24px; cursor: pointer; list-style: none; }
+.access-advanced > summary::-webkit-details-marker { display: none; }
+.access-advanced > summary h2, .access-advanced > summary p { margin: 0; }
+.access-advanced > summary p { margin-top: 4px; color: #7183a0; }
+.access-advanced > summary b { color: #a71935; font-size: 13px; }
+.access-advanced[open] > summary { border-bottom: 1px solid #dbe4ef; background: #fbfcfe; }
+.access-advanced-content { display: grid; gap: 18px; padding: 20px; }
+.access-subsection { padding: 18px; border: 1px solid #e1e7ef; border-radius: 16px; background: #fff; }
+
+@media (max-width: 1180px) {
+  .access-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .role-workspace { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 760px) {
+  .access-overview, .role-assignment-form, #generalBlockAssignment { grid-template-columns: 1fr; }
+  .role-assignment-heading, .role-assignment-form #generalBlockAssignment, .role-assignment-footer, .role-assignment-state { grid-column: 1; }
+  .role-workspace > div, .role-assignment-form { padding: 14px; }
+  .role-assignment-footer { align-items: stretch; flex-direction: column; }
+  .access-advanced > summary { grid-template-columns: auto 1fr; }
+  .access-advanced > summary b { grid-column: 2; }
+}
