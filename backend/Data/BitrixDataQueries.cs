@@ -167,7 +167,7 @@ public static class BitrixDataQueries
                 WHERE entity_type = 'deal'
                   AND is_deleted = false
                 ORDER BY connection_id, bitrix_id, updated_at DESC
-            ), radicated AS (
+            ), eligible_deals AS (
                 SELECT
                     CASE
                         WHEN s.custom_fields ->> 'UF_CRM_1676419915' = '22560' OR UPPER(COALESCE(s.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%ENERO%' THEN '01 ENE'
@@ -186,8 +186,6 @@ public static class BitrixDataQueries
                     CASE
                         WHEN p.category_id = 28 THEN 'PNNC'
                         WHEN p.category_id = 10 THEN 'RCH'
-                        WHEN p.category_id = 32 THEN '1116'
-                        WHEN p.category_id = 248 THEN 'LP-2445'
                     END AS pipeline,
                     COALESCE(
                         NULLIF(TRIM(CONCAT_WS(' ',
@@ -198,7 +196,21 @@ public static class BitrixDataQueries
                         d.assigned_by_bitrix_id,
                         'Sin asesor'
                     ) AS advisor,
-                    d.opportunity AS amount
+                    d.opportunity AS amount,
+                    REGEXP_REPLACE(
+                        REGEXP_REPLACE(
+                            REGEXP_REPLACE(UPPER(COALESCE(d.title, '')), '^DUPLICADO[- ]*', ''),
+                            '\s*-\s*(EMB|PV|CA|LBZ)\b.*$', ''
+                        ),
+                        '\s+LP\b.*$', ''
+                    ) AS dedupe_key,
+                    CASE
+                        WHEN p.category_id IN (10, 28) THEN 1
+                        WHEN p.category_id = 166 THEN 2
+                        WHEN p.category_id = 109 THEN 3
+                        ELSE 9
+                    END AS pipeline_priority,
+                    d.bitrix_id
                 FROM bitrix.deals d
                 INNER JOIN bitrix.pipelines p ON p.id = d.pipeline_id
                 INNER JOIN latest_snapshots s
@@ -233,6 +245,18 @@ public static class BitrixDataQueries
                             AND NULLIF(s.custom_fields ->> 'UF_CRM_1590601503', '') IS NOT NULL
                         )
                     )
+            ), radicated AS (
+                SELECT month, pipeline, advisor, amount
+                FROM (
+                    SELECT
+                        eligible_deals.*,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY advisor, month, amount, dedupe_key
+                            ORDER BY pipeline_priority, bitrix_id
+                        ) AS row_number
+                    FROM eligible_deals
+                ) ranked
+                WHERE row_number = 1
             )
             SELECT month, pipeline, advisor, COALESCE(SUM(amount), 0) AS total_achieved
             FROM radicated
@@ -1321,6 +1345,16 @@ public static class BitrixDataQueries
                 WHERE entity_type = 'user'
                   AND (@coordinatorAsOf IS NULL OR received_at <= @coordinatorAsOf)
                 ORDER BY connection_id, bitrix_id, received_at DESC
+            ), latest_deal_snapshots AS (
+                SELECT DISTINCT ON (connection_id, bitrix_id)
+                    connection_id,
+                    bitrix_id,
+                    core_data,
+                    custom_fields
+                FROM bitrix.entity_snapshots
+                WHERE entity_type = 'deal'
+                  AND is_deleted = false
+                ORDER BY connection_id, bitrix_id, updated_at DESC
             ), current_deals AS (
                 SELECT
                     d.bitrix_id,
@@ -1333,11 +1367,9 @@ public static class BitrixDataQueries
                         ) AS payload
                 FROM bitrix.deals d
                 JOIN bitrix.pipelines pipeline ON pipeline.id = d.pipeline_id
-                JOIN bitrix.entity_snapshots snapshot
+                JOIN latest_deal_snapshots snapshot
                     ON snapshot.connection_id = d.connection_id
-                    AND snapshot.entity_type = 'deal'
                     AND snapshot.bitrix_id = d.bitrix_id
-                    AND snapshot.is_deleted = false
             ), source_deals AS (
                 SELECT
                     baseline.bitrix_id,
@@ -1499,7 +1531,7 @@ public static class BitrixDataQueries
                     ON assigned_payload.bitrix_id = source.payload ->> 'ASSIGNED_BY_ID'
                 LEFT JOIN bitrix.users assigned_user
                     ON assigned_user.bitrix_id = source.payload ->> 'ASSIGNED_BY_ID'
-                WHERE source.payload ->> 'CATEGORY_ID' IN ('10', '28', '32', '248')
+                WHERE source.payload ->> 'CATEGORY_ID' IN ('10', '28')
                     AND (
                         source.payload ->> 'UF_CRM_1737653376' = @yearText
                         OR source.payload ->> 'UF_CRM_1737653376' = CASE @yearText
@@ -1546,6 +1578,15 @@ public static class BitrixDataQueries
                 FROM bitrix.raw_payloads
                 WHERE entity_type = 'user'
                 ORDER BY connection_id, bitrix_id, received_at DESC
+            ), latest_snapshots AS (
+                SELECT DISTINCT ON (connection_id, bitrix_id)
+                    connection_id,
+                    bitrix_id,
+                    custom_fields
+                FROM bitrix.entity_snapshots
+                WHERE entity_type = 'deal'
+                  AND is_deleted = false
+                ORDER BY connection_id, bitrix_id, updated_at DESC
             ), user_departments AS (
                 SELECT DISTINCT
                     u.connection_id,
@@ -1588,12 +1629,17 @@ public static class BitrixDataQueries
                 ORDER BY full_name, coordinator NULLS LAST, leader NULLS LAST
             ), radicated AS (
                 SELECT
-                    COALESCE(NULLIF(assigned_user.full_name, ''), d.assigned_by_bitrix_id) AS advisor,
+                    COALESCE(
+                        NULLIF(TRIM(CONCAT_WS(' ',
+                            NULLIF(assigned_payload.payload ->> 'NAME', ''),
+                            NULLIF(assigned_payload.payload ->> 'LAST_NAME', '')
+                        )), ''),
+                        NULLIF(assigned_user.full_name, ''),
+                        d.assigned_by_bitrix_id
+                    ) AS advisor,
                     CASE
                         WHEN pipeline.category_id = 10 THEN 'RCH'
                         WHEN pipeline.category_id = 28 THEN 'PNNC'
-                        WHEN pipeline.category_id = 32 THEN '1116'
-                        WHEN pipeline.category_id = 248 THEN 'LP-2445'
                     END AS commercial_line,
                     CASE
                         WHEN snapshot.custom_fields ->> 'UF_CRM_1676419915' = '22560' OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', '')) LIKE '%ENERO%' THEN '01 ENE'
@@ -1615,12 +1661,13 @@ public static class BitrixDataQueries
                 LEFT JOIN bitrix.users assigned_user
                     ON assigned_user.connection_id = d.connection_id
                     AND assigned_user.bitrix_id = d.assigned_by_bitrix_id
-                JOIN bitrix.entity_snapshots snapshot
+                LEFT JOIN latest_users assigned_payload
+                    ON assigned_payload.connection_id = d.connection_id
+                    AND assigned_payload.bitrix_id = d.assigned_by_bitrix_id
+                JOIN latest_snapshots snapshot
                     ON snapshot.connection_id = d.connection_id
-                    AND snapshot.entity_type = 'deal'
                     AND snapshot.bitrix_id = d.bitrix_id
-                    AND snapshot.is_deleted = false
-                WHERE pipeline.category_id IN (10, 28, 32, 248)
+                WHERE pipeline.category_id IN (10, 28)
                     AND (
                         snapshot.custom_fields ->> 'UF_CRM_1737653376' = @yearText
                         OR snapshot.custom_fields ->> 'UF_CRM_1737653376' = CASE @yearText
@@ -1628,6 +1675,17 @@ public static class BitrixDataQueries
                             WHEN '2025' THEN '37036'
                             WHEN '2026' THEN '39138'
                         END
+                    )
+                    AND (
+                        (
+                            pipeline.category_id = 10
+                            AND NULLIF(snapshot.custom_fields ->> 'UF_CRM_1628266963127', '') IS NOT NULL
+                        )
+                        OR
+                        (
+                            pipeline.category_id = 28
+                            AND NULLIF(snapshot.custom_fields ->> 'UF_CRM_1590601503', '') IS NOT NULL
+                        )
                     )
                 GROUP BY 1, 2, 3
             )
@@ -1650,7 +1708,12 @@ public static class BitrixDataQueries
             """;
 
         const string commissionsSql = """
-            WITH commissions AS (
+            WITH latest_users AS (
+                SELECT DISTINCT ON (connection_id, bitrix_id) connection_id, bitrix_id, payload
+                FROM bitrix.raw_payloads
+                WHERE entity_type = 'user'
+                ORDER BY connection_id, bitrix_id, received_at DESC
+            ), commissions AS (
                 SELECT
                     EXTRACT(MONTH FROM d.bitrix_created_at AT TIME ZONE 'America/Bogota')::int AS month_number,
                     COALESCE(

@@ -95,7 +95,7 @@ public static class AdminAccessQueries
             """;
         await using (var command = new NpgsqlCommand(reportsSql, connection))
         {
-            command.Parameters.AddWithValue("hiddenReportCodes", new[] { "fuerza_comercial_diego", "rch_comercial", "pnnc_comercial", "marketing" });
+            command.Parameters.AddWithValue("hiddenReportCodes", new[] { "marketing" });
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
             while (await reader.ReadAsync(cancellationToken))
