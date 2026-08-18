@@ -115,6 +115,7 @@ const isGeneralBlockVisible = (title) => {
   return code?.startsWith("commercial_possible_close_") && generalBlockAccess.codes.has("commercial_possible_close");
 };
 let teamScope = null;
+let commercialDateRangeTouched = false;
 let generalRadicatedData = null;
 let generalDashboardData = null;
 let commercialHierarchy = [];
@@ -1167,8 +1168,8 @@ const fillFilterOptions = (id, values) => {
 const getDiegoCommercialQueryString = () => {
   const params = new URLSearchParams();
   params.set("year", document.getElementById("diegoYear")?.value ?? "2026");
-  let dateFrom = document.getElementById("diegoDateFrom")?.value;
-  let dateTo = document.getElementById("diegoDateTo")?.value;
+  let dateFrom = commercialDateRangeTouched ? document.getElementById("diegoDateFrom")?.value : "";
+  let dateTo = commercialDateRangeTouched ? document.getElementById("diegoDateTo")?.value : "";
   const months = selectedFilterValues("diegoMonth");
   if (dateFrom && dateTo && dateFrom > dateTo) [dateFrom, dateTo] = [dateTo, dateFrom];
   if (dateFrom) params.set("from", dateFrom);
@@ -1197,6 +1198,7 @@ const parseDateInputValue = (value) => {
 };
 
 const getDiegoDateRange = () => {
+  if (!commercialDateRangeTouched) return { from: null, to: null };
   const from = parseDateInputValue(document.getElementById("diegoDateFrom")?.value ?? "");
   const to = parseDateInputValue(document.getElementById("diegoDateTo")?.value ?? "");
   if (from && to && from > to) return { from: to, to: from };
@@ -1394,6 +1396,7 @@ const setupDiegoFilters = () => {
     const input = document.getElementById(id);
     if (!input || input.dataset.bound === "true") return;
     input.addEventListener("change", () => {
+      commercialDateRangeTouched = true;
       applyDiegoFilters();
       markCommercialViewPending();
     });
@@ -1410,6 +1413,7 @@ const clearDiegoFilters = async () => {
     || Boolean(document.getElementById("diegoDateFrom").value)
     || Boolean(document.getElementById("diegoDateTo").value);
   year.value = "2026";
+  commercialDateRangeTouched = false;
   setFilterSelectionToAll("diegoMonth");
   document.getElementById("diegoDateFrom").value = "";
   document.getElementById("diegoDateTo").value = "";
@@ -4661,6 +4665,7 @@ const load = async () => {
     // selected year unless the user explicitly chooses a range afterwards.
     document.getElementById("diegoDateFrom").value = "";
     document.getElementById("diegoDateTo").value = "";
+    commercialDateRangeTouched = false;
     const session = await fetch("/api/auth/me").then((response) => response.json());
     teamScope = session.roleCode === "admin"
       ? null
