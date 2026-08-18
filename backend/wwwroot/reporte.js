@@ -127,6 +127,7 @@ const normalizeTeamValue = (value = "") => value
   .trim()
   .toLocaleLowerCase("es-CO");
 const isAdvisorTeamScope = () => normalizeTeamValue(teamScope?.roleLabel ?? "") === "advisor";
+const isLeaderTeamScope = () => normalizeTeamValue(teamScope?.departmentName ?? "").includes("lider");
 const scopedMemberNames = () => teamScope ? (teamScope.memberNames ?? []) : null;
 const isTeamMember = (name) => {
   const members = scopedMemberNames();
@@ -995,7 +996,9 @@ const loadDiegoLeadershipAndCommissions = async () => {
   if (teamScope) {
     data.coordinatorValues = isAdvisorTeamScope()
       ? data.coordinatorValues.filter((item) => isTeamMember(item.advisor))
-      : data.coordinatorValues.filter((item) => isTeamDepartment(item.coordinator));
+      : isLeaderTeamScope()
+        ? data.coordinatorValues.filter((item) => isTeamDepartment(item.leader) || isTeamMember(item.advisor))
+        : data.coordinatorValues.filter((item) => isTeamDepartment(item.coordinator));
     data.leadership = isAdvisorTeamScope()
       ? (data.leadership ?? []).filter((item) => isTeamMember(item.advisor))
       : (data.leadership ?? []).filter((item) => isTeamDepartment(item.leader) || isTeamDepartment(item.coordinator));
