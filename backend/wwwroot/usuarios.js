@@ -2,21 +2,13 @@ let adminKey = sessionStorage.getItem("adminAccessKey") ?? "";
 let accessData = null;
 let selectedCommercialRole = "viewer";
 const commercialManagedReportCodes = [
-  "informe_general_comercial",
-  "fuerza_comercial_diego",
-  "rch_comercial",
-  "rch_operativa",
-  "pnnc_comercial",
-  "pnnc_operativa",
-  "informe_gerencia_2026_2027"
+  "informe_general_comercial"
 ];
 const generalBlockGroups = [
   ["Radicación", [["radicated_values", "Valores radicados por asesor"], ["advisor_negotiations", "Total negociaciones por asesor"], ["coordinator_values", "Valores radicados por coordinador"], ["leader_values", "Valores radicados por líder"], ["coordinator_detail", "Detalle coordinadores"], ["leader_detail", "Radicaciones por líderes"]]],
   ["Comisiones", [["advisor_commissions", "Comisiones por asesor"]]],
   ["Carteras", [["portfolio_state", "Estado de cartera 2025"], ["portfolio_collected", "Cartera recaudada"]]],
-  ["Embudos", [["funnel_insolvency", "Embudo Insolvencia"], ["funnel_rch", "Embudo RCH"], ["commercial_possible_close", "(COM) Posible Cierre"]]],
-  ["Etapas", [["stages_rch_commercial", "Etapas Comercial RCH"], ["stages_rch_operativa", "Etapas Operativa RCH"], ["stages_pnnc_commercial", "Etapas Comercial PNNC"], ["stages_pnnc_operativa", "Etapas Operativa PNNC"]]],
-  ["Gerencial", [["management_possible_close", "Posible cierre general"], ["management_compliance_pnnc", "Detalle cumplimiento PNNC 2025"], ["management_compliance_rch", "Detalle cumplimiento RCH 2026"], ["management_compliance_1116", "Detalle cumplimiento 1116 2026"]]]
+  ["Embudos", [["funnel_insolvency", "Embudo Insolvencia"], ["funnel_rch", "Embudo RCH"], ["commercial_possible_close_rch", "(COM) Posible Cierre RCH"], ["commercial_possible_close_pnnc", "(COM) Posible Cierre PNNC"]]]
 ];
 const allGeneralBlockCodes = generalBlockGroups.flatMap(([, items]) => items.map(([code]) => code));
 const leaderExcludedGeneralBlockCodes = new Set(["coordinator_values", "coordinator_detail"]);

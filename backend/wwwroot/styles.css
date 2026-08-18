@@ -2225,6 +2225,13 @@ main.app .radicated-total {
   grid-template-columns: 1fr;
   gap: 16px;
 }
+
+.organization-role-badge.coordinator_rch,
+.organization-role-badge.coordinator_pnnc{background:#fbeaec;color:#9c1830}
+.organization-role-badge.leader_rch,
+.organization-role-badge.leader_pnnc{background:#e9f2fa;color:#174d79}
+.organization-settings input:disabled{opacity:.82}
+.organization-preset-note{border-radius:999px;background:#edf2f7;color:#6b7b90;padding:4px 7px;font-size:8px;font-weight:900;text-transform:uppercase}
 .commercial-possible-close-section {
   min-width: 0;
   overflow-x: auto;
@@ -2388,6 +2395,92 @@ main.app .radicated-total {
 .pipeline-table tbody tr:nth-child(odd) td:not(.pipeline-heat) { background: #f3f7f8; }
 .pipeline-table tbody tr:hover td { box-shadow: inset 0 0 0 999px rgba(49, 96, 152, .055); }
 .pipeline-table-funnel .pipeline-heat { background: rgba(89, 192, 139, calc(.10 + (var(--heat) * .42))); }
+.pipeline-funnel {
+  display: grid;
+  gap: 11px;
+  margin-top: 20px;
+  padding: 4px 8px 2px;
+}
+.pipeline-funnel-step {
+  display: grid;
+  justify-items: center;
+}
+.pipeline-funnel-stage {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 950;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+.pipeline-funnel-stage b {
+  flex: 0 0 auto;
+  min-width: 18px;
+  color: rgba(255, 255, 255, .86);
+  font-size: 11px;
+  font-weight: 950;
+  text-align: left;
+}
+.pipeline-funnel-stage span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pipeline-funnel-bar strong {
+  flex: 0 0 auto;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 950;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 2px rgba(24, 17, 39, .22);
+}
+.pipeline-funnel-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  justify-self: center;
+  width: var(--funnel-width, 72%);
+  min-width: min(100%, 320px);
+  min-height: 38px;
+  border-radius: 7px;
+  background: linear-gradient(90deg, #4b3a64 0%, #823a5a 55%, #cf3f50 100%);
+  padding: 0 15px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .18), 0 6px 14px rgba(71, 48, 88, .12);
+}
+.general-commercial-report .pipeline-funnel {
+  gap: 10px;
+  margin-top: 18px;
+}
+.general-commercial-report .pipeline-funnel-bar {
+  min-height: 36px;
+}
+@media (max-width: 700px) {
+  .pipeline-funnel {
+    padding-right: 0;
+    padding-left: 0;
+  }
+  .pipeline-funnel-bar {
+    width: min(100%, var(--funnel-width, 72%));
+    min-width: 0;
+    gap: 8px;
+    padding: 0 11px;
+  }
+  .pipeline-funnel-stage {
+    gap: 6px;
+    font-size: 10px;
+  }
+  .pipeline-funnel-stage span {
+    white-space: nowrap;
+  }
+  .pipeline-funnel-bar strong {
+    font-size: 11px;
+  }
+}
 .pipeline-table-commercial th:first-child,
 .pipeline-table-commercial td:first-child,
 .pipeline-table-operative th:first-child,

@@ -4,15 +4,24 @@ using Npgsql;
 namespace InformesAvanzar.Api.Data;
 public static class OrganizationQueries {
  private sealed record DepartmentItem(string Id,string Name,string? ParentId,string? HeadId);
+ private static readonly string[] CommercialRoleLabels = ["coordinator_rch","coordinator_pnnc","leader_rch","leader_pnnc"];
+ private static readonly string[] ManagedReports = ["informe_general_comercial"];
+ private static readonly string[] CommercialReportCatalog = ["informe_general_comercial","fuerza_comercial_diego","rch_comercial","rch_operativa","pnnc_comercial","pnnc_operativa","informe_gerencia_2026_2027"];
+ private static readonly string[] SharedManagedBlocks = ["radicated_values","advisor_negotiations","coordinator_values","leader_values","coordinator_detail","leader_detail","advisor_commissions","portfolio_state","portfolio_collected","funnel_insolvency","funnel_rch"];
+ public static bool IsCommercialRoleLabel(string? roleLabel)=>!string.IsNullOrWhiteSpace(roleLabel)&&CommercialRoleLabels.Contains(roleLabel,StringComparer.OrdinalIgnoreCase);
+ public static string NormalizeCommercialRoleLabel(string? roleLabel)=>IsCommercialRoleLabel(roleLabel)?roleLabel!.Trim().ToLowerInvariant():"leader_rch";
+ private static string[] BlocksForCommercialRole(string roleLabel)=>roleLabel.EndsWith("_pnnc",StringComparison.OrdinalIgnoreCase)?[..SharedManagedBlocks,"commercial_possible_close_pnnc"]:[..SharedManagedBlocks,"commercial_possible_close_rch"];
  public static async Task EnsureSchemaAsync(NpgsqlDataSource ds,CancellationToken ct){await using var connection=await ds.OpenConnectionAsync(ct);await using var command=new NpgsqlCommand("""ALTER TABLE bitrix.departments ADD COLUMN IF NOT EXISTS head_bitrix_id text; CREATE TABLE IF NOT EXISTS reporting.organization_access (department_id text PRIMARY KEY, role_label text NOT NULL DEFAULT 'viewer', visible_reports text[] NOT NULL DEFAULT ARRAY[]::text[], visible_blocks text[] NOT NULL DEFAULT ARRAY[]::text[], user_id uuid NULL REFERENCES auth.users(id) ON DELETE SET NULL, updated_at timestamptz NOT NULL DEFAULT now()); ALTER TABLE reporting.organization_access ADD COLUMN IF NOT EXISTS visible_blocks text[] NOT NULL DEFAULT ARRAY[]::text[]; ALTER TABLE reporting.organization_access ADD COLUMN IF NOT EXISTS user_id uuid NULL REFERENCES auth.users(id) ON DELETE SET NULL; CREATE INDEX IF NOT EXISTS ix_organization_access_user ON reporting.organization_access(user_id); CREATE TABLE IF NOT EXISTS reporting.user_report_block_settings (user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE, report_code text NOT NULL, visible_blocks text[] NOT NULL DEFAULT ARRAY[]::text[], updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(user_id,report_code));""",connection);await command.ExecuteNonQueryAsync(ct);}
  public static async Task SetSettingsAsync(string departmentId,string? email,string roleLabel,string[] visibleReports,string[] visibleBlocks,NpgsqlDataSource ds,CancellationToken ct){
   const string sql="""INSERT INTO reporting.organization_access(department_id,role_label,visible_reports,visible_blocks,updated_at) VALUES(@id,@role,@reports,@blocks,now()) ON CONFLICT(department_id) DO UPDATE SET role_label=EXCLUDED.role_label,visible_reports=EXCLUDED.visible_reports,visible_blocks=EXCLUDED.visible_blocks,updated_at=now();""";
-  var managedReports=new[]{"informe_general_comercial","fuerza_comercial_diego","rch_comercial","rch_operativa","pnnc_comercial","pnnc_operativa","informe_gerencia_2026_2027"};
+  roleLabel=NormalizeCommercialRoleLabel(roleLabel);
+  visibleReports=ManagedReports;
+  visibleBlocks=BlocksForCommercialRole(roleLabel);
   await using var connection=await ds.OpenConnectionAsync(ct);
   await using var transaction=await connection.BeginTransactionAsync(ct);
   await using(var command=new NpgsqlCommand(sql,connection,transaction)){
    command.Parameters.AddWithValue("id",departmentId);
-   command.Parameters.AddWithValue("role",roleLabel is "coordinator" or "leader" or "advisor" ? roleLabel : "viewer");
+   command.Parameters.AddWithValue("role",roleLabel);
    command.Parameters.AddWithValue("reports",visibleReports);
    command.Parameters.AddWithValue("blocks",visibleBlocks);
    await command.ExecuteNonQueryAsync(ct);
@@ -31,7 +40,7 @@ public static class OrganizationQueries {
     }
     await using(var clear=new NpgsqlCommand("DELETE FROM reporting.report_access ra USING reporting.report_definitions rd WHERE ra.report_definition_id=rd.id AND ra.user_id=@userId AND rd.code=ANY(@managedReports);",connection,transaction)){
      clear.Parameters.AddWithValue("userId",userId.Value);
-     clear.Parameters.AddWithValue("managedReports",managedReports);
+     clear.Parameters.AddWithValue("managedReports",CommercialReportCatalog);
      await clear.ExecuteNonQueryAsync(ct);
     }
     await using(var grant=new NpgsqlCommand("""INSERT INTO reporting.report_access(report_definition_id,user_id,access_level) SELECT id,@userId,'viewer' FROM reporting.report_definitions WHERE code=ANY(@reports) ON CONFLICT(report_definition_id,user_id) WHERE user_id IS NOT NULL DO UPDATE SET access_level='viewer';""",connection,transaction)){

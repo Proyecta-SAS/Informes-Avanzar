@@ -363,7 +363,7 @@ adminApi.MapPost("/organization/{departmentId}/create-user", async (string depar
 {
     var fullName = body.TryGetProperty("fullName", out var nameProperty) ? nameProperty.GetString() : null;
     var email = body.TryGetProperty("email", out var emailProperty) ? emailProperty.GetString() : null;
-    var roleLabel = body.TryGetProperty("roleLabel", out var roleProperty) ? roleProperty.GetString() ?? "viewer" : "viewer";
+    var roleLabel = OrganizationQueries.NormalizeCommercialRoleLabel(body.TryGetProperty("roleLabel", out var roleProperty) ? roleProperty.GetString() : null);
     if (string.IsNullOrWhiteSpace(fullName) || string.IsNullOrWhiteSpace(email)) return Results.BadRequest(new { message = "El responsable debe tener nombre y correo en Bitrix." });
     await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
     await using (var existsCommand = new NpgsqlCommand("SELECT EXISTS(SELECT 1 FROM auth.users WHERE lower(email)=lower(@email) AND deleted_at IS NULL);", connection))
@@ -371,14 +371,14 @@ adminApi.MapPost("/organization/{departmentId}/create-user", async (string depar
         existsCommand.Parameters.AddWithValue("email", email.Trim());
         if ((bool)(await existsCommand.ExecuteScalarAsync(cancellationToken) ?? false)) return Results.Conflict(new { message = "Este correo ya está registrado en Usuarios y roles." });
     }
-    var roleCode = roleLabel is "coordinator" or "leader" ? "report_manager" : "report_viewer";
+    var roleCode = "report_viewer";
     Guid? roleId;
     await using (var roleCommand = new NpgsqlCommand("SELECT id FROM auth.roles WHERE code=@code;", connection))
     {
         roleCommand.Parameters.AddWithValue("code", roleCode);
         roleId = await roleCommand.ExecuteScalarAsync(cancellationToken) as Guid?;
     }
-    var rolePrefix = roleLabel switch { "coordinator" => "Coord", "leader" => "Lider", "advisor" => "Asesor", _ => "Consulta" };
+    var rolePrefix = roleLabel switch { "coordinator_rch" => "CoordRCH", "coordinator_pnnc" => "CoordPNNC", "leader_rch" => "LiderRCH", "leader_pnnc" => "LiderPNNC", _ => "Comercial" };
     var password = $"Avz-{rolePrefix}-{Convert.ToHexString(RandomNumberGenerator.GetBytes(7))}!";
     var userId = await AdminAccessQueries.CreateUserAsync(fullName, email, password, roleId, dataSource, cancellationToken);
     string[] savedReports = Array.Empty<string>();
@@ -393,8 +393,7 @@ adminApi.MapPost("/organization/{departmentId}/create-user", async (string depar
             savedBlocks = reader.GetFieldValue<string[]>(1);
         }
     }
-    if (savedReports.Length > 0 || savedBlocks.Length > 0)
-        await OrganizationQueries.SetSettingsAsync(departmentId, email, roleLabel, savedReports, savedBlocks, dataSource, cancellationToken);
+    await OrganizationQueries.SetSettingsAsync(departmentId, email, roleLabel, savedReports, savedBlocks, dataSource, cancellationToken);
     return Results.Created($"/api/admin/users/{userId}", new { id = userId, temporaryPassword = password, roleCode, departmentId });
 });
 

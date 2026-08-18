@@ -9,12 +9,12 @@ const metadata = {
   informe_general_comercial: {
     name: "Informe General Comercial",
     area: "Comercial",
-    description: "Vista consolidada de radicación, negociaciones, comisiones, cartera, embudos y etapas comerciales."
+    description: "Vista consolidada de radicación, negociaciones, comisiones, cartera, embudos y posibles cierres."
   },
   fuerza_comercial_diego: {
     name: "Fuerza Comercial",
     area: "Comercial",
-    description: "Seguimiento de negociaciones, responsables, etapas y actividad de la fuerza comercial de Diego."
+    description: "Seguimiento de negociaciones, responsables, posibles cierres y actividad de la fuerza comercial de Diego."
   },
   informe_gerencia_2026_2027: {
     name: "Informe Gerencia 2026 y 2027",
@@ -70,13 +70,9 @@ const diegoSections = [
   {
     id: "etapas",
     icon: "≡",
-    title: "Etapas de pipelines",
-    description: "Casos y valor comercial en las etapas prioritarias de RCH y PNNC.",
+    title: "Posible cierre",
+    description: "Monto y casos en las etapas comerciales de posible cierre.",
     blocks: [
-      ["Etapas Comercial RCH", "Casos y valor por etapa comercial RCH.", "bars"],
-      ["Etapas Operativa RCH", "Radicación por validar y documentación pendiente o subsanada.", "bars"],
-      ["Etapas Comercial PNNC", "Recopilación, anticipo y cuarentena.", "bars"],
-      ["Etapas Operativa PNNC", "Validación y estado de la documentación comercial.", "bars"],
       ["(COM) Posible Cierre RCH", "Monto y casos por etapa de posible cierre RCH.", "table"],
       ["(COM) Posible Cierre PNNC", "Monto y casos por etapa de posible cierre PNNC.", "table"]
     ]
@@ -108,12 +104,8 @@ const generalBlockCodes = {
   "Cartera recaudada": "portfolio_collected",
   "Embudo Insolvencia": "funnel_insolvency",
   "Embudo RCH": "funnel_rch",
-  "(COM) Posible Cierre RCH": "commercial_possible_close",
-  "(COM) Posible Cierre PNNC": "commercial_possible_close",
-  "Etapas Comercial RCH": "stages_rch_commercial",
-  "Etapas Operativa RCH": "stages_rch_operativa",
-  "Etapas Comercial PNNC": "stages_pnnc_commercial",
-  "Etapas Operativa PNNC": "stages_pnnc_operativa",
+  "(COM) Posible Cierre RCH": "commercial_possible_close_rch",
+  "(COM) Posible Cierre PNNC": "commercial_possible_close_pnnc",
   "Posible cierre general": "management_possible_close",
   "Detalle cumplimiento PNNC 2025": "management_compliance_pnnc",
   "Detalle cumplimiento RCH 2026": "management_compliance_rch",
@@ -123,15 +115,26 @@ let generalBlockAccess = { configured: false, codes: new Set() };
 const isGeneralBlockVisible = (title) => {
   const code = generalBlockCodes[title];
   if (!generalBlockAccess.configured) return true;
-  return Boolean(code) && generalBlockAccess.codes.has(code);
+  if (generalBlockAccess.codes.has(code)) return true;
+  return code?.startsWith("commercial_possible_close_") && generalBlockAccess.codes.has("commercial_possible_close");
 };
 let teamScope = null;
 let generalRadicatedData = null;
 let generalDashboardData = null;
 let commercialHierarchy = [];
 let coordinatorRadicatedData = [];
-const normalizeTeamValue = (value = "") => value.trim().toLocaleLowerCase("es-CO");
-const isTeamMember = (name) => !teamScope || new Set((teamScope.memberNames ?? []).map(normalizeTeamValue)).has(normalizeTeamValue(name));
+const normalizeTeamValue = (value = "") => value
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/\s+/g, " ")
+  .trim()
+  .toLocaleLowerCase("es-CO");
+const isAdvisorTeamScope = () => normalizeTeamValue(teamScope?.roleLabel ?? "") === "advisor";
+const scopedMemberNames = () => teamScope ? (teamScope.memberNames ?? []) : null;
+const isTeamMember = (name) => {
+  const members = scopedMemberNames();
+  return !members || new Set(members.map(normalizeTeamValue)).has(normalizeTeamValue(name));
+};
 const isTeamDepartment = (name) => !teamScope || new Set((teamScope.departmentNames ?? []).map(normalizeTeamValue)).has(normalizeTeamValue(name));
 
 const blockPreview = (type) => {
@@ -149,18 +152,6 @@ const currencyFormatter = new Intl.NumberFormat("es-CO", {
   currency: "COP",
   maximumFractionDigits: 0
 });
-
-const portfolioCollectionGoals = {
-  "01": 1840070000,
-  "02": 1840070000,
-  "03": 1620000000,
-  "04": 1860080000,
-  "05": 1909080000,
-  "06": 1909080000,
-  "07": 2091000000,
-  "08": 1959000000,
-  "09": 524700000
-};
 
 const spanishMonthLabels = {
   "01": "01 ENE", "02": "02 FEB", "03": "03 MAR", "04": "04 ABR",
@@ -347,7 +338,7 @@ const ensureDiegoFilterHierarchy = async () => {
 const startDiegoAutoRefresh = () => {
   if (!["fuerza_comercial_diego", "informe_general_comercial"].includes(reportId) || diegoAutoRefreshTimer) return;
   diegoAutoRefreshTimer = window.setInterval(() => {
-    if (document.visibilityState === "visible") updateReportView();
+    if (document.visibilityState === "visible") window.location.reload();
   }, diegoAutoRefreshMs);
 };
 
@@ -413,10 +404,6 @@ const generalCommercialLabels = {
   "Cartera recaudada": "(COM) Cartera Recaudada",
   "Embudo Insolvencia": "(COM) Embudo Insolvencia",
   "Embudo RCH": "(COM) Embudo RCH",
-  "Etapas Comercial RCH": "(COM) ETAPAS COMERCIAL RCH",
-  "Etapas Operativa RCH": "(COM) ETAPAS OPERATIVA RCH",
-  "Etapas Comercial PNNC": "(COM) ETAPAS COMERCIAL PNNC",
-  "Etapas Operativa PNNC": "(COM) ETAPAS OPERATIVA PNNC",
   "(COM) Posible Cierre RCH": "(COM) Posible Cierre RCH",
   "(COM) Posible Cierre PNNC": "(COM) Posible Cierre PNNC"
 };
@@ -559,6 +546,22 @@ const decorateTableTotals = (root = document) => {
       table.appendChild(footer);
     }
     if (footer) {
+      if (table.classList.contains("advisor-negotiations-table")) {
+        const negotiations = totals[1] ?? 0;
+        const studies = totals[2] ?? 0;
+        const radicated = totals[4] ?? 0;
+        const studiesRate = negotiations ? (studies / negotiations) * 100 : 0;
+        const closingRate = negotiations ? (radicated / negotiations) * 100 : 0;
+        footer.innerHTML = `<tr>
+          <th>Total</th>
+          <td>${formatNumber.format(negotiations)}</td>
+          <td>${formatNumber.format(studies)}</td>
+          <td>${studiesRate.toLocaleString("es-CO", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</td>
+          <td>${formatNumber.format(radicated)}</td>
+          <td>${closingRate.toLocaleString("es-CO", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</td>
+        </tr>`;
+        return;
+      }
       footer.innerHTML = `<tr>${Array.from({ length: columnCount }, (_, index) => {
         if (index === 0) return "<th>Total</th>";
         if (!numericCounts[index]) return "<td>—</td>";
@@ -577,15 +580,40 @@ const decorateTableTotals = (root = document) => {
   });
 };
 
+const renderPipelineFunnel = (items) => {
+  const visibleItems = [...items]
+    .filter((item) => Number(item.cases ?? 0) > 0)
+    .sort((left, right) =>
+      Number(left.sortOrder ?? 9999) - Number(right.sortOrder ?? 9999)
+      || String(left.stage ?? "").localeCompare(String(right.stage ?? ""), "es", { sensitivity: "base" }));
+  if (!visibleItems.length) {
+    return `<div class="empty-block"><strong>Sin datos</strong><span>No hay etapas con casos para este embudo.</span></div>`;
+  }
+  const steps = Math.max(visibleItems.length - 1, 1);
+  return `
+    <div class="pipeline-funnel" role="list">
+      ${visibleItems.map((item, index) => {
+        const cases = Number(item.cases ?? 0);
+        const stage = String(item.stage ?? "Sin etapa");
+        const stageParts = stage.match(/^(\d{1,2})\s+(.+)$/);
+        const stageNumber = stageParts?.[1] ?? String(index + 1).padStart(2, "0");
+        const stageName = stageParts?.[2] ?? stage;
+        const width = visibleItems.length === 1 ? 94 : 94 - ((index / steps) * 34);
+        return `
+          <article class="pipeline-funnel-step" role="listitem" style="--funnel-width:${width.toFixed(1)}%">
+            <div class="pipeline-funnel-bar" title="${escapeHtml(stage)}: ${formatNumber.format(cases)}">
+              <span class="pipeline-funnel-stage" title="${escapeHtml(stage)}"><b>${escapeHtml(stageNumber)}</b><span>${escapeHtml(stageName)}</span></span>
+              <strong>${formatNumber.format(cases)}</strong>
+            </div>
+          </article>`;
+      }).join("")}
+    </div>`;
+};
+
 const renderPipelineTable = (items, mode) => {
-  const sortedItems = [...items].sort((left, right) => mode === "funnel"
-    ? left.cases - right.cases
-    : right.cases - left.cases);
-  const maxCases = Math.max(...sortedItems.map((item) => item.cases), 1);
-  const isFunnel = mode === "funnel";
-  const headers = isFunnel
-    ? ["Etapa", "COUNT(*)"]
-    : mode === "commercial"
+  if (mode === "funnel") return renderPipelineFunnel(items);
+  const sortedItems = [...items].sort((left, right) => right.cases - left.cases);
+  const headers = mode === "commercial"
       ? ["ETAPA COMERCIAL RCH", "# CASOS COMERCIAL", "$ VALOR COMERCIAL"]
       : mode === "operative"
         ? ["ETAPA OPERATIVA RCH", "# CASOS OPERATIVA", "$ VALOR COMERCIAL"]
@@ -593,10 +621,6 @@ const renderPipelineTable = (items, mode) => {
           ? ["ETAPA COMERCIAL PNNC", "# CASOS COMERCIAL PNNC", "$ VALOR COMERCIAL"]
           : ["ETAPA OPERATIVA PNNC", "# CASOS OPERATIVA PNNC", "$ VALOR OPERATIVA"];
   const rows = sortedItems.map((item) => {
-    const intensity = (item.cases / maxCases).toFixed(3);
-    if (isFunnel) {
-      return `<tr><td>${item.stage}</td><td class="pipeline-heat" style="--heat:${intensity}">${formatNumber.format(item.cases)}</td></tr>`;
-    }
     return `<tr><td>${item.stage}</td><td>${formatNumber.format(item.cases)}</td><td>${formatNumber.format(item.totalValue)}</td></tr>`;
   });
   return renderDataTable(headers, rows, `pipeline-table pipeline-table-${mode}`);
@@ -709,7 +733,7 @@ const replaceBlockPreview = (title, content, count) => {
   const block = findDiegoBlock(title);
   if (!block) return;
   block.querySelector(".diego-block-title em").textContent = `${count} registros`;
-  const preview = block.querySelector(".block-table, .block-bars, .block-funnel, .block-donut, .management-placeholder, .management-kpi-grid, .radicated-table-wrap, .empty-block");
+  const preview = block.querySelector(".block-table, .block-bars, .block-funnel, .block-donut, .pipeline-funnel, .management-placeholder, .management-kpi-grid, .radicated-table-wrap, .empty-block");
   if (preview) preview.outerHTML = content;
   decorateTableTotals(block);
 };
@@ -895,8 +919,8 @@ const loadDiegoDashboardData = async () => {
     [...data.advisors]
       .sort((left, right) => left.advisor.localeCompare(right.advisor, "es", { sensitivity: "base" }))
       .map((item) => {
-        const studiesRateValue = item.studiesRate ?? (item.negotiations ? item.commercialCases / item.negotiations : 0);
-        const closingRateValue = item.closingRate ?? (item.commercialCases ? item.radicatedCases / item.commercialCases : null);
+        const studiesRateValue = item.negotiations ? item.commercialCases / item.negotiations : 0;
+        const closingRateValue = item.negotiations ? item.radicatedCases / item.negotiations : null;
         const studiesRate = `${(studiesRateValue * 100).toFixed(1)}%`;
         const closingRate = closingRateValue === null ? "N/A" : `${(closingRateValue * 100).toFixed(1)}%`;
         return `<tr data-advisor="${encodeURIComponent(item.advisor)}"><td>${item.advisor}</td><td>${formatNumber.format(item.negotiations)}</td><td>${formatNumber.format(item.commercialCases)}</td><td>${studiesRate}</td><td>${formatNumber.format(item.radicatedCases)}</td><td>${closingRate}</td></tr>`;
@@ -906,25 +930,14 @@ const loadDiegoDashboardData = async () => {
 
 
   const pipelineBlocks = {
-    rch_comercial_table: ["Etapas Comercial RCH"],
     rch_comercial_funnel: ["Embudo RCH"],
-    rch_operativa: ["Etapas Operativa RCH"],
-    pnnc_comercial_table: ["Etapas Comercial PNNC"],
-    pnnc_comercial_funnel: ["Embudo Insolvencia"],
-    pnnc_operativa: ["Etapas Operativa PNNC"]
+    pnnc_comercial_funnel: ["Embudo Insolvencia"]
   };
 
   Object.entries(pipelineBlocks).forEach(([pipeline, titles]) => {
     const items = data.stages.filter((item) => item.pipeline === pipeline);
     titles.forEach((title) => {
-      const mode = title.startsWith("Embudo")
-        ? "funnel"
-        : title === "Etapas Comercial RCH"
-          ? "commercial"
-          : title === "Etapas Operativa RCH"
-            ? "operative"
-            : title === "Etapas Comercial PNNC" ? "pnnc-commercial" : "pnnc-operative";
-      replaceBlockPreview(title, renderPipelineTable(items, mode), items.length);
+      replaceBlockPreview(title, renderPipelineTable(items, "funnel"), items.filter((item) => Number(item.cases ?? 0) > 0).length);
     });
   });
   const possibleCloseItems = data.possibleCloseCommercial ?? [];
@@ -951,11 +964,14 @@ const loadDiegoPortfolioCollections = async () => {
   const collectionsByMonth = new Map();
   data.items.forEach((item) => {
     const monthKey = item.month.slice(0, 2);
-    collectionsByMonth.set(monthKey, (collectionsByMonth.get(monthKey) ?? 0) + item.collected);
+    const current = collectionsByMonth.get(monthKey) ?? { collected: 0, goal: 0 };
+    current.collected += Number(item.collected ?? 0);
+    current.goal += Number(item.goal ?? 0);
+    collectionsByMonth.set(monthKey, current);
   });
   const rows = [...collectionsByMonth.entries()]
-    .map(([month, collected]) => ({ month, collected, goal: portfolioCollectionGoals[month] ?? 0 }))
-    .sort((left, right) => right.goal - left.goal)
+    .map(([month, values]) => ({ month, collected: values.collected, goal: values.goal }))
+    .sort((left, right) => Number.parseInt(left.month, 10) - Number.parseInt(right.month, 10))
     .map((item) => `<tr><td>${spanishMonthLabels[item.month]}</td><td>${formatNumber.format(item.goal)}</td><td>${formatNumber.format(item.collected)}</td></tr>`);
   const content = rows.length
     ? renderDataTable(["Mes", "Meta", "Recaudo"], rows, "portfolio-collection-table")
@@ -970,8 +986,12 @@ const loadDiegoLeadershipAndCommissions = async () => {
   const data = await response.json();
   data.coordinatorValues = data.coordinatorValues ?? [];
   if (teamScope) {
-    data.coordinatorValues = data.coordinatorValues.filter((item) => isTeamDepartment(item.coordinator));
-    data.leadership = (data.leadership ?? []).filter((item) => isTeamDepartment(item.leader) || isTeamDepartment(item.coordinator));
+    data.coordinatorValues = isAdvisorTeamScope()
+      ? data.coordinatorValues.filter((item) => isTeamMember(item.advisor))
+      : data.coordinatorValues.filter((item) => isTeamDepartment(item.coordinator));
+    data.leadership = isAdvisorTeamScope()
+      ? (data.leadership ?? []).filter((item) => isTeamMember(item.advisor))
+      : (data.leadership ?? []).filter((item) => isTeamDepartment(item.leader) || isTeamDepartment(item.coordinator));
     data.commissions = (data.commissions ?? []).filter((item) => isTeamMember(item.advisor));
     data.relationships = (data.relationships ?? []).filter((item) => isTeamMember(item.advisor));
   }
@@ -1004,19 +1024,68 @@ const loadDiegoFilterHierarchy = async () => {
 
 const normalizeFilterText = (value) => value.trim().toLocaleLowerCase("es-CO");
 
+const multiFilterSelectIds = new Set(["diegoMonth", "diegoCoordinator", "diegoLeader", "diegoAdvisor"]);
+
+const isMultiFilterSelect = (selectOrId) => {
+  const id = typeof selectOrId === "string" ? selectOrId : selectOrId?.id;
+  return multiFilterSelectIds.has(id);
+};
+
+const selectedFilterValues = (selectOrId) => {
+  const select = typeof selectOrId === "string" ? document.getElementById(selectOrId) : selectOrId;
+  if (!select) return [];
+  if (!isMultiFilterSelect(select)) return select.value;
+  return [...select.selectedOptions]
+    .map((option) => option.value)
+    .filter((value) => value !== "all");
+};
+
+const isFilterSelectionAll = (selected) => Array.isArray(selected)
+  ? selected.length === 0
+  : selected === "all";
+
+const selectedValueMatches = (value, selected, normalizer = normalizeFilterText) => {
+  if (Array.isArray(selected)) {
+    if (!selected.length) return true;
+    const normalizedValue = normalizer(value ?? "");
+    return selected.some((item) => normalizedValue === normalizer(item ?? ""));
+  }
+  return selected === "all" || normalizer(value ?? "") === normalizer(selected ?? "");
+};
+
+const setFilterSelectionToAll = (id) => {
+  const select = document.getElementById(id);
+  if (!select) return;
+  if (isMultiFilterSelect(select)) {
+    [...select.options].forEach((option) => {
+      option.selected = option.value === "all";
+    });
+  } else {
+    select.value = "all";
+  }
+  syncSearchableSelectInput(select);
+};
+
 const hierarchySelection = () => ({
   line: document.getElementById("diegoLine").value,
-  coordinator: document.getElementById("diegoCoordinator").value,
-  leader: document.getElementById("diegoLeader").value,
-  advisor: document.getElementById("diegoAdvisor").value
+  coordinator: selectedFilterValues("diegoCoordinator"),
+  leader: selectedFilterValues("diegoLeader"),
+  advisor: selectedFilterValues("diegoAdvisor")
 });
 
+const normalizeHierarchyLine = (value = "") => {
+  const normalized = normalizeFilterText(value);
+  if (normalized.includes("rch")) return "rch";
+  if (normalized.includes("pnnc") || normalized.includes("insolvencia")) return "pnnc";
+  return normalized;
+};
+
 const matchesHierarchySelection = (item, selection, ignored = "") => {
-  const line = normalizeFilterText(item.commercialLine ?? "");
+  const line = normalizeHierarchyLine(item.commercialLine ?? "");
   return (ignored === "line" || selection.line === "all" || line === selection.line)
-    && (ignored === "coordinator" || selection.coordinator === "all" || normalizeFilterText(item.coordinator ?? "") === normalizeFilterText(selection.coordinator))
-    && (ignored === "leader" || selection.leader === "all" || normalizeFilterText(item.leader ?? "") === normalizeFilterText(selection.leader))
-    && (ignored === "advisor" || selection.advisor === "all" || normalizeFilterText(item.advisor ?? "") === normalizeFilterText(selection.advisor));
+    && (ignored === "coordinator" || selectedValueMatches(item.coordinator, selection.coordinator))
+    && (ignored === "leader" || selectedValueMatches(item.leader, selection.leader))
+    && (ignored === "advisor" || selectedValueMatches(item.advisor, selection.advisor));
 };
 
 const uniqueHierarchyValues = (field, selection, ignored) => [...new Set(commercialHierarchy
@@ -1024,6 +1093,26 @@ const uniqueHierarchyValues = (field, selection, ignored) => [...new Set(commerc
   .map((item) => item[field])
   .filter((value) => value && !value.startsWith("Sin ")))]
   .sort((left, right) => left.localeCompare(right, "es", { sensitivity: "base" }));
+
+const availableAdvisorValues = (selection) => {
+  const hierarchyValues = uniqueHierarchyValues("advisor", selection, "advisor");
+  const fallbackValues = [
+    ...(generalDashboardData?.advisors ?? []).map((item) => item.advisor),
+    ...(generalDashboardData?.possibleCloseCommercial ?? []).map((item) => item.advisor),
+    ...coordinatorRadicatedData.map((item) => item.advisor)
+  ].filter(Boolean);
+  const allowedFallbackValues = teamScope
+    ? fallbackValues.filter((advisor) => isTeamMember(advisor))
+    : fallbackValues;
+  const hasHierarchyFilters = selection.line !== "all"
+    || !isFilterSelectionAll(selection.coordinator)
+    || !isFilterSelectionAll(selection.leader);
+  const hierarchyValueKeys = new Set(hierarchyValues.map(normalizeFilterText));
+  const values = [...new Set([...hierarchyValues, ...allowedFallbackValues])]
+    .filter((value) => !hasHierarchyFilters || hierarchyValueKeys.has(normalizeFilterText(value)))
+    .filter((value) => value && !String(value).startsWith("Sin "));
+  return values.sort((left, right) => left.localeCompare(right, "es", { sensitivity: "base" }));
+};
 
 const collectColumnValues = (headerName) => {
   const values = new Set();
@@ -1041,8 +1130,9 @@ const collectColumnValues = (headerName) => {
 
 const fillFilterOptions = (id, values) => {
   const select = document.getElementById(id);
-  const previous = select.value;
+  const previous = isMultiFilterSelect(select) ? selectedFilterValues(select) : select.value;
   select.replaceChildren();
+  select.multiple = isMultiFilterSelect(select);
   const allOption = document.createElement("option");
   allOption.value = "all";
   allOption.textContent = "Todos";
@@ -1053,7 +1143,18 @@ const fillFilterOptions = (id, values) => {
     option.textContent = value;
     select.append(option);
   });
-  if ([...select.options].some((option) => option.value === previous)) select.value = previous;
+  if (isMultiFilterSelect(select)) {
+    const previousSet = new Set(previous);
+    let selectedCount = 0;
+    [...select.options].forEach((option) => {
+      const selected = option.value !== "all" && previousSet.has(option.value);
+      option.selected = selected;
+      if (selected) selectedCount += 1;
+    });
+    allOption.selected = selectedCount === 0;
+  } else if ([...select.options].some((option) => option.value === previous)) {
+    select.value = previous;
+  }
   enhanceSearchableFilterSelect(select);
 };
 
@@ -1062,11 +1163,11 @@ const getDiegoCommercialQueryString = () => {
   params.set("year", document.getElementById("diegoYear")?.value ?? "2026");
   let dateFrom = document.getElementById("diegoDateFrom")?.value;
   let dateTo = document.getElementById("diegoDateTo")?.value;
-  const month = document.getElementById("diegoMonth")?.value;
+  const months = selectedFilterValues("diegoMonth");
   if (dateFrom && dateTo && dateFrom > dateTo) [dateFrom, dateTo] = [dateTo, dateFrom];
   if (dateFrom) params.set("from", dateFrom);
   if (dateTo) params.set("to", dateTo);
-  if (month && month !== "all") params.set("month", month);
+  if (months.length === 1) params.set("month", months[0]);
   return params.toString();
 };
 
@@ -1113,16 +1214,18 @@ const diegoMonthMatchesDateRange = (monthValue, range) => {
 
 const applyDiegoFilters = () => {
   const filters = {
-    Mes: document.getElementById("diegoMonth").value,
+    Mes: selectedFilterValues("diegoMonth"),
     "Línea comercial": document.getElementById("diegoLine").value,
-    Asesor: document.getElementById("diegoAdvisor").value,
-    "Líder": document.getElementById("diegoLeader").value,
-    Coordinador: document.getElementById("diegoCoordinator").value
+    Asesor: selectedFilterValues("diegoAdvisor"),
+    "Líder": selectedFilterValues("diegoLeader"),
+    Coordinador: selectedFilterValues("diegoCoordinator")
   };
   const selectedLine = document.getElementById("diegoLine").value;
-  const selectedMonth = document.getElementById("diegoMonth").value;
+  const selectedMonths = selectedFilterValues("diegoMonth");
   const selectedDateRange = getDiegoDateRange();
   const monthMatchesDateRange = (monthValue) => diegoMonthMatchesDateRange(monthValue, selectedDateRange);
+  const monthMatchesSelection = (monthValue) => isFilterSelectionAll(selectedMonths)
+    || selectedMonths.some((month) => getMonthCodeFromText(monthValue) === month);
   const selectedPendingLeader = "all";
   const selectedHierarchy = hierarchySelection();
   const hierarchyIndexes = {
@@ -1135,6 +1238,10 @@ const applyDiegoFilters = () => {
     complete: new Set()
   };
   const relatedHierarchy = commercialHierarchy.filter((item) => matchesHierarchySelection(item, selectedHierarchy));
+  const hasHierarchyFilter = selectedHierarchy.line !== "all"
+    || !isFilterSelectionAll(selectedHierarchy.coordinator)
+    || !isFilterSelectionAll(selectedHierarchy.leader)
+    || !isFilterSelectionAll(selectedHierarchy.advisor);
   relatedHierarchy.forEach((item) => {
     const advisor = normalizeFilterText(item.advisor ?? "");
     const leader = normalizeFilterText(item.leader ?? "");
@@ -1166,7 +1273,7 @@ const applyDiegoFilters = () => {
   if (generalDashboardData?.possibleCloseCommercial) {
     const possibleCloseItems = generalDashboardData.possibleCloseCommercial.filter((item) => {
       const matchesLine = selectedLine === "all" || commercialPossibleCloseLine(item).includes(selectedLine);
-      const matchesTeam = belongsToSelectedHierarchy(item.advisor, item.leader, item.coordinator);
+      const matchesTeam = !hasHierarchyFilter || belongsToSelectedHierarchy(item.advisor, item.leader, item.coordinator);
       return matchesLine && matchesTeam;
     });
     const possibleCloseRchView = renderCommercialPossibleClose(possibleCloseItems, "rch");
@@ -1184,11 +1291,11 @@ const applyDiegoFilters = () => {
 
     const table = block.querySelector("table");
     if (!table) return;
-    if (block.dataset.blockCode === "commercial_possible_close") return;
+    if (block.dataset.blockCode?.startsWith("commercial_possible_close")) return;
     const hasMonthlyCells = table.classList.contains("radicated-matrix") || table.classList.contains("monthly-matrix");
     if (hasMonthlyCells) {
       table.querySelectorAll("[data-month]").forEach((cell) => {
-        cell.hidden = (selectedMonth !== "all" && cell.dataset.month !== selectedMonth)
+        cell.hidden = !monthMatchesSelection(cell.dataset.month)
           || !monthMatchesDateRange(cell.dataset.month);
       });
     }
@@ -1197,10 +1304,10 @@ const applyDiegoFilters = () => {
 
     table.querySelectorAll("tbody tr").forEach((row) => {
       const matches = Object.entries(filters).every(([headerName, selected]) => {
-        if (selected === "all") return true;
+        if (isFilterSelectionAll(selected)) return true;
         if (table.classList.contains("performance-table") && row.dataset.group) {
-          if (headerName === "Coordinador" && title.includes("coordinadores")) return normalizeFilterText(decodeURIComponent(row.dataset.group)) === normalizeFilterText(selected);
-          if (headerName === "Líder" && title.includes("líder")) return normalizeFilterText(decodeURIComponent(row.dataset.group)) === normalizeFilterText(selected);
+          if (headerName === "Coordinador" && title.includes("coordinadores")) return selectedValueMatches(decodeURIComponent(row.dataset.group), selected);
+          if (headerName === "Líder" && title.includes("líder")) return selectedValueMatches(decodeURIComponent(row.dataset.group), selected);
         }
         const index = headers.indexOf(headerName);
         if (index < 0 && normalizeFilterText(headerName).includes("linea") && row.dataset.line) {
@@ -1208,12 +1315,12 @@ const applyDiegoFilters = () => {
         }
         if (index < 0) return true;
         const cellValue = row.children[index]?.textContent.trim() ?? "";
-        if (headerName === "Mes") return cellValue.startsWith(selected);
+        if (headerName === "Mes") return monthMatchesSelection(cellValue);
         if (headerName === "Línea comercial") {
           const normalizedLine = normalizeFilterText(cellValue).includes("insolvencia") ? "pnnc" : normalizeFilterText(cellValue);
           return normalizedLine.includes(selected);
         }
-        return normalizeFilterText(cellValue) === normalizeFilterText(selected);
+        return selectedValueMatches(cellValue, selected);
       });
       const advisorIndex = headers.indexOf("Asesor");
       const leaderIndex = headers.indexOf("Líder");
@@ -1222,7 +1329,7 @@ const applyDiegoFilters = () => {
       const rowLeader = row.dataset.leader ? decodeURIComponent(row.dataset.leader) : (leaderIndex >= 0 ? row.children[leaderIndex]?.textContent.trim() : (title.includes("líder") ? row.dataset.group : null));
       const rowCoordinator = row.dataset.coordinator ? decodeURIComponent(row.dataset.coordinator) : (coordinatorIndex >= 0 ? row.children[coordinatorIndex]?.textContent.trim() : (title.includes("coordinador") ? row.dataset.group : null));
       const hasHierarchyIdentity = rowAdvisor || rowLeader || rowCoordinator;
-      const matchesRelatedTeam = !hasHierarchyIdentity || belongsToSelectedHierarchy(rowAdvisor, rowLeader, rowCoordinator);
+      const matchesRelatedTeam = !hasHierarchyFilter || !hasHierarchyIdentity || belongsToSelectedHierarchy(rowAdvisor, rowLeader, rowCoordinator);
       const stageIndex = headers.findIndex((header) => normalizeFilterText(header).startsWith("etapa"));
       const stageValue = stageIndex >= 0 ? normalizeFilterText(row.children[stageIndex]?.textContent ?? "") : "";
       const rowMonthIndex = headers.indexOf("Mes");
@@ -1245,27 +1352,23 @@ const applyDiegoFilters = () => {
 };
 
 const setupDiegoFilters = () => {
-  const selection = hierarchySelection();
-  fillFilterOptions("diegoCoordinator", uniqueHierarchyValues("coordinator", selection, "coordinator"));
-  const afterCoordinator = hierarchySelection();
-  fillFilterOptions("diegoLeader", uniqueHierarchyValues("leader", afterCoordinator, "leader"));
-  const afterLeader = hierarchySelection();
+  const refreshHierarchyOptions = () => {
+    fillFilterOptions("diegoCoordinator", uniqueHierarchyValues("coordinator", hierarchySelection(), "coordinator"));
+    fillFilterOptions("diegoLeader", uniqueHierarchyValues("leader", hierarchySelection(), "leader"));
+    fillFilterOptions("diegoAdvisor", availableAdvisorValues(hierarchySelection()));
+  };
+  refreshHierarchyOptions();
+  refreshHierarchyOptions();
   const advisorSelect = document.getElementById("diegoAdvisor");
-  const hasAdvisorScope = afterLeader.line !== "all"
-    || afterLeader.coordinator !== "all"
-    || afterLeader.leader !== "all";
-  // Rendering more than a thousand native options blocks the production UI.
-  // Advisors are therefore loaded after choosing a line, coordinator or leader;
-  // the hierarchy still returns every related advisor without truncation.
-  const hierarchyAdvisors = hasAdvisorScope
-    ? uniqueHierarchyValues("advisor", afterLeader, "advisor")
-    : [];
-  fillFilterOptions("diegoAdvisor", hierarchyAdvisors);
-  advisorSelect.disabled = !hasAdvisorScope;
-  advisorSelect.title = hasAdvisorScope
-    ? "Filtrar por asesor"
-    : "Seleccione primero una línea, un coordinador o un líder";
-  enhanceSearchableFilterSelect(advisorSelect);
+  advisorSelect.disabled = false;
+  advisorSelect.title = "Filtrar por asesor";
+  ["diegoMonth", "diegoCoordinator", "diegoLeader", "diegoAdvisor"].forEach((id) => {
+    const select = document.getElementById(id);
+    if (!select) return;
+    select.multiple = true;
+    if (![...select.selectedOptions].length) setFilterSelectionToAll(id);
+    enhanceSearchableFilterSelect(select);
+  });
   ["diegoMonth", "diegoLine", "diegoAdvisor", "diegoLeader", "diegoCoordinator"].forEach((id) => {
     const select = document.getElementById(id);
     if (select.dataset.bound === "true") return;
@@ -1275,20 +1378,7 @@ const setupDiegoFilters = () => {
         markCommercialViewPending();
         return;
       }
-      if (id === "diegoLine") {
-        document.getElementById("diegoCoordinator").value = "all";
-        document.getElementById("diegoLeader").value = "all";
-        document.getElementById("diegoAdvisor").value = "all";
-        clearFilterOptionSearches(["diegoCoordinator", "diegoLeader", "diegoAdvisor"]);
-      } else if (id === "diegoCoordinator") {
-        document.getElementById("diegoLeader").value = "all";
-        document.getElementById("diegoAdvisor").value = "all";
-        clearFilterOptionSearches(["diegoLeader", "diegoAdvisor"]);
-      } else if (id === "diegoLeader") {
-        document.getElementById("diegoAdvisor").value = "all";
-        clearFilterOptionSearches(["diegoAdvisor"]);
-      }
-      if (["diegoLine", "diegoCoordinator", "diegoLeader"].includes(id)) setupDiegoFilters();
+      if (["diegoLine", "diegoCoordinator", "diegoLeader", "diegoAdvisor"].includes(id)) setupDiegoFilters();
       else applyDiegoFilters();
     });
     select.dataset.bound = "true";
@@ -1309,18 +1399,18 @@ const clearDiegoFilters = async () => {
   const year = document.getElementById("diegoYear");
   const yearChanged = year.value !== "2026";
   const hadServerFilters = yearChanged
-    || document.getElementById("diegoMonth").value !== "all"
+    || !isFilterSelectionAll(selectedFilterValues("diegoMonth"))
     || Boolean(document.getElementById("diegoDateFrom").value)
     || Boolean(document.getElementById("diegoDateTo").value);
   year.value = "2026";
-  document.getElementById("diegoMonth").value = "all";
+  setFilterSelectionToAll("diegoMonth");
   document.getElementById("diegoDateFrom").value = "";
   document.getElementById("diegoDateTo").value = "";
   document.getElementById("diegoLine").value = "all";
-  document.getElementById("diegoCoordinator").value = "all";
-  document.getElementById("diegoLeader").value = "all";
-  document.getElementById("diegoAdvisor").value = "all";
-  clearFilterOptionSearches(["diegoCoordinator", "diegoLeader", "diegoAdvisor"]);
+  setFilterSelectionToAll("diegoCoordinator");
+  setFilterSelectionToAll("diegoLeader");
+  setFilterSelectionToAll("diegoAdvisor");
+  clearFilterOptionSearches(["diegoMonth", "diegoCoordinator", "diegoLeader", "diegoAdvisor"]);
   setupDiegoFilters();
   if (hadServerFilters) markCommercialViewPending();
 };
@@ -4167,6 +4257,7 @@ const normalizeFilterValue = (value) => String(value ?? "")
 const searchableFilterSelectIds = new Set([
   "standardStageFilter",
   "standardOwnerFilter",
+  "diegoMonth",
   "diegoCoordinator",
   "diegoLeader",
   "diegoAdvisor"
@@ -4210,8 +4301,21 @@ const closeFilterComboboxes = (exceptRoot = null) => {
 const syncSearchableSelectInput = (select) => {
   const options = searchableSelectOptions(select);
   const input = getSearchableSelectInput(select);
+  if (!input) return;
+  if (isMultiFilterSelect(select)) {
+    const values = selectedFilterValues(select);
+    const labels = options
+      .filter((option) => values.includes(option.value))
+      .map((option) => option.label);
+    input.value = labels.length === 0
+      ? (options[0]?.label ?? "Todos")
+      : labels.length <= 2
+        ? labels.join(", ")
+        : `${labels.length} seleccionados`;
+    return;
+  }
   const selected = options.find((option) => option.value === select.value) ?? options[0];
-  if (input) input.value = selected?.label ?? "";
+  input.value = selected?.label ?? "";
 };
 
 const applySearchableSelectFilter = (select) => {
@@ -4220,14 +4324,32 @@ const applySearchableSelectFilter = (select) => {
   const dropdown = getSearchableSelectDropdown(select);
   if (!root || !input || !dropdown) return;
 
-  const term = normalizeFilterValue(input.value);
-  const visibleOptions = searchableSelectOptions(select).filter((option, index) =>
+  const options = searchableSelectOptions(select);
+  const selected = options.find((option) => option.value === select.value);
+  const selectedValues = isMultiFilterSelect(select) ? selectedFilterValues(select) : [];
+  const selectedLabels = isMultiFilterSelect(select)
+    ? options.filter((option) => selectedValues.includes(option.value)).map((option) => option.label)
+    : [];
+  const multiDisplayValue = selectedLabels.length === 0
+    ? (options[0]?.label ?? "Todos")
+    : selectedLabels.length <= 2
+      ? selectedLabels.join(", ")
+      : `${selectedLabels.length} seleccionados`;
+  const inputValue = normalizeFilterValue(input.value);
+  const term = (select.value === "all" && inputValue === normalizeFilterValue(selected?.label ?? ""))
+    || (isMultiFilterSelect(select) && inputValue === normalizeFilterValue(multiDisplayValue))
+    ? ""
+    : inputValue;
+  const visibleOptions = options.filter((option, index) =>
     index === 0 || !term || normalizeFilterValue(option.label).includes(term)
   );
+  const isOptionSelected = (option) => isMultiFilterSelect(select)
+    ? (option.value === "all" ? selectedValues.length === 0 : selectedValues.includes(option.value))
+    : option.value === select.value;
 
   dropdown.innerHTML = visibleOptions.length
     ? visibleOptions.map((option) => `
-      <button type="button" data-value="${escapeHtml(option.value)}" class="${option.value === select.value ? "is-selected" : ""}">
+      <button type="button" data-value="${escapeHtml(option.value)}" class="${isOptionSelected(option) ? "is-selected" : ""}">
         ${escapeHtml(option.label)}
       </button>`).join("")
     : `<span class="filter-combobox-empty">Sin coincidencias</span>`;
@@ -4253,7 +4375,8 @@ const enhanceSearchableFilterSelect = (select) => {
     const dropdown = getSearchableSelectDropdown(select);
     input.addEventListener("focus", () => {
       closeFilterComboboxes(combo);
-      input.select();
+      if (isMultiFilterSelect(select) || select.value === "all") input.value = "";
+      else input.select();
       applySearchableSelectFilter(select);
     });
     input.addEventListener("input", () => applySearchableSelectFilter(select));
@@ -4270,8 +4393,27 @@ const enhanceSearchableFilterSelect = (select) => {
     });
     dropdown.addEventListener("mousedown", (event) => event.preventDefault());
     dropdown.addEventListener("click", (event) => {
+      event.stopPropagation();
       const option = event.target.closest("button[data-value]");
       if (!option) return;
+      if (isMultiFilterSelect(select)) {
+        const nativeOption = [...select.options].find((item) => item.value === option.dataset.value);
+        if (!nativeOption) return;
+        if (nativeOption.value === "all") {
+          [...select.options].forEach((item) => {
+            item.selected = item.value === "all";
+          });
+        } else {
+          nativeOption.selected = !nativeOption.selected;
+          const selectedSpecificOptions = [...select.options].filter((item) => item.value !== "all" && item.selected);
+          const allOption = [...select.options].find((item) => item.value === "all");
+          if (allOption) allOption.selected = selectedSpecificOptions.length === 0;
+        }
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        input.value = "";
+        applySearchableSelectFilter(select);
+        return;
+      }
       select.value = option.dataset.value;
       syncSearchableSelectInput(select);
       combo.classList.remove("is-open");
@@ -4706,22 +4848,7 @@ const load = async () => {
 
 const updateReportView = async () => {
   setText("reportStatus", "Leyendo");
-  try {
-    if (["fuerza_comercial_diego", "informe_general_comercial"].includes(reportId)) {
-      await ensureDiegoFilterHierarchy();
-      await loadDiegoSyncStatus();
-      await reloadDiegoCommercialData();
-    } else if (reportId === "informe_gerencia_2026_2027") {
-      await loadGerenciaReportData();
-    } else {
-      await loadSummary();
-      await loadDeals();
-    }
-
-    setText("reportStatus", "OK");
-  } catch {
-    setText("reportStatus", "Error");
-  }
+  window.location.reload();
 };
 
 const setupSidebarToggle = () => {

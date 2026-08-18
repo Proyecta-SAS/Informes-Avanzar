@@ -1,25 +1,375 @@
-const escOrg=(v="")=>String(v).replace(/[&<>'"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","'":"&#39;",'"':"&quot;"})[c]);const initialsOrg=(n="")=>n.split(/\s+/).filter(Boolean).slice(0,2).map(p=>p[0]).join("").toUpperCase()||"AV";
-const roleNames={viewer:"Consulta",coordinator:"Coordinador",leader:"Líder",advisor:"Asesor"};const reportOptions=[['informe_general_comercial','Informe general'],['fuerza_comercial_diego','Fuerza comercial'],['rch_comercial','RCH Comercial'],['rch_operativa','RCH Operativa'],['pnnc_comercial','PNNC Comercial'],['pnnc_operativa','PNNC Operativa'],['informe_gerencia_2026_2027','Informe Gerencia']];
-const generalBlockGroups=[
-  ["Radicación",[["radicated_values","Valores radicados por asesor"],["advisor_negotiations","Total negociaciones por asesor"],["coordinator_values","Valores radicados por coordinador"],["leader_values","Valores radicados por líder"],["coordinator_detail","Detalle coordinadores"],["leader_detail","Radicaciones por líderes"]]],
-  ["Comisiones",[["advisor_commissions","Comisiones por asesor"]]],
-  ["Carteras",[["portfolio_state","Estado de cartera"],["portfolio_collected","Cartera recaudada"]]],
-  ["Embudos",[["funnel_insolvency","Embudo Insolvencia"],["funnel_rch","Embudo RCH"],["commercial_possible_close","(COM) Posible Cierre"]]],
-  ["Etapas",[["stages_rch_commercial","Etapas Comercial RCH"],["stages_rch_operativa","Etapas Operativa RCH"],["stages_pnnc_commercial","Etapas Comercial PNNC"],["stages_pnnc_operativa","Etapas Operativa PNNC"]]],
-  ["Gerencial",[["management_possible_close","Posible cierre general"],["management_compliance_pnnc","Detalle cumplimiento PNNC 2025"],["management_compliance_rch","Detalle cumplimiento RCH 2026"],["management_compliance_1116","Detalle cumplimiento 1116 2026"]]]
+const escOrg = (value = "") => String(value).replace(/[&<>'"]/g, (character) => ({
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  "'": "&#39;",
+  '"': "&quot;"
+})[character]);
+
+const initialsOrg = (name = "") =>
+  name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "AV";
+
+const commercialRoles = [
+  ["coordinator_rch", "Coordinador RCH", "Coordina equipos y lideres de la linea RCH."],
+  ["coordinator_pnnc", "Coordinador PNNC", "Coordina equipos y lideres de la linea PNNC."],
+  ["leader_rch", "Lider RCH", "Gestiona un equipo comercial RCH."],
+  ["leader_pnnc", "Lider PNNC", "Gestiona un equipo comercial PNNC."]
 ];
-const orgCard=(d,ch)=>`<article class="organization-card ${ch.length?"has-children":""}" data-department-id="${d.id}" data-head-name="${escOrg(d.headName??'')}" data-head-email="${escOrg(d.headEmail??'')}"><div class="organization-card-top"><div class="organization-card-type">${escOrg(d.name)}</div><span class="organization-role-badge ${d.roleLabel}">${roleNames[d.roleLabel]??"Consulta"}</span></div><div class="organization-person"><span>${initialsOrg(d.headName??d.name)}</span><div><strong>${escOrg(d.headName??"Responsable no especificado")}</strong><small>${escOrg(d.headEmail??"Sin correo registrado")}</small></div></div><div class="organization-card-metric"><small>Empleados</small><b>${d.directUsers} asignados</b></div><div class="organization-card-actions"><button class="organization-manage" type="button">Gestionar acceso</button><button class="organization-create-user ${d.userExists?'is-created':''}" type="button" ${d.userExists||!d.headEmail?'disabled':''}>${d.userExists?'Usuario creado':'Crear usuario'}</button></div><div class="organization-user-result" hidden></div><div class="organization-settings" hidden><label>Rol<select class="organization-role"><option value="viewer" ${d.roleLabel==='viewer'?'selected':''}>Consulta</option><option value="coordinator" ${d.roleLabel==='coordinator'?'selected':''}>Coordinador</option><option value="leader" ${d.roleLabel==='leader'?'selected':''}>Líder</option><option value="advisor" ${d.roleLabel==='advisor'?'selected':''}>Asesor</option></select></label><fieldset><legend>Paneles visibles</legend>${reportOptions.map(([code,name])=>`<label><input class="organization-report-check" type="checkbox" value="${code}" ${d.visibleReports?.includes(code)?'checked':''}>${name}</label>`).join('')}</fieldset><div class="organization-block-access"><div><strong>Tablas del Informe General</strong><button class="organization-select-all" type="button">Marcar todas</button></div>${generalBlockGroups.map(([group,items])=>`<fieldset><legend>${group}</legend>${items.map(([code,name])=>`<label><input class="organization-block-check" type="checkbox" value="${code}" ${d.visibleBlocks?.includes(code)?'checked':''}>${name}</label>`).join('')}</fieldset>`).join('')}</div><button class="organization-save" type="button">Guardar permisos</button><small class="organization-save-state"></small></div><footer>${ch.length?`<button class="organization-toggle" type="button" aria-expanded="false"><span>${ch.length} departamentos</span><b>⌄</b></button>`:"Sin subdepartamentos"}</footer></article>`;const orgNode=(d,all,depth=0)=>{const ch=all.filter(x=>x.parentId===d.id);return `<div class="organization-node ${ch.length&&depth>0?"collapsed":""}">${orgCard(d,ch)}${ch.length?`<div class="organization-children">${ch.map(x=>orgNode(x,all,depth+1)).join("")}</div>`:""}</div>`};
-const loadCommercialStructure=()=>fetch("/api/organization/commercial").then(r=>{if(!r.ok)throw Error("No fue posible consultar la estructura.");return r.json()}).then(data=>{const ds=data.departments??[];if(!ds.length){organizationLoading.hidden=false;organizationLoading.innerHTML=`<strong>Estructura pendiente de sincronizar</strong><span>La base de datos todavía no tiene departamentos comerciales.</span><button id="organizationInitialSync" type="button">Sincronizar estructura desde Bitrix</button>`;return}const root=ds.find(x=>x.id==="646"),lines=ds.filter(x=>x.parentId===root?.id);orgDepartments.textContent=Math.max(0,ds.length-1);orgLeaders.textContent=ds.filter(x=>x.headName).length;orgUsers.textContent=ds.reduce((t,x)=>t+x.directUsers,0).toLocaleString("es-CO");organizationTrees.innerHTML=lines.map(line=>`<section class="organization-line"><div class="organization-line-heading"><span>Línea comercial</span><h2>${escOrg(line.name)}</h2></div><div class="organization-chart-scroll"><div class="organization-chart">${orgNode(line,ds)}</div></div></section>`).join("");organizationLoading.hidden=true}).catch(e=>{organizationLoading.hidden=false;organizationLoading.textContent=e.message});
+
+const roleNames = Object.fromEntries(commercialRoles.map(([code, name]) => [code, name]));
+const legacyRoleNames = {
+  coordinator: "Coordinador",
+  leader: "Lider",
+  advisor: "Asesor",
+  viewer: "Consulta"
+};
+
+const reportOptions = [
+  ["informe_general_comercial", "Informe general"]
+];
+
+const generalBlockGroups = [
+  ["Radicacion", [
+    ["radicated_values", "Valores radicados por asesor"],
+    ["advisor_negotiations", "Total negociaciones por asesor"],
+    ["coordinator_values", "Valores radicados por coordinador"],
+    ["leader_values", "Valores radicados por lider"],
+    ["coordinator_detail", "Detalle coordinadores"],
+    ["leader_detail", "Radicaciones por lideres"]
+  ]],
+  ["Comisiones", [
+    ["advisor_commissions", "Comisiones por asesor"]
+  ]],
+  ["Carteras", [
+    ["portfolio_state", "Estado de cartera"],
+    ["portfolio_collected", "Cartera recaudada"]
+  ]],
+  ["Embudos", [
+    ["funnel_insolvency", "Embudo Insolvencia"],
+    ["funnel_rch", "Embudo RCH"],
+    ["commercial_possible_close_rch", "(COM) Posible Cierre RCH"],
+    ["commercial_possible_close_pnnc", "(COM) Posible Cierre PNNC"]
+  ]]
+];
+
+const allReportCodes = reportOptions.map(([code]) => code);
+const allGeneralBlockCodes = generalBlockGroups.flatMap(([, items]) => items.map(([code]) => code));
+const sharedGeneralBlockCodes = allGeneralBlockCodes.filter((code) => !code.startsWith("commercial_possible_close_"));
+const normalizeCommercialRole = (role) => roleNames[role] ? role : "leader_rch";
+const getRoleName = (role) => roleNames[role] ?? legacyRoleNames[role] ?? "Lider RCH";
+const blockCodesForRole = (role) => {
+  const normalized = normalizeCommercialRole(role);
+  return [
+    ...sharedGeneralBlockCodes,
+    normalized.endsWith("_pnnc") ? "commercial_possible_close_pnnc" : "commercial_possible_close_rch"
+  ];
+};
+
+const applyPresetAccess = (settings) => {
+  const blocks = new Set(blockCodesForRole(settings.querySelector(".organization-role")?.value));
+  settings.querySelectorAll(".organization-report-check").forEach((input) => {
+    input.checked = true;
+  });
+  settings.querySelectorAll(".organization-block-check").forEach((input) => {
+    input.checked = blocks.has(input.value);
+  });
+};
+
+const roleOptionsMarkup = (selectedRole) => commercialRoles
+  .map(([code, name]) => `<option value="${code}" ${normalizeCommercialRole(selectedRole) === code ? "selected" : ""}>${name}</option>`)
+  .join("");
+
+const orgCard = (department, children) => {
+  const role = normalizeCommercialRole(department.roleLabel);
+  const selectedReports = new Set([...(department.visibleReports ?? []), ...allReportCodes]);
+  const selectedBlocks = new Set([...(department.visibleBlocks ?? []), ...blockCodesForRole(role)]);
+
+  return `
+    <article class="organization-card ${children.length ? "has-children" : ""}" data-department-id="${department.id}" data-head-name="${escOrg(department.headName ?? "")}" data-head-email="${escOrg(department.headEmail ?? "")}">
+      <div class="organization-card-top">
+        <div class="organization-card-type">${escOrg(department.name)}</div>
+        <span class="organization-role-badge ${role}">${escOrg(getRoleName(role))}</span>
+      </div>
+      <div class="organization-person">
+        <span>${initialsOrg(department.headName ?? department.name)}</span>
+        <div>
+          <strong>${escOrg(department.headName ?? "Responsable no especificado")}</strong>
+          <small>${escOrg(department.headEmail ?? "Sin correo registrado")}</small>
+        </div>
+      </div>
+      <div class="organization-card-metric"><small>Empleados</small><b>${department.directUsers} asignados</b></div>
+      <div class="organization-card-actions">
+        <button class="organization-manage" type="button">Gestionar acceso</button>
+        <button class="organization-create-user ${department.userExists ? "is-created" : ""}" type="button" ${department.userExists || !department.headEmail ? "disabled" : ""}>${department.userExists ? "Usuario creado" : "Crear usuario"}</button>
+      </div>
+      <div class="organization-user-result" hidden></div>
+      <div class="organization-settings" hidden>
+        <label>Rol comercial predefinido<select class="organization-role">${roleOptionsMarkup(role)}</select></label>
+        <fieldset>
+          <legend>Paneles visibles incluidos</legend>
+          ${reportOptions.map(([code, name]) => `<label><input class="organization-report-check" type="checkbox" value="${code}" ${selectedReports.has(code) ? "checked" : ""} disabled>${name}</label>`).join("")}
+        </fieldset>
+        <div class="organization-block-access">
+          <div><strong>Tablas del Informe General incluidas</strong><span class="organization-preset-note">Predefinido</span></div>
+          ${generalBlockGroups.map(([group, items]) => `
+            <fieldset>
+              <legend>${group}</legend>
+              ${items.map(([code, name]) => `<label><input class="organization-block-check" type="checkbox" value="${code}" ${selectedBlocks.has(code) ? "checked" : ""} disabled>${name}</label>`).join("")}
+            </fieldset>
+          `).join("")}
+        </div>
+        <button class="organization-save" type="button">Guardar rol</button>
+        <small class="organization-save-state">Este rol ve todos los paneles vigentes. Lo eliminado o archivado no se incluye en el catalogo.</small>
+      </div>
+      <footer>${children.length ? `<button class="organization-toggle" type="button" aria-expanded="false"><span>${children.length} departamentos</span><b>⌄</b></button>` : "Sin subdepartamentos"}</footer>
+    </article>`;
+};
+
+const orgNode = (department, allDepartments, depth = 0) => {
+  const children = allDepartments.filter((item) => item.parentId === department.id);
+  return `
+    <div class="organization-node ${children.length && depth > 0 ? "collapsed" : ""}">
+      ${orgCard(department, children)}
+      ${children.length ? `<div class="organization-children">${children.map((child) => orgNode(child, allDepartments, depth + 1)).join("")}</div>` : ""}
+    </div>`;
+};
+
+const loadCommercialStructure = () => fetch("/api/organization/commercial")
+  .then((response) => {
+    if (!response.ok) throw Error("No fue posible consultar la estructura.");
+    return response.json();
+  })
+  .then((data) => {
+    const departments = data.departments ?? [];
+    if (!departments.length) {
+      organizationLoading.hidden = false;
+      organizationLoading.innerHTML = `<strong>Estructura pendiente de sincronizar</strong><span>La base de datos todavia no tiene departamentos comerciales.</span><button id="organizationInitialSync" type="button">Sincronizar estructura desde Bitrix</button>`;
+      return;
+    }
+
+    const root = departments.find((item) => item.id === "646");
+    const lines = departments.filter((item) => item.parentId === root?.id);
+    orgDepartments.textContent = Math.max(0, departments.length - 1);
+    orgLeaders.textContent = departments.filter((item) => item.headName).length;
+    orgUsers.textContent = departments.reduce((total, item) => total + item.directUsers, 0).toLocaleString("es-CO");
+    organizationTrees.innerHTML = lines.map((line) => `
+      <section class="organization-line">
+        <div class="organization-line-heading"><span>Linea comercial</span><h2>${escOrg(line.name)}</h2></div>
+        <div class="organization-chart-scroll"><div class="organization-chart">${orgNode(line, departments)}</div></div>
+      </section>`).join("");
+    organizationLoading.hidden = true;
+  })
+  .catch((error) => {
+    organizationLoading.hidden = false;
+    organizationLoading.textContent = error.message;
+  });
+
+const restoreOrganizationSettings = (settings) => {
+  const origin = document.querySelector(`.organization-card[data-department-id="${settings.dataset.originDepartment}"]`);
+  if (origin) origin.querySelector(".organization-user-result").after(settings);
+};
+
+const closeOrganizationSettings = () => {
+  document.querySelectorAll("body>.organization-settings").forEach((settings) => {
+    settings.hidden = true;
+    restoreOrganizationSettings(settings);
+  });
+  document.querySelectorAll(".organization-manage").forEach((button) => {
+    button.textContent = "Gestionar acceso";
+  });
+  document.body.classList.remove("organization-drawer-open");
+  organizationSettingsBackdrop.hidden = true;
+};
+
+const getSettingsPayload = (card, settings) => {
+  const role = normalizeCommercialRole(settings.querySelector(".organization-role").value);
+  return {
+    email: card.dataset.headEmail,
+    roleLabel: role,
+    visibleReports: allReportCodes,
+    visibleBlocks: blockCodesForRole(role)
+  };
+};
+
+const saveOrganizationSettings = async (card, settings, state, save) => {
+  save.disabled = true;
+  state.textContent = "Guardando configuracion...";
+  const payload = getSettingsPayload(card, settings);
+  const response = await fetch(`/api/organization/commercial/${card.dataset.departmentId}/settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  save.disabled = false;
+  state.textContent = response.ok ? `Rol guardado: ${getRoleName(payload.roleLabel)} · ${payload.visibleBlocks.length} tablas visibles` : "No fue posible guardar";
+  if (response.ok) {
+    const badge = card.querySelector(".organization-role-badge");
+    badge.className = `organization-role-badge ${payload.roleLabel}`;
+    badge.textContent = getRoleName(payload.roleLabel);
+    applyPresetAccess(settings);
+  }
+};
+
 loadCommercialStructure();
-organizationLoading.addEventListener("click",async event=>{const button=event.target.closest("#organizationInitialSync");if(!button)return;button.disabled=true;button.textContent="Sincronizando…";try{const response=await fetch("/api/bitrix/sync/departments",{method:"POST"});if(!response.ok){const error=await response.json().catch(()=>({}));throw Error(error.error??"No fue posible sincronizar los departamentos.")}organizationLoading.innerHTML="Consultando estructura comercial…";await loadCommercialStructure()}catch(error){button.disabled=false;button.textContent="Reintentar sincronización";organizationLoading.insertAdjacentHTML("beforeend",`<small>${escOrg(error.message)}</small>`)}});
-organizationTrees.addEventListener("click",event=>{const button=event.target.closest(".organization-toggle");if(!button)return;const node=button.closest(".organization-node"),collapsed=node.classList.toggle("collapsed");button.setAttribute("aria-expanded",String(!collapsed));});
-organizationLoading.insertAdjacentHTML("beforebegin",`<section class="organization-toolbar"><label><span>⌕</span><input id="organizationSearch" type="search" placeholder="Buscar coordinador, líder o equipo"></label><button id="organizationExpand" type="button">Expandir todo</button><button id="organizationCollapse" type="button">Contraer todo</button></section>`);
-organizationTrees.addEventListener("click",async event=>{const manage=event.target.closest(".organization-manage");if(manage){const settings=manage.closest(".organization-card").querySelector(".organization-settings");settings.hidden=!settings.hidden;manage.textContent=settings.hidden?"Gestionar acceso":"Cerrar gestión";return}const selectAll=event.target.closest('.organization-select-all');if(selectAll){const checks=[...selectAll.closest('.organization-settings').querySelectorAll('.organization-block-check')],shouldCheck=checks.some(input=>!input.checked);checks.forEach(input=>input.checked=shouldCheck);selectAll.textContent=shouldCheck?'Desmarcar todas':'Marcar todas';return}const create=event.target.closest(".organization-create-user");if(create){const card=create.closest('.organization-card'),result=card.querySelector('.organization-user-result'),role=card.querySelector('.organization-role').value;create.disabled=true;create.textContent='Creando…';const response=await fetch(`/api/admin/organization/${card.dataset.departmentId}/create-user`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({fullName:card.dataset.headName,email:card.dataset.headEmail,roleLabel:role})});const data=await response.json().catch(()=>({}));create.textContent=response.ok?'Usuario creado':'Crear usuario';create.disabled=response.ok;result.hidden=false;result.innerHTML=response.ok?`<b>Usuario creado</b><span>${escOrg(card.dataset.headEmail)}</span><label>Contraseña temporal<strong>${escOrg(data.temporaryPassword)}</strong></label><small>Guárdala ahora. El usuario ya aparece en Usuarios y roles.</small>`:`<b>No fue posible crear</b><span>${escOrg(data.message??'Verifica que el correo no esté registrado.')}</span>`;return}const save=event.target.closest(".organization-save");if(!save)return;const card=save.closest(".organization-card"),state=card.querySelector(".organization-save-state"),role=card.querySelector(".organization-role").value,reports=[...card.querySelectorAll('.organization-report-check:checked')].map(input=>input.value),blocks=[...card.querySelectorAll('.organization-block-check:checked')].map(input=>input.value);save.disabled=true;state.textContent="Guardando…";const response=await fetch(`/api/organization/commercial/${card.dataset.departmentId}/settings`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:card.dataset.headEmail,roleLabel:role,visibleReports:reports,visibleBlocks:blocks})});save.disabled=false;state.textContent=response.ok?`Permisos guardados · ${blocks.length} tablas visibles`:"No fue posible guardar";if(response.ok){const badge=card.querySelector('.organization-role-badge');badge.className=`organization-role-badge ${role}`;badge.textContent=roleNames[role]}});
-organizationSearch.addEventListener("input",event=>{const q=event.target.value.trim().toLocaleLowerCase('es-CO');document.querySelectorAll('.organization-card').forEach(card=>card.classList.toggle('search-hidden',q&&!card.textContent.toLocaleLowerCase('es-CO').includes(q)))});organizationExpand.addEventListener("click",()=>document.querySelectorAll('.organization-node').forEach(node=>{node.classList.remove('collapsed');node.querySelector(':scope > .organization-card .organization-toggle')?.setAttribute('aria-expanded','true')}));organizationCollapse.addEventListener("click",()=>document.querySelectorAll('.organization-node:has(.organization-children)').forEach(node=>{node.classList.add('collapsed');node.querySelector(':scope > .organization-card .organization-toggle')?.setAttribute('aria-expanded','false')}));
-document.body.insertAdjacentHTML("beforeend",`<div id="organizationSettingsBackdrop" class="organization-settings-backdrop" hidden></div>`);
-const restoreOrganizationSettings=settings=>{const origin=document.querySelector(`.organization-card[data-department-id="${settings.dataset.originDepartment}"]`);if(origin)origin.querySelector('.organization-user-result').after(settings)};
-const closeOrganizationSettings=()=>{document.querySelectorAll('body>.organization-settings').forEach(settings=>{settings.hidden=true;restoreOrganizationSettings(settings)});document.querySelectorAll('.organization-manage').forEach(button=>button.textContent='Gestionar acceso');document.body.classList.remove('organization-drawer-open');organizationSettingsBackdrop.hidden=true};
-organizationTrees.addEventListener("click",event=>{const manage=event.target.closest('.organization-manage');if(!manage)return;const card=manage.closest('.organization-card'),settings=card.querySelector('.organization-settings');if(settings.hidden){closeOrganizationSettings();return}settings.dataset.originDepartment=card.dataset.departmentId;if(!settings.querySelector('.organization-settings-header'))settings.insertAdjacentHTML('afterbegin',`<div class="organization-settings-header"><div><small>Configuración de acceso</small><strong>${escOrg(card.dataset.headName||card.querySelector('.organization-card-type').textContent)}</strong><span>${escOrg(card.dataset.headEmail||'Sin correo registrado')}</span></div><button class="organization-settings-close" type="button" aria-label="Cerrar">×</button></div>`);document.body.append(settings);document.body.classList.add('organization-drawer-open');organizationSettingsBackdrop.hidden=false});
-document.addEventListener('click',async event=>{if(event.target.closest('.organization-settings-close')){closeOrganizationSettings();return}const selectAll=event.target.closest('body>.organization-settings .organization-select-all');if(selectAll){const checks=[...selectAll.closest('.organization-settings').querySelectorAll('.organization-block-check')],shouldCheck=checks.some(input=>!input.checked);checks.forEach(input=>input.checked=shouldCheck);selectAll.textContent=shouldCheck?'Desmarcar todas':'Marcar todas';return}const save=event.target.closest('body>.organization-settings .organization-save');if(!save)return;const settings=save.closest('.organization-settings'),card=document.querySelector(`.organization-card[data-department-id="${settings.dataset.originDepartment}"]`),state=settings.querySelector('.organization-save-state'),role=settings.querySelector('.organization-role').value,reports=[...settings.querySelectorAll('.organization-report-check:checked')].map(input=>input.value),blocks=[...settings.querySelectorAll('.organization-block-check:checked')].map(input=>input.value);save.disabled=true;state.textContent='Guardando configuración…';const response=await fetch(`/api/organization/commercial/${card.dataset.departmentId}/settings`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:card.dataset.headEmail,roleLabel:role,visibleReports:reports,visibleBlocks:blocks})});save.disabled=false;state.textContent=response.ok?`Configuración guardada · ${blocks.length} tablas visibles`:'No fue posible guardar';if(response.ok){const badge=card.querySelector('.organization-role-badge');badge.className=`organization-role-badge ${role}`;badge.textContent=roleNames[role]} });
-organizationSettingsBackdrop.addEventListener('click',closeOrganizationSettings);document.addEventListener('keydown',event=>{if(event.key==='Escape')closeOrganizationSettings()});
-organizationTrees.insertAdjacentHTML("afterend",`<section class="organization-help"><div class="organization-help-heading"><span class="section-kicker">Guía de acceso</span><h2>Roles y asignación de permisos</h2><p>Los roles describen la función del responsable; los paneles visibles determinan exactamente qué información puede consultar.</p></div><div class="organization-role-guide"><article class="coordinator"><span>01</span><div><h3>Coordinador</h3><p>Supervisa varios equipos y líderes. Puede recibir acceso a los informes consolidados de su línea comercial.</p></div></article><article class="leader"><span>02</span><div><h3>Líder</h3><p>Gestiona un equipo específico con acceso al Informe General según las tablas autorizadas.</p></div></article><article class="advisor"><span>03</span><div><h3>Asesor</h3><p>Consulta indicadores relacionados con su gestión y los paneles autorizados individualmente.</p></div></article><article class="viewer"><span>04</span><div><h3>Consulta</h3><p>Perfil de solo lectura para responsables que necesitan visualizar información sin administrarla.</p></div></article></div><div class="organization-permission-steps"><h3>¿Cómo asignar los permisos?</h3><ol><li><b>Ubica el equipo</b><span>Busca el coordinador, líder o departamento en el organigrama.</span></li><li><b>Abre “Gestionar acceso”</b><span>Despliega la configuración dentro de la tarjeta.</span></li><li><b>Selecciona el rol</b><span>Elige Coordinador, Líder, Asesor o Consulta.</span></li><li><b>Marca los paneles</b><span>Activa únicamente los informes que podrá visualizar.</span></li><li><b>Guarda los permisos</b><span>La configuración queda registrada en la base de datos.</span></li></ol><div class="organization-permission-note"><b>Importante:</b> asignar un rol no habilita automáticamente todos los informes. Los paneles deben marcarse individualmente según la responsabilidad del usuario.</div></div></section>`);
+
+organizationLoading.addEventListener("click", async (event) => {
+  const button = event.target.closest("#organizationInitialSync");
+  if (!button) return;
+  button.disabled = true;
+  button.textContent = "Sincronizando...";
+  try {
+    const response = await fetch("/api/bitrix/sync/departments", { method: "POST" });
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw Error(error.error ?? "No fue posible sincronizar los departamentos.");
+    }
+    organizationLoading.innerHTML = "Consultando estructura comercial...";
+    await loadCommercialStructure();
+  } catch (error) {
+    button.disabled = false;
+    button.textContent = "Reintentar sincronizacion";
+    organizationLoading.insertAdjacentHTML("beforeend", `<small>${escOrg(error.message)}</small>`);
+  }
+});
+
+organizationLoading.insertAdjacentHTML("beforebegin", `
+  <section class="organization-toolbar">
+    <label><span>⌕</span><input id="organizationSearch" type="search" placeholder="Buscar coordinador, lider o equipo"></label>
+    <button id="organizationExpand" type="button">Expandir todo</button>
+    <button id="organizationCollapse" type="button">Contraer todo</button>
+  </section>`);
+
+document.body.insertAdjacentHTML("beforeend", `<div id="organizationSettingsBackdrop" class="organization-settings-backdrop" hidden></div>`);
+
+organizationTrees.addEventListener("click", async (event) => {
+  const toggle = event.target.closest(".organization-toggle");
+  if (toggle) {
+    const node = toggle.closest(".organization-node");
+    const collapsed = node.classList.toggle("collapsed");
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    return;
+  }
+
+  const manage = event.target.closest(".organization-manage");
+  if (manage) {
+    const card = manage.closest(".organization-card");
+    const settings = card.querySelector(".organization-settings");
+    if (!settings.hidden) {
+      closeOrganizationSettings();
+      return;
+    }
+    closeOrganizationSettings();
+    settings.hidden = false;
+    settings.dataset.originDepartment = card.dataset.departmentId;
+    applyPresetAccess(settings);
+    if (!settings.querySelector(".organization-settings-header")) {
+      settings.insertAdjacentHTML("afterbegin", `
+        <div class="organization-settings-header">
+          <div>
+            <small>Configuracion de acceso</small>
+            <strong>${escOrg(card.dataset.headName || card.querySelector(".organization-card-type").textContent)}</strong>
+            <span>${escOrg(card.dataset.headEmail || "Sin correo registrado")}</span>
+          </div>
+          <button class="organization-settings-close" type="button" aria-label="Cerrar">×</button>
+        </div>`);
+    }
+    document.body.append(settings);
+    document.body.classList.add("organization-drawer-open");
+    organizationSettingsBackdrop.hidden = false;
+    manage.textContent = "Cerrar gestion";
+    return;
+  }
+
+  const create = event.target.closest(".organization-create-user");
+  if (create) {
+    const card = create.closest(".organization-card");
+    const result = card.querySelector(".organization-user-result");
+    const role = normalizeCommercialRole(card.querySelector(".organization-role")?.value ?? card.querySelector(".organization-role-badge")?.classList[1]);
+    create.disabled = true;
+    create.textContent = "Creando...";
+    const response = await fetch(`/api/admin/organization/${card.dataset.departmentId}/create-user`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fullName: card.dataset.headName, email: card.dataset.headEmail, roleLabel: role })
+    });
+    const data = await response.json().catch(() => ({}));
+    create.textContent = response.ok ? "Usuario creado" : "Crear usuario";
+    create.disabled = response.ok;
+    result.hidden = false;
+    result.innerHTML = response.ok
+      ? `<b>Usuario creado</b><span>${escOrg(card.dataset.headEmail)}</span><label>Contrasena temporal<strong>${escOrg(data.temporaryPassword)}</strong></label><small>Guardala ahora. El usuario ya aparece en Usuarios y roles.</small>`
+      : `<b>No fue posible crear</b><span>${escOrg(data.message ?? "Verifica que el correo no este registrado.")}</span>`;
+  }
+});
+
+document.addEventListener("change", (event) => {
+  if (!event.target.matches(".organization-role")) return;
+  applyPresetAccess(event.target.closest(".organization-settings"));
+});
+
+document.addEventListener("click", async (event) => {
+  if (event.target.closest(".organization-settings-close")) {
+    closeOrganizationSettings();
+    return;
+  }
+
+  const save = event.target.closest("body>.organization-settings .organization-save");
+  if (!save) return;
+  const settings = save.closest(".organization-settings");
+  const card = document.querySelector(`.organization-card[data-department-id="${settings.dataset.originDepartment}"]`);
+  const state = settings.querySelector(".organization-save-state");
+  await saveOrganizationSettings(card, settings, state, save);
+});
+
+organizationSettingsBackdrop.addEventListener("click", closeOrganizationSettings);
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeOrganizationSettings();
+});
+
+organizationSearch.addEventListener("input", (event) => {
+  const query = event.target.value.trim().toLocaleLowerCase("es-CO");
+  document.querySelectorAll(".organization-card").forEach((card) => {
+    card.classList.toggle("search-hidden", query && !card.textContent.toLocaleLowerCase("es-CO").includes(query));
+  });
+});
+
+organizationExpand.addEventListener("click", () => {
+  document.querySelectorAll(".organization-node").forEach((node) => {
+    node.classList.remove("collapsed");
+    node.querySelector(":scope > .organization-card .organization-toggle")?.setAttribute("aria-expanded", "true");
+  });
+});
+
+organizationCollapse.addEventListener("click", () => {
+  document.querySelectorAll(".organization-node:has(.organization-children)").forEach((node) => {
+    node.classList.add("collapsed");
+    node.querySelector(":scope > .organization-card .organization-toggle")?.setAttribute("aria-expanded", "false");
+  });
+});
+
+organizationTrees.insertAdjacentHTML("afterend", `
+  <section class="organization-help">
+    <div class="organization-help-heading">
+      <span class="section-kicker">Guia de acceso</span>
+      <h2>Roles predefinidos de estructura comercial</h2>
+      <p>Selecciona uno de los cuatro roles principales. Cada rol habilita automaticamente todos los paneles y tablas vigentes del catalogo comercial; lo eliminado o archivado queda fuera.</p>
+    </div>
+    <div class="organization-role-guide">
+      ${commercialRoles.map(([code, name, description], index) => `
+        <article class="${code}">
+          <span>${String(index + 1).padStart(2, "0")}</span>
+          <div><h3>${name}</h3><p>${description}</p></div>
+        </article>`).join("")}
+    </div>
+    <div class="organization-permission-steps">
+      <h3>Como asignar los permisos</h3>
+      <ol>
+        <li><b>Ubica el equipo</b><span>Busca el coordinador, lider o departamento en el organigrama.</span></li>
+        <li><b>Abre Gestionar acceso</b><span>Despliega la configuracion dentro de la tarjeta.</span></li>
+        <li><b>Selecciona el rol</b><span>Elige Coordinador RCH, Coordinador PNNC, Lider RCH o Lider PNNC.</span></li>
+        <li><b>Guarda</b><span>La configuracion queda registrada con todos los paneles vigentes.</span></li>
+        <li><b>Crea usuario</b><span>Si falta la cuenta, usa el boton Crear usuario para generar acceso.</span></li>
+      </ol>
+      <div class="organization-permission-note"><b>Importante:</b> estos roles son predefinidos. Para excepciones finas se revisara una segunda etapa.</div>
+    </div>
+  </section>`);

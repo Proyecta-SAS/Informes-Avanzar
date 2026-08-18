@@ -434,9 +434,7 @@ public static class BitrixDataQueries
                     COUNT(*) AS negotiations,
                     COUNT(*) FILTER (WHERE tipo = 'estudio') AS commercial_cases,
                     COUNT(*) FILTER (WHERE tipo = 'radicado') AS radicated_cases,
-                    COALESCE(SUM(opportunity), 0) AS total_value,
-                    COUNT(*) FILTER (WHERE tipo = 'estudio')::numeric / NULLIF(COUNT(*), 0) AS studies_rate,
-                    COUNT(*) FILTER (WHERE tipo = 'radicado')::numeric / NULLIF(COUNT(*) FILTER (WHERE tipo = 'estudio'), 0) AS closing_rate
+                    COALESCE(SUM(opportunity), 0) AS total_value
                 FROM base_unificada
                 GROUP BY advisor, line
             )
@@ -446,8 +444,8 @@ public static class BitrixDataQueries
                 SUM(commercial_cases)::bigint AS commercial_cases,
                 SUM(radicated_cases)::bigint AS radicated_cases,
                 COALESCE(SUM(total_value), 0) AS total_value,
-                COALESCE(SUM(studies_rate), 0) AS studies_rate,
-                SUM(closing_rate) AS closing_rate
+                COALESCE(SUM(commercial_cases)::numeric / NULLIF(SUM(negotiations), 0), 0) AS studies_rate,
+                SUM(radicated_cases)::numeric / NULLIF(SUM(negotiations), 0) AS closing_rate
             FROM line_summary
             GROUP BY advisor
             ORDER BY advisor;
@@ -1178,41 +1176,202 @@ public static class BitrixDataQueries
         CancellationToken cancellationToken)
     {
         const string sql = """
-            WITH guide_collections(month, month_start, collected) AS (
-                VALUES
-                    ('01 ENE', DATE '2026-01-01', 687112119::numeric),
-                    ('02 FEB', DATE '2026-02-01', 776428900::numeric),
-                    ('03 MAR', DATE '2026-03-01', 908176932::numeric),
-                    ('04 ABR', DATE '2026-04-01', 923236614::numeric),
-                    ('05 MAY', DATE '2026-05-01', 900964722::numeric),
-                    ('06 JUN', DATE '2026-06-01', 1146766431::numeric),
-                    ('07 JUL', DATE '2026-07-01', 1278326843::numeric),
-                    ('08 AGO', DATE '2026-08-01', 293344007::numeric)
+            WITH latest_users AS (
+                SELECT DISTINCT ON (connection_id, bitrix_id)
+                    connection_id,
+                    bitrix_id,
+                    payload
+                FROM bitrix.raw_payloads
+                WHERE entity_type = 'user'
+                ORDER BY connection_id, bitrix_id, received_at DESC
+            ), user_departments AS (
+                SELECT
+                    u.connection_id,
+                    u.bitrix_id,
+                    u.full_name AS advisor,
+                    department.value::bigint AS department_id,
+                    department.ordinality AS department_ordinal
+                FROM bitrix.users u
+                JOIN latest_users payload
+                    ON payload.connection_id = u.connection_id
+                    AND payload.bitrix_id = u.bitrix_id
+                CROSS JOIN LATERAL jsonb_array_elements_text(payload.payload -> 'UF_DEPARTMENT')
+                    WITH ORDINALITY AS department(value, ordinality)
+                WHERE u.active = true
+                  AND LOWER(COALESCE(payload.payload ->> 'ACTIVE', 'true')) NOT IN ('false', 'n', '0')
+                  AND jsonb_typeof(payload.payload -> 'UF_DEPARTMENT') = 'array'
+            ), hierarchy AS (
+                SELECT
+                    u.bitrix_id,
+                    u.department_id AS source_department_id,
+                    CASE
+                        WHEN UPPER(COALESCE(s1.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s1.name)
+                        WHEN UPPER(COALESCE(s2.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s2.name)
+                        WHEN UPPER(COALESCE(s3.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s3.name)
+                        WHEN UPPER(COALESCE(s4.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s4.name)
+                        WHEN UPPER(COALESCE(s5.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s5.name)
+                        WHEN UPPER(COALESCE(s6.name, '')) LIKE '%EQ. COOR%' THEN TRIM(s6.name)
+                    END AS coordinator
+                FROM user_departments u
+                LEFT JOIN bitrix.departments s1 ON s1.id = u.department_id
+                LEFT JOIN bitrix.departments s2 ON s2.id = s1.parent_id
+                LEFT JOIN bitrix.departments s3 ON s3.id = s2.parent_id
+                LEFT JOIN bitrix.departments s4 ON s3.parent_id = s4.id
+                LEFT JOIN bitrix.departments s5 ON s4.parent_id = s5.id
+                LEFT JOIN bitrix.departments s6 ON s5.parent_id = s6.id
+                WHERE
+                    UPPER(COALESCE(s1.name, '')) LIKE '%COMERCIAL%'
+                    OR UPPER(COALESCE(s2.name, '')) LIKE '%COMERCIAL%'
+                    OR UPPER(COALESCE(s3.name, '')) LIKE '%COMERCIAL%'
+                    OR UPPER(COALESCE(s4.name, '')) LIKE '%COMERCIAL%'
+                    OR UPPER(COALESCE(s5.name, '')) LIKE '%COMERCIAL%'
+                    OR UPPER(COALESCE(s6.name, '')) LIKE '%COMERCIAL%'
+            ), hierarchy_by_user AS (
+                SELECT DISTINCT ON (bitrix_id)
+                    bitrix_id,
+                    coordinator
+                FROM hierarchy
+                ORDER BY bitrix_id, source_department_id, coordinator NULLS LAST
+            ), known_hierarchy_overrides(advisor_id, coordinator) AS (
+                VALUES ('20566', 'EQ. COOR SOL PEREIRA')
+            ), effective_hierarchy AS (
+                SELECT
+                    hierarchy_by_user.bitrix_id,
+                    COALESCE(known_hierarchy_overrides.coordinator, hierarchy_by_user.coordinator) AS coordinator
+                FROM hierarchy_by_user
+                LEFT JOIN known_hierarchy_overrides ON known_hierarchy_overrides.advisor_id = hierarchy_by_user.bitrix_id
+            ), payment_rows AS (
+                SELECT
+                    source.payload ->> 'ASSIGNED_BY_ID' AS advisor_id,
+                    CASE
+                        WHEN payment.raw_date ~ '^\d{4}-\d{2}-\d{2}'
+                        THEN SUBSTRING(payment.raw_date FROM 1 FOR 10)::date
+                    END AS payment_date,
+                    CASE
+                        WHEN NULLIF(TRIM(payment.raw_value), '') IS NULL THEN NULL
+                        WHEN payment.raw_value LIKE '%,%' THEN
+                            NULLIF(REPLACE(REPLACE(REGEXP_REPLACE(payment.raw_value, '[^0-9,.-]', '', 'g'), '.', ''), ',', '.'), '')::numeric
+                        WHEN REGEXP_REPLACE(payment.raw_value, '[^0-9.]', '', 'g') ~ '^\d{1,3}(\.\d{3})+$' THEN
+                            NULLIF(REPLACE(REGEXP_REPLACE(payment.raw_value, '[^0-9.]', '', 'g'), '.', ''), '')::numeric
+                        ELSE
+                            NULLIF(REGEXP_REPLACE(payment.raw_value, '[^0-9.-]', '', 'g'), '')::numeric
+                    END AS collected,
+                    CASE
+                        WHEN source.payload ->> 'CATEGORY_ID' IN ('12', '302') THEN 'LINEA RCH'
+                        WHEN source.payload ->> 'CATEGORY_ID' IN ('68', '308') THEN 'LINEA INSOLVENCIA'
+                    END AS commercial_line
+                FROM "Bitrix_tablas".crm_deal source
+                CROSS JOIN LATERAL (VALUES
+                    (source.payload ->> 'UF_CRM_1616543199911', source.payload ->> 'UF_CRM_1616543235645'),
+                    (source.payload ->> 'UF_CRM_1616543363164', source.payload ->> 'UF_CRM_1616543387444'),
+                    (source.payload ->> 'UF_CRM_1616543459676', source.payload ->> 'UF_CRM_1616543489629'),
+                    (source.payload ->> 'UF_CRM_1616543556711', source.payload ->> 'UF_CRM_1616543576996'),
+                    (source.payload ->> 'UF_CRM_1616543676428', source.payload ->> 'UF_CRM_1616543703340'),
+                    (source.payload ->> 'UF_CRM_1616543806805', source.payload ->> 'UF_CRM_1616543829877'),
+                    (source.payload ->> 'UF_CRM_1616543903340', source.payload ->> 'UF_CRM_1616543924037'),
+                    (source.payload ->> 'UF_CRM_1709396834305', source.payload ->> 'UF_CRM_1709151333092'),
+                    (source.payload ->> 'UF_CRM_1616544028572', source.payload ->> 'UF_CRM_1616544047801'),
+                    (source.payload ->> 'UF_CRM_1616544121180', source.payload ->> 'UF_CRM_1616544143695'),
+                    (source.payload ->> 'UF_CRM_1676486990987', source.payload ->> 'UF_CRM_1676487293788'),
+                    (source.payload ->> 'UF_CRM_1676487033939', source.payload ->> 'UF_CRM_1676487304887')
+                ) AS payment(raw_date, raw_value)
+                WHERE source.payload ->> 'CATEGORY_ID' IN ('12', '68', '302', '308')
+            ), collections AS (
+                SELECT
+                    EXTRACT(MONTH FROM payment_date)::int AS month_number,
+                    LPAD(EXTRACT(MONTH FROM payment_date)::int::text, 2, '0') || ' ' ||
+                        CASE EXTRACT(MONTH FROM payment_date)::int
+                            WHEN 1 THEN 'ENE' WHEN 2 THEN 'FEB' WHEN 3 THEN 'MAR'
+                            WHEN 4 THEN 'ABR' WHEN 5 THEN 'MAY' WHEN 6 THEN 'JUN'
+                            WHEN 7 THEN 'JUL' WHEN 8 THEN 'AGO' WHEN 9 THEN 'SEP'
+                            WHEN 10 THEN 'OCT' WHEN 11 THEN 'NOV' WHEN 12 THEN 'DIC'
+                        END AS month,
+                    hierarchy.coordinator,
+                    SUM(collected) AS collected
+                FROM payment_rows
+                JOIN effective_hierarchy hierarchy ON hierarchy.bitrix_id = payment_rows.advisor_id
+                WHERE payment_date IS NOT NULL
+                  AND collected IS NOT NULL
+                  AND hierarchy.coordinator IS NOT NULL
+                  AND EXTRACT(YEAR FROM payment_date)::int = @yearNumber
+                  AND (@monthNumber IS NULL OR EXTRACT(MONTH FROM payment_date)::int = @monthNumber)
+                  AND (@fromDate IS NULL OR payment_date >= @fromDate)
+                  AND (@toDate IS NULL OR payment_date <= @toDate)
+                GROUP BY 1, 2, 3
+            ), meta_pipeline AS (
+                SELECT id
+                FROM bitrix.pipelines
+                WHERE category_id = 224
+                ORDER BY id
+                LIMIT 1
+            ), goals AS (
+                SELECT
+                    CASE meta.payload ->> 'TITLE'
+                        WHEN '01 ENE' THEN 1 WHEN '02 FEB' THEN 2 WHEN '03 MAR' THEN 3
+                        WHEN '04 ABR' THEN 4 WHEN '05 MAY' THEN 5 WHEN '06 JUN' THEN 6
+                        WHEN '07 JUL' THEN 7 WHEN '08 AGO' THEN 8 WHEN '09 SEP' THEN 9
+                        WHEN '10 OCT' THEN 10 WHEN '11 NOV' THEN 11 WHEN '12 DIC' THEN 12
+                    END AS month_number,
+                    meta.payload ->> 'TITLE' AS month,
+                    CASE
+                        WHEN meta.payload ->> 'UF_CRM_1611163412' = '969' THEN 'EQ. COOR STEFANIA MORALES'
+                        WHEN meta.payload ->> 'UF_CRM_1611163412' = '138' THEN 'EQ. COOR LUZ VELANDIA'
+                        WHEN meta.payload ->> 'UF_CRM_1611163412' = '2308' THEN 'EQ. COOR SOL PEREIRA'
+                        WHEN meta.payload ->> 'UF_CRM_1611163412' = '1027' THEN 'EQ. COOR MARTA HERNANDEZ'
+                        WHEN meta.payload ->> 'UF_CRM_1611163412' = '2064' THEN 'EQ. COOR CATALINA ESCOBAR'
+                        WHEN meta.payload ->> 'UF_CRM_1611163412' = '24' THEN 'EQ. COOR JONNY ANAYA'
+                        WHEN meta.payload ->> 'UF_CRM_1611163412' = '150' THEN 'EQ. COOR YAMID MORENO'
+                        WHEN meta.payload ->> 'UF_CRM_1611163412' = '2028' THEN 'EQ. COOR ANGELICA GALEANO'
+                    END AS coordinator,
+                    SUM(COALESCE(NULLIF(meta.payload ->> 'OPPORTUNITY', '')::numeric, 0)) AS goal
+                FROM "Bitrix_tablas".crm_deal meta
+                JOIN meta_pipeline ON true
+                JOIN bitrix.pipeline_stages meta_stage
+                    ON meta_stage.pipeline_id = meta_pipeline.id
+                    AND meta_stage.bitrix_stage_id = meta.payload ->> 'STAGE_ID'
+                WHERE meta.payload ->> 'CATEGORY_ID' = '224'
+                  AND meta.payload ->> 'UF_CRM_1737653376' = @yearText
+                  AND meta_stage.name IN ('Meta RCH Coordinadores', 'Meta INS Coordinadores')
+                  AND meta.payload ->> 'TITLE' IN ('01 ENE', '02 FEB', '03 MAR', '04 ABR', '05 MAY', '06 JUN', '07 JUL', '08 AGO', '09 SEP', '10 OCT', '11 NOV', '12 DIC')
+                GROUP BY 1, 2, 3
+            ), monthly AS (
+                SELECT
+                    collections.month_number,
+                    collections.month,
+                    'LINEA COMERCIAL' AS commercial_line,
+                    SUM(collections.collected) AS collected,
+                    COALESCE(SUM(goals.goal), 0) AS goal
+                FROM collections
+                LEFT JOIN goals
+                    ON goals.month_number = collections.month_number
+                    AND goals.coordinator = collections.coordinator
+                GROUP BY collections.month_number, collections.month
             )
-            SELECT month, 'LINEA COMERCIAL' AS commercial_line, collected
-            FROM guide_collections
-            WHERE @year = 2026
-                AND (@monthNumber IS NULL OR EXTRACT(MONTH FROM month_start)::int = @monthNumber)
-                AND (@fromDate IS NULL OR (month_start + INTERVAL '1 month - 1 day')::date >= @fromDate)
-                AND (@toDate IS NULL OR month_start <= @toDate)
-            ORDER BY collected DESC, month;
+            SELECT month, commercial_line, goal, collected
+            FROM monthly
+            ORDER BY month_number;
             """;
 
         var items = new List<object>();
         decimal total = 0;
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
         await using var command = new NpgsqlCommand(sql, connection);
-        command.Parameters.AddWithValue("year", year);
+        command.Parameters.AddWithValue("yearNumber", year);
+        command.Parameters.AddWithValue("yearText", year.ToString(CultureInfo.InvariantCulture));
         AddDiegoDateFilterParameters(command, from, to, month);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        decimal totalGoal = 0;
         while (await reader.ReadAsync(cancellationToken))
         {
-            var collected = reader.GetDecimal(2);
+            var goal = reader.GetDecimal(2);
+            var collected = reader.GetDecimal(3);
+            totalGoal += goal;
             total += collected;
             items.Add(new
             {
                 month = reader.GetString(0),
                 commercialLine = reader.GetString(1),
+                goal,
                 collected
             });
         }
@@ -1323,7 +1482,7 @@ public static class BitrixDataQueries
             }
         }
 
-        return new { year, totalCollected = total, items, portfolio };
+        return new { year, totalCollected = total, totalGoal, items, portfolio };
     }
 
     public static async Task<object> GetDiegoLeadershipAndCommissionsAsync(
