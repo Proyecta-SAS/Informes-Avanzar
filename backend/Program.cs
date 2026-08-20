@@ -1337,13 +1337,18 @@ app.MapPost("/api/bitrix/sync/reports/comercial/portfolio-state", async (
     {
         "VERIFICACION CASO EXITOSO",
         "CASOS CON NOVEDAD",
+        "CASOS CON NOVEDADES ESTRUCTURACION",
         "NOTIFICADO",
         "CARTERA EN TIEMPO",
+        "MORA 0 - 30 DIAS",
         "MORA 0 - 30 DÍAS",
         "POR GESTIONAR",
+        "ANTICIPO PENDIENTE RADICACION",
+        "CARTERA DE ESTRUCTURACION",
         "ANTICIPO PENDIENTE RADICACIÓN",
         "CARTERA DE ESTRUCTURACIÓN",
         "EN SEGUIMIENTO",
+        "MORA 30 - 60 DIAS",
         "MORA 30 - 60 DÍAS",
         "COBRO PRE JURIDICO",
         "ACUERDO DE PAGO",
@@ -1353,7 +1358,9 @@ app.MapPost("/api/bitrix/sync/reports/comercial/portfolio-state", async (
         "MORA 30 - 60 DIAS",
         "ACUERDO DE PAGO EN MORA",
         "GENERACIÓN DE PAZ Y SALVO",
+        "GENERACION DE PAZ Y SALVO",
         "GANADO",
+        "GENERACION PAZ Y SALVO",
         "GENERACIÓN PAZ Y SALVO"
     };
     var fields = new[]
@@ -1374,7 +1381,16 @@ app.MapPost("/api/bitrix/sync/reports/comercial/portfolio-state", async (
         FROM bitrix.pipeline_stages stage
         JOIN bitrix.pipelines pipeline ON pipeline.id = stage.pipeline_id
         WHERE pipeline.slug = ANY(@pipelineSlugs)
-          AND UPPER(TRIM(stage.name)) = ANY(@stageNames)
+          AND REGEXP_REPLACE(
+              TRIM(UPPER(TRANSLATE(
+                  stage.name,
+                  CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241),
+                  'AEIOUUNAEIOUUN'
+              ))),
+              '[[:space:]]+',
+              ' ',
+              'g'
+          ) = ANY(@stageNames)
         ORDER BY pipeline.sync_order, stage.sort_order, stage.bitrix_stage_id;
         """;
     var reportStages = new List<(string PipelineSlug, string StageId)>();
@@ -1621,6 +1637,32 @@ if (!string.IsNullOrWhiteSpace(jobMode))
         return;
     }
 
+    if (normalizedJobMode == "commercial-extended-nightly")
+    {
+        app.Logger.LogInformation("Starting Bitrix commercial extended nightly job.");
+        await using var commercialScope = app.Services.CreateAsyncScope();
+        var commercialSynchronizer = commercialScope.ServiceProvider.GetRequiredService<IBitrixSynchronizer>();
+        var commercialResults = await commercialSynchronizer.RunCommercialExtendedNightlyAsync(CancellationToken.None);
+
+        foreach (var result in commercialResults)
+        {
+            app.Logger.LogInformation(
+                "Bitrix commercial extended nightly result: {EntityType} {Status}, read {RecordsRead}, wrote {RecordsWritten}, error {ErrorMessage}",
+                result.EntityType,
+                result.Status,
+                result.RecordsRead,
+                result.RecordsWritten,
+                result.ErrorMessage);
+        }
+
+        if (commercialResults.Any(result => !string.Equals(result.Status, "succeeded", StringComparison.OrdinalIgnoreCase)))
+        {
+            Environment.ExitCode = 1;
+        }
+
+        return;
+    }
+
     if (normalizedJobMode == "commercial-meta-goals")
     {
         var reportYear = builder.Configuration.GetValue<int?>("BITRIX_COMMERCIAL_SYNC_YEAR") ?? DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-5)).Year;
@@ -1653,7 +1695,7 @@ if (!string.IsNullOrWhiteSpace(jobMode))
         "full" => SyncMode.Full,
         "incremental" => SyncMode.Incremental,
         _ => throw new InvalidOperationException(
-            "BITRIX_SYNC_MODE must be 'full', 'incremental', 'webhook-pending', 'commercial-nightly' or 'commercial-meta-goals'.")
+            "BITRIX_SYNC_MODE must be 'full', 'incremental', 'webhook-pending', 'commercial-nightly', 'commercial-extended-nightly' or 'commercial-meta-goals'.")
     };
 
     app.Logger.LogInformation("Starting Bitrix synchronization job in {Mode} mode.", mode);

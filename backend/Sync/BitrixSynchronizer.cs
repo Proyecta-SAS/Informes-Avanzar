@@ -96,6 +96,8 @@ public sealed class BitrixSynchronizer(
             var createdTo = createdFrom.AddYears(1).AddTicks(-1);
             var results = new List<SyncResult>();
 
+            results.Add(await userSyncService.SyncUsersAsync(cancellationToken));
+
             foreach (var pipelineSlug in new[] { "rch_comercial", "pnnc_comercial" })
             {
                 results.AddRange(await SyncPipelineWithTransientRetriesAsync(
@@ -116,6 +118,55 @@ public sealed class BitrixSynchronizer(
             }
 
             results.AddRange(await RunCommercialMetaCoordinatorGoalsAsync(reportYear, cancellationToken));
+
+            return results;
+        }
+        finally
+        {
+            await repository.ReleaseGlobalLockAsync(ownerId, CancellationToken.None);
+        }
+    }
+
+    public async Task<IReadOnlyList<SyncResult>> RunCommercialExtendedNightlyAsync(CancellationToken cancellationToken)
+    {
+        var ownerId = $"{Environment.MachineName}:commercial-extended-nightly:{Guid.NewGuid():N}";
+        var locked = await repository.TryAcquireGlobalLockAsync(ownerId, TimeSpan.FromHours(12), cancellationToken);
+
+        if (!locked)
+        {
+            throw new InvalidOperationException("Another global Bitrix synchronization is already running.");
+        }
+
+        try
+        {
+            var reportYear = GetCommercialSyncYear();
+            var createdFrom = new DateTimeOffset(reportYear, 1, 1, 0, 0, 0, TimeSpan.FromHours(-5));
+            var createdTo = createdFrom.AddYears(1).AddTicks(-1);
+            var results = new List<SyncResult>
+            {
+                await userSyncService.SyncUsersAsync(cancellationToken)
+            };
+
+            foreach (var pipelineSlug in new[]
+            {
+                "cuentas_cobro",
+                "1116_comercial",
+                "rch_cartera",
+                "pnnc_cartera",
+                "1116_operativa",
+                "lp_2445_operativa",
+                "cobro_juridico_rch",
+                "cobro_juridico_pnnc"
+            })
+            {
+                results.AddRange(await SyncPipelineWithTransientRetriesAsync(
+                    pipelineSlug,
+                    cancellationToken,
+                    createdFrom,
+                    createdTo,
+                    reconcileMissing: false,
+                    entityTypeSuffix: $"extended-nightly-{reportYear}"));
+            }
 
             return results;
         }

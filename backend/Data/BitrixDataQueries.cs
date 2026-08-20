@@ -1483,7 +1483,16 @@ public static class BitrixDataQueries
                         WHEN pipelines.category_id = 68 THEN 'Insolvencia'
                         WHEN pipelines.category_id = 12 THEN 'RCH'
                     END AS commercial_line,
-                    UPPER(TRIM(COALESCE(stages.name, source.payload ->> 'STAGE_ID', ''))) AS stage_name,
+                    REGEXP_REPLACE(
+                        TRIM(UPPER(TRANSLATE(
+                            COALESCE(stages.name, source.payload ->> 'STAGE_ID', ''),
+                            CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241),
+                            'AEIOUUNAEIOUUN'
+                        ))),
+                        '[[:space:]]+',
+                        ' ',
+                        'g'
+                    ) AS stage_name,
                     COALESCE(
                         NULLIF(source.payload ->> 'OPPORTUNITY_ACCOUNT', '')::numeric,
                         NULLIF(source.payload ->> 'OPPORTUNITY', '')::numeric,
@@ -1500,16 +1509,30 @@ public static class BitrixDataQueries
                 LEFT JOIN latest_users user_payload
                     ON user_payload.bitrix_id = source.payload ->> 'ASSIGNED_BY_ID'
                 WHERE pipelines.category_id IN (68, 12)
-                    AND UPPER(TRIM(COALESCE(stages.name, source.payload ->> 'STAGE_ID', ''))) IN (
+                    AND REGEXP_REPLACE(
+                        TRIM(UPPER(TRANSLATE(
+                            COALESCE(stages.name, source.payload ->> 'STAGE_ID', ''),
+                            CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241),
+                            'AEIOUUNAEIOUUN'
+                        ))),
+                        '[[:space:]]+',
+                        ' ',
+                        'g'
+                    ) IN (
                         'VERIFICACION CASO EXITOSO',
                         'CASOS CON NOVEDAD',
+                        'CASOS CON NOVEDADES ESTRUCTURACION',
                         'NOTIFICADO',
                         'CARTERA EN TIEMPO',
+                        'MORA 0 - 30 DIAS',
                         'MORA 0 - 30 DÍAS',
                         'POR GESTIONAR',
+                        'ANTICIPO PENDIENTE RADICACION',
+                        'CARTERA DE ESTRUCTURACION',
                         'ANTICIPO PENDIENTE RADICACIÓN',
                         'CARTERA DE ESTRUCTURACIÓN',
                         'EN SEGUIMIENTO',
+                        'MORA 30 - 60 DIAS',
                         'MORA 30 - 60 DÍAS',
                         'COBRO PRE JURIDICO',
                         'ACUERDO DE PAGO',
@@ -1519,7 +1542,9 @@ public static class BitrixDataQueries
                         'MORA 30 - 60 DIAS',
                         'ACUERDO DE PAGO EN MORA',
                         'GENERACIÓN DE PAZ Y SALVO',
+                        'GENERACION DE PAZ Y SALVO',
                         'GANADO',
+                        'GENERACION PAZ Y SALVO',
                         'GENERACIÓN PAZ Y SALVO'
                     )
             )
@@ -1531,13 +1556,18 @@ public static class BitrixDataQueries
                     'CASOS CON NOVEDAD',
                     'NOTIFICADO',
                     'CARTERA EN TIEMPO',
+                    'MORA 0 - 30 DIAS',
                     'MORA 0 - 30 DÍAS',
                     'POR GESTIONAR',
+                    'ANTICIPO PENDIENTE RADICACION',
+                    'CARTERA DE ESTRUCTURACION',
                     'ANTICIPO PENDIENTE RADICACIÓN',
                     'CARTERA DE ESTRUCTURACIÓN',
                     'EN SEGUIMIENTO'
                 )), 0) AS receivable,
                 COALESCE(SUM(amount) FILTER (WHERE stage_name IN (
+                    'CASOS CON NOVEDADES ESTRUCTURACION',
+                    'MORA 30 - 60 DIAS',
                     'MORA 30 - 60 DÍAS',
                     'COBRO PRE JURIDICO',
                     'ACUERDO DE PAGO',
@@ -1549,7 +1579,9 @@ public static class BitrixDataQueries
                 )), 0) AS with_novelty,
                 COALESCE(SUM(amount) FILTER (WHERE stage_name IN (
                     'GENERACIÓN DE PAZ Y SALVO',
+                    'GENERACION DE PAZ Y SALVO',
                     'GANADO',
+                    'GENERACION PAZ Y SALVO',
                     'GENERACIÓN PAZ Y SALVO'
                 )), 0) AS successful
             FROM portfolio
@@ -3116,7 +3148,17 @@ public static class BitrixDataQueries
                         WHEN COALESCE(snapshot.custom_fields ->> 'UF_CRM_1597419734', payload.payload ->> 'UF_CRM_1597419734') ~ '^\d{4}-\d{2}-\d{2}'
                             THEN SUBSTRING(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1597419734', payload.payload ->> 'UF_CRM_1597419734') FROM 1 FOR 10)::date
                     END AS finish_date,
-                    COALESCE(stage.name, d.stage_id) AS stage_name
+                    COALESCE(stage.name, d.stage_id) AS stage_name,
+                    REGEXP_REPLACE(
+                        TRIM(UPPER(TRANSLATE(
+                            COALESCE(stage.name, d.stage_id, ''),
+                            CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241),
+                            'AEIOUUNAEIOUUN'
+                        ))),
+                        '[[:space:]]+',
+                        ' ',
+                        'g'
+                    ) AS stage_key
                 FROM bitrix.deals d
                 INNER JOIN bitrix.pipelines p ON p.id = d.pipeline_id
                 INNER JOIN bitrix.entity_snapshots snapshot
@@ -3171,7 +3213,7 @@ public static class BitrixDataQueries
                     COUNT(finish_date) AS finished_cases
                 FROM source
                 WHERE finish_date IS NOT NULL
-                  AND stage_name IN ('ACUERDO EXITOSO', 'LIQUIDACIÓN PATRIMONIAL')
+                  AND stage_key IN ('ACUERDO EXITOSO', 'LIQUIDACION PATRIMONIAL')
                   AND EXTRACT(YEAR FROM finish_date)::integer = @yearNumber
                 GROUP BY EXTRACT(MONTH FROM finish_date)::integer
             )
@@ -3226,30 +3268,40 @@ public static class BitrixDataQueries
                 SELECT
                     d.id,
                     COALESCE(stage.name, d.stage_id) AS stage_name,
+                    REGEXP_REPLACE(
+                        TRIM(UPPER(TRANSLATE(
+                            COALESCE(stage.name, d.stage_id, ''),
+                            CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241),
+                            'AEIOUUNAEIOUUN'
+                        ))),
+                        '[[:space:]]+',
+                        ' ',
+                        'g'
+                    ) AS stage_key,
                     COALESCE(stage.sort_order, 9999) AS stage_order,
                     CASE
-                        WHEN COALESCE(stage.name, d.stage_id) IN ('RADICACION POR VALIDAR ', 'RADICACION POR VALIDAR', 'RADICACIÓN POR VALIDAR')
+                        WHEN REGEXP_REPLACE(TRIM(UPPER(TRANSLATE(COALESCE(stage.name, d.stage_id, ''), CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241), 'AEIOUUNAEIOUUN'))), '[[:space:]]+', ' ', 'g') = 'RADICACION POR VALIDAR'
                             THEN CURRENT_DATE - (
                                 CASE
                                     WHEN COALESCE(snapshot.custom_fields ->> 'UF_CRM_1628266904138', payload.payload ->> 'UF_CRM_1628266904138') ~ '^\d{4}-\d{2}-\d{2}'
                                         THEN SUBSTRING(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1628266904138', payload.payload ->> 'UF_CRM_1628266904138') FROM 1 FOR 10)::date
                                 END
                             ) - 5
-                        WHEN COALESCE(stage.name, d.stage_id) = 'DOCUMENTACIÓN SUBSANADA COMERCIAL'
+                        WHEN REGEXP_REPLACE(TRIM(UPPER(TRANSLATE(COALESCE(stage.name, d.stage_id, ''), CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241), 'AEIOUUNAEIOUUN'))), '[[:space:]]+', ' ', 'g') = 'DOCUMENTACION SUBSANADA COMERCIAL'
                             THEN CURRENT_DATE - (
                                 CASE
                                     WHEN COALESCE(snapshot.custom_fields ->> 'UF_CRM_1654544609940', payload.payload ->> 'UF_CRM_1654544609940') ~ '^\d{4}-\d{2}-\d{2}'
                                         THEN SUBSTRING(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1654544609940', payload.payload ->> 'UF_CRM_1654544609940') FROM 1 FOR 10)::date
                                 END
                             ) - 5
-                        WHEN COALESCE(stage.name, d.stage_id) = 'ANÁLISIS JURÍDICO'
+                        WHEN REGEXP_REPLACE(TRIM(UPPER(TRANSLATE(COALESCE(stage.name, d.stage_id, ''), CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241), 'AEIOUUNAEIOUUN'))), '[[:space:]]+', ' ', 'g') = 'ANALISIS JURIDICO'
                             THEN CURRENT_DATE - (
                                 CASE
                                     WHEN COALESCE(snapshot.custom_fields ->> 'UF_CRM_1590601503', payload.payload ->> 'UF_CRM_1590601503') ~ '^\d{4}-\d{2}-\d{2}'
                                         THEN SUBSTRING(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1590601503', payload.payload ->> 'UF_CRM_1590601503') FROM 1 FOR 10)::date
                                 END
                             ) - 14
-                        WHEN COALESCE(stage.name, d.stage_id) IN ('FIRMA OTRO SÍ', 'FIRMA OTRO SI')
+                        WHEN REGEXP_REPLACE(TRIM(UPPER(TRANSLATE(COALESCE(stage.name, d.stage_id, ''), CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241), 'AEIOUUNAEIOUUN'))), '[[:space:]]+', ' ', 'g') = 'FIRMA OTRO SI'
                             THEN CURRENT_DATE - (
                                 CASE
                                     WHEN COALESCE(snapshot.custom_fields ->> 'UF_CRM_1597419361', payload.payload ->> 'UF_CRM_1597419361') ~ '^\d{4}-\d{2}-\d{2}'
@@ -3305,13 +3357,20 @@ public static class BitrixDataQueries
                     AND stage.bitrix_stage_id = d.stage_id
                 WHERE
                     p.category_id = 28
-                    AND COALESCE(stage.name, d.stage_id) IN (
+                    AND REGEXP_REPLACE(
+                        TRIM(UPPER(TRANSLATE(
+                            COALESCE(stage.name, d.stage_id, ''),
+                            CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241),
+                            'AEIOUUNAEIOUUN'
+                        ))),
+                        '[[:space:]]+',
+                        ' ',
+                        'g'
+                    ) IN (
                         'RADICACION POR VALIDAR ',
                         'RADICACION POR VALIDAR',
-                        'RADICACIÓN POR VALIDAR',
-                        'DOCUMENTACIÓN SUBSANADA COMERCIAL',
-                        'ANÁLISIS JURÍDICO',
-                        'FIRMA OTRO SÍ',
+                        'DOCUMENTACION SUBSANADA COMERCIAL',
+                        'ANALISIS JURIDICO',
                         'FIRMA OTRO SI',
                         'DOCUMENTACION SUBSANADA OPERATIVA',
                         'SOLICITUD ENVIADA',
@@ -3591,6 +3650,16 @@ public static class BitrixDataQueries
             WITH deal_dates AS (
                 SELECT
                     COALESCE(stage.name, d.stage_id) AS stage_name,
+                    REGEXP_REPLACE(
+                        TRIM(UPPER(TRANSLATE(
+                            COALESCE(stage.name, d.stage_id, ''),
+                            CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241),
+                            'AEIOUUNAEIOUUN'
+                        ))),
+                        '[[:space:]]+',
+                        ' ',
+                        'g'
+                    ) AS stage_key,
                     CASE WHEN COALESCE(snapshot.custom_fields ->> 'UF_CRM_1628266904138', payload.payload ->> 'UF_CRM_1628266904138') ~ '^\d{4}-\d{2}-\d{2}' THEN SUBSTRING(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1628266904138', payload.payload ->> 'UF_CRM_1628266904138') FROM 1 FOR 10)::date END AS start_date,
                     CASE WHEN COALESCE(snapshot.custom_fields ->> 'UF_CRM_1654544609940', payload.payload ->> 'UF_CRM_1654544609940') ~ '^\d{4}-\d{2}-\d{2}' THEN SUBSTRING(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1654544609940', payload.payload ->> 'UF_CRM_1654544609940') FROM 1 FOR 10)::date END AS commercial_fixed_date,
                     CASE WHEN COALESCE(snapshot.custom_fields ->> 'UF_CRM_1590601503', payload.payload ->> 'UF_CRM_1590601503') ~ '^\d{4}-\d{2}-\d{2}' THEN SUBSTRING(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1590601503', payload.payload ->> 'UF_CRM_1590601503') FROM 1 FOR 10)::date END AS legal_date,
@@ -3624,32 +3693,32 @@ public static class BitrixDataQueries
                 SELECT
                     stage_name,
                     CASE
-                        WHEN stage_name LIKE 'RADICACION POR VALIDAR%' AND start_date IS NOT NULL AND CURRENT_DATE - start_date > 5 THEN 1
-                        WHEN stage_name = 'DOCUMENTACIÃ“N SUBSANADA COMERCIAL' AND commercial_fixed_date IS NOT NULL AND CURRENT_DATE - commercial_fixed_date > 5 THEN 1
-                        WHEN stage_name = 'ANÃLISIS JURÃDICO' AND legal_date IS NOT NULL AND CURRENT_DATE - legal_date > 13 THEN 1
-                        WHEN stage_name LIKE 'FIRMA OTRO S%' AND addendum_date IS NOT NULL AND CURRENT_DATE - addendum_date > 3 THEN 1
-                        WHEN stage_name = 'DOCUMENTACION SUBSANADA OPERATIVA' AND operational_fixed_date IS NOT NULL AND CURRENT_DATE - operational_fixed_date > 6 THEN 1
-                        WHEN stage_name = 'SOLICITUD ENVIADA' AND sent_date IS NOT NULL AND CURRENT_DATE - sent_date > 4 THEN 1
-                        WHEN stage_name = 'RADICADO CENTRO CONCILIACION' AND conciliation_date IS NOT NULL AND CURRENT_DATE - conciliation_date > 35 THEN 1
-                        WHEN stage_name = 'CITA DE PRESENTACION' AND appointment_date IS NOT NULL AND CURRENT_DATE - appointment_date > 24 THEN 1
-                        WHEN stage_name = 'PAGO RECIBIDO' AND payment_date IS NOT NULL AND CURRENT_DATE - payment_date > 10 THEN 1
-                        WHEN stage_name = 'VENTAS Y SEGUIMIENTO DE APERTURA' AND start_date IS NOT NULL AND CURRENT_DATE - start_date > 10 THEN 1
-                        WHEN stage_name = 'CONTRATOS ENVIADOS' AND contracts_sent_date IS NOT NULL AND CURRENT_DATE - (contracts_sent_date + 10) > 10 THEN 1
-                        WHEN stage_name = 'PROCESOS RECHAZADOS' AND rejected_date IS NOT NULL AND CURRENT_DATE - (rejected_date + 20) > 90 THEN 1
-                        WHEN stage_name = 'CONTRATO FIRMADO' AND commercial_fixed_date IS NOT NULL AND CURRENT_DATE - commercial_fixed_date > 90 THEN 1
-                        WHEN stage_name = '1. ADMISION Y NOMBRAMIENTO DEL LIQUIDADOR' AND admission_date IS NOT NULL AND CURRENT_DATE - admission_date > 180 THEN 1
-                        WHEN stage_name = '1. ACTULIZACION DE ACREENCIAS ADMISION' AND claims_date IS NOT NULL AND CURRENT_DATE - (claims_date + 180) > 90 THEN 1
-                        WHEN stage_name = '1. OBJECIONES U OBSERVACIONES' AND objections_date IS NOT NULL AND CURRENT_DATE - (objections_date + 270) > 180 THEN 1
-                        WHEN stage_name = '1. PROYECTO DE ADJUDICACION' AND award_project_date IS NOT NULL AND CURRENT_DATE - (award_project_date + 450) > 30 THEN 1
-                        WHEN stage_name = '2. ACUERDO RESOLUTORIO' AND resolutory_date IS NOT NULL AND CURRENT_DATE - (resolutory_date + 480) > 545 THEN 1
-                        WHEN stage_name = '3. AUDIENCIA DE ADJUDICACION' AND hearing_award_date IS NOT NULL AND CURRENT_DATE - hearing_award_date > 150 THEN 1
-                        WHEN stage_name = '3. SENTENCIA Y OFICIOS' AND hearing_award_date IS NOT NULL AND CURRENT_DATE - (hearing_award_date + 150) > 90 THEN 1
-                        WHEN stage_name = '3. CITA DE FINALIZACION' AND final_appointment_date IS NOT NULL AND CURRENT_DATE - (final_appointment_date + 240) > 10 THEN 1
+                        WHEN stage_key LIKE 'RADICACION POR VALIDAR%' AND start_date IS NOT NULL AND CURRENT_DATE - start_date > 5 THEN 1
+                        WHEN stage_key = 'DOCUMENTACION SUBSANADA COMERCIAL' AND commercial_fixed_date IS NOT NULL AND CURRENT_DATE - commercial_fixed_date > 5 THEN 1
+                        WHEN stage_key = 'ANALISIS JURIDICO' AND legal_date IS NOT NULL AND CURRENT_DATE - legal_date > 13 THEN 1
+                        WHEN stage_key LIKE 'FIRMA OTRO S%' AND addendum_date IS NOT NULL AND CURRENT_DATE - addendum_date > 3 THEN 1
+                        WHEN stage_key = 'DOCUMENTACION SUBSANADA OPERATIVA' AND operational_fixed_date IS NOT NULL AND CURRENT_DATE - operational_fixed_date > 6 THEN 1
+                        WHEN stage_key = 'SOLICITUD ENVIADA' AND sent_date IS NOT NULL AND CURRENT_DATE - sent_date > 4 THEN 1
+                        WHEN stage_key = 'RADICADO CENTRO CONCILIACION' AND conciliation_date IS NOT NULL AND CURRENT_DATE - conciliation_date > 35 THEN 1
+                        WHEN stage_key = 'CITA DE PRESENTACION' AND appointment_date IS NOT NULL AND CURRENT_DATE - appointment_date > 24 THEN 1
+                        WHEN stage_key = 'PAGO RECIBIDO' AND payment_date IS NOT NULL AND CURRENT_DATE - payment_date > 10 THEN 1
+                        WHEN stage_key = 'VENTAS Y SEGUIMIENTO DE APERTURA' AND start_date IS NOT NULL AND CURRENT_DATE - start_date > 10 THEN 1
+                        WHEN stage_key = 'CONTRATOS ENVIADOS' AND contracts_sent_date IS NOT NULL AND CURRENT_DATE - (contracts_sent_date + 10) > 10 THEN 1
+                        WHEN stage_key = 'PROCESOS RECHAZADOS' AND rejected_date IS NOT NULL AND CURRENT_DATE - (rejected_date + 20) > 90 THEN 1
+                        WHEN stage_key = 'CONTRATO FIRMADO' AND commercial_fixed_date IS NOT NULL AND CURRENT_DATE - commercial_fixed_date > 90 THEN 1
+                        WHEN stage_key = '1. ADMISION Y NOMBRAMIENTO DEL LIQUIDADOR' AND admission_date IS NOT NULL AND CURRENT_DATE - admission_date > 180 THEN 1
+                        WHEN stage_key = '1. ACTULIZACION DE ACREENCIAS ADMISION' AND claims_date IS NOT NULL AND CURRENT_DATE - (claims_date + 180) > 90 THEN 1
+                        WHEN stage_key = '1. OBJECIONES U OBSERVACIONES' AND objections_date IS NOT NULL AND CURRENT_DATE - (objections_date + 270) > 180 THEN 1
+                        WHEN stage_key = '1. PROYECTO DE ADJUDICACION' AND award_project_date IS NOT NULL AND CURRENT_DATE - (award_project_date + 450) > 30 THEN 1
+                        WHEN stage_key = '2. ACUERDO RESOLUTORIO' AND resolutory_date IS NOT NULL AND CURRENT_DATE - (resolutory_date + 480) > 545 THEN 1
+                        WHEN stage_key = '3. AUDIENCIA DE ADJUDICACION' AND hearing_award_date IS NOT NULL AND CURRENT_DATE - hearing_award_date > 150 THEN 1
+                        WHEN stage_key = '3. SENTENCIA Y OFICIOS' AND hearing_award_date IS NOT NULL AND CURRENT_DATE - (hearing_award_date + 150) > 90 THEN 1
+                        WHEN stage_key = '3. CITA DE FINALIZACION' AND final_appointment_date IS NOT NULL AND CURRENT_DATE - (final_appointment_date + 240) > 10 THEN 1
                         ELSE 0
                     END AS is_late
                 FROM deal_dates
-                WHERE stage_name IN (
-                    'RADICACION POR VALIDAR ', 'DOCUMENTACIÃ“N SUBSANADA COMERCIAL', 'ANÃLISIS JURÃDICO', 'FIRMA OTRO SÃ',
+                WHERE stage_key IN (
+                    'RADICACION POR VALIDAR', 'DOCUMENTACION SUBSANADA COMERCIAL', 'ANALISIS JURIDICO', 'FIRMA OTRO SI',
                     'DOCUMENTACION SUBSANADA OPERATIVA', 'SOLICITUD ENVIADA', 'RADICADO CENTRO CONCILIACION', 'CITA DE PRESENTACION',
                     'PAGO RECIBIDO', 'VENTAS Y SEGUIMIENTO DE APERTURA', 'CONTRATOS ENVIADOS', 'PROCESOS RECHAZADOS',
                     'CONTRATO FIRMADO', '1. ADMISION Y NOMBRAMIENTO DEL LIQUIDADOR', '1. ACTULIZACION DE ACREENCIAS ADMISION',
@@ -4764,7 +4833,17 @@ public static class BitrixDataQueries
                         WHEN '37486' THEN 'SUGERENCIA'
                         ELSE UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1607022885798', payload.payload ->> 'UF_CRM_1607022885798', ''))
                     END AS request_type,
-                    COALESCE(stage.name, d.stage_id) AS stage
+                    COALESCE(stage.name, d.stage_id) AS stage,
+                    REGEXP_REPLACE(
+                        TRIM(UPPER(TRANSLATE(
+                            COALESCE(stage.name, d.stage_id, ''),
+                            CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241),
+                            'AEIOUUNAEIOUUN'
+                        ))),
+                        '[[:space:]]+',
+                        ' ',
+                        'g'
+                    ) AS stage_key
                 FROM bitrix.deals d
                 INNER JOIN bitrix.pipelines p ON p.id = d.pipeline_id
                 INNER JOIN bitrix.entity_snapshots snapshot
@@ -4778,14 +4857,23 @@ public static class BitrixDataQueries
                     AND stage.bitrix_stage_id = d.stage_id
                 WHERE p.category_id = 97
                     AND EXTRACT(YEAR FROM d.bitrix_created_at) = @year
-                    AND COALESCE(stage.name, d.stage_id) IN (
+                    AND REGEXP_REPLACE(
+                        TRIM(UPPER(TRANSLATE(
+                            COALESCE(stage.name, d.stage_id, ''),
+                            CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241),
+                            'AEIOUUNAEIOUUN'
+                        ))),
+                        '[[:space:]]+',
+                        ' ',
+                        'g'
+                    ) IN (
                         'PQRF RADICADOS',
                         'ESCALADO',
-                        'ESCALADO EN GESTIÓN',
+                        'ESCALADO EN GESTION',
                         'GESTIONANDO',
                         'ESCALADO VENCIDO',
                         'ESCALADO CON RESPUESTA',
-                        'REASIGNACIÓN RESPONSABLE',
+                        'REASIGNACION RESPONSABLE',
                         'RESPUESTA PROYECTADA',
                         'PQRF  FINALIZADO'
                     )
@@ -4869,7 +4957,17 @@ public static class BitrixDataQueries
                         WHEN '37486' THEN 'SUGERENCIA'
                         ELSE COALESCE(NULLIF(UPPER(snapshot.custom_fields ->> 'UF_CRM_1607022885798'), ''), 'SIN DEFINIR')
                     END AS requirement,
-                    COALESCE(stage.name, d.stage_id) AS stage
+                    COALESCE(stage.name, d.stage_id) AS stage,
+                    REGEXP_REPLACE(
+                        TRIM(UPPER(TRANSLATE(
+                            COALESCE(stage.name, d.stage_id, ''),
+                            CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241),
+                            'AEIOUUNAEIOUUN'
+                        ))),
+                        '[[:space:]]+',
+                        ' ',
+                        'g'
+                    ) AS stage_key
                 FROM bitrix.deals d
                 INNER JOIN bitrix.pipelines p ON p.id = d.pipeline_id
                 INNER JOIN bitrix.entity_snapshots snapshot
@@ -4883,14 +4981,23 @@ public static class BitrixDataQueries
                     AND stage.bitrix_stage_id = d.stage_id
                 WHERE p.category_id = 97
                     AND EXTRACT(YEAR FROM d.bitrix_created_at) = @year
-                    AND COALESCE(stage.name, d.stage_id) IN (
+                    AND REGEXP_REPLACE(
+                        TRIM(UPPER(TRANSLATE(
+                            COALESCE(stage.name, d.stage_id, ''),
+                            CHR(193)||CHR(201)||CHR(205)||CHR(211)||CHR(218)||CHR(220)||CHR(209)||CHR(225)||CHR(233)||CHR(237)||CHR(243)||CHR(250)||CHR(252)||CHR(241),
+                            'AEIOUUNAEIOUUN'
+                        ))),
+                        '[[:space:]]+',
+                        ' ',
+                        'g'
+                    ) IN (
                         'PQRF RADICADOS',
                         'ESCALADO',
-                        'ESCALADO EN GESTIÓN',
+                        'ESCALADO EN GESTION',
                         'GESTIONANDO',
                         'ESCALADO VENCIDO',
                         'ESCALADO CON RESPUESTA',
-                        'REASIGNACIÓN RESPONSABLE',
+                        'REASIGNACION RESPONSABLE',
                         'RESPUESTA PROYECTADA',
                         'PQRF  FINALIZADO'
                     )

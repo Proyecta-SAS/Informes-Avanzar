@@ -6,5 +6,7 @@ public interface IBitrixSynchronizer
 
     Task<IReadOnlyList<SyncResult>> RunCommercialNightlyAsync(CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<SyncResult>> RunCommercialExtendedNightlyAsync(CancellationToken cancellationToken);
+
     Task<IReadOnlyList<SyncResult>> RunCommercialMetaCoordinatorGoalsAsync(int year, CancellationToken cancellationToken);
 }

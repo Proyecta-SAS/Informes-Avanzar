@@ -51,6 +51,31 @@ Se ejecuta diariamente a las 03:00. Este job no sincroniza usuarios, etapas, act
 
 En comerciales 2026 no borra registros locales que Bitrix no devuelva en la corrida (`reconcileMissing=false`). Esta proteccion evita borrados erroneos cuando Bitrix corta una consulta grande o devuelve error a mitad de paginacion. Si aparecen registros extra en produccion, primero se deben comparar IDs y validar una muestra en Bitrix antes de eliminar o reconciliar.
 
+### Comercial extendida nocturna
+
+- Job sugerido: `informes-bitrix-commercial-extended-nightly`.
+- Scheduler sugerido: `scheduler-informes-bitrix-commercial-extended-nightly`.
+- Variable adicional: `BITRIX_SYNC_MODE=commercial-extended-nightly`.
+- Ano objetivo: `BITRIX_COMMERCIAL_SYNC_YEAR=2026`.
+- Timeout sugerido: 12 horas.
+- Tareas: 1.
+- Reintentos del job: 0.
+- Cron sugerido: `30 5 * * *`.
+- Zona horaria: `America/Bogota`.
+
+Se ejecuta separada de la comercial nocturna para refrescar pipelines de soporte sin aumentar el riesgo de timeout del job principal. Todas estas sincronizaciones se filtran al ano objetivo por fecha de creacion y usan `reconcileMissing=false`: actualizan e insertan registros, pero no marcan como borrados los registros locales que Bitrix no devuelva en una corrida incompleta.
+
+Sincroniza:
+
+- `cuentas_cobro`.
+- `1116_comercial`.
+- `rch_cartera`.
+- `pnnc_cartera`.
+- `1116_operativa`.
+- `lp_2445_operativa`.
+- `cobro_juridico_rch`.
+- `cobro_juridico_pnnc`.
+
 Comando manual:
 
 ```powershell
