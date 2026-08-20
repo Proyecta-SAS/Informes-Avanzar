@@ -1524,6 +1524,9 @@ public static class BitrixDataQueries
                         'CASOS CON NOVEDADES ESTRUCTURACION',
                         'NOTIFICADO',
                         'CARTERA EN TIEMPO',
+                        'ACTUALIZAR',
+                        'CAMBIO CONTRATO',
+                        'CUARENTENA',
                         'MORA 0 - 30 DIAS',
                         'MORA 0 - 30 DÍAS',
                         'POR GESTIONAR',
@@ -1532,8 +1535,10 @@ public static class BitrixDataQueries
                         'ANTICIPO PENDIENTE RADICACIÓN',
                         'CARTERA DE ESTRUCTURACIÓN',
                         'EN SEGUIMIENTO',
+                        'PENDIENTE POR REVISION CONTRATO',
                         'MORA 30 - 60 DIAS',
                         'MORA 30 - 60 DÍAS',
+                        'MORA 60 - 90',
                         'COBRO PRE JURIDICO',
                         'ACUERDO DE PAGO',
                         'INCUMPLIMIENTO DE ACUERDO',
@@ -1543,6 +1548,8 @@ public static class BitrixDataQueries
                         'ACUERDO DE PAGO EN MORA',
                         'GENERACIÓN DE PAZ Y SALVO',
                         'GENERACION DE PAZ Y SALVO',
+                        'PAZ Y SALVO GENERADO',
+                        'FACTURACION',
                         'GANADO',
                         'GENERACION PAZ Y SALVO',
                         'GENERACIÓN PAZ Y SALVO'
@@ -1556,6 +1563,9 @@ public static class BitrixDataQueries
                     'CASOS CON NOVEDAD',
                     'NOTIFICADO',
                     'CARTERA EN TIEMPO',
+                    'ACTUALIZAR',
+                    'CAMBIO CONTRATO',
+                    'CUARENTENA',
                     'MORA 0 - 30 DIAS',
                     'MORA 0 - 30 DÍAS',
                     'POR GESTIONAR',
@@ -1563,11 +1573,13 @@ public static class BitrixDataQueries
                     'CARTERA DE ESTRUCTURACION',
                     'ANTICIPO PENDIENTE RADICACIÓN',
                     'CARTERA DE ESTRUCTURACIÓN',
-                    'EN SEGUIMIENTO'
+                    'EN SEGUIMIENTO',
+                    'PENDIENTE POR REVISION CONTRATO'
                 )), 0) AS receivable,
                 COALESCE(SUM(amount) FILTER (WHERE stage_name IN (
                     'CASOS CON NOVEDADES ESTRUCTURACION',
                     'MORA 30 - 60 DIAS',
+                    'MORA 60 - 90',
                     'MORA 30 - 60 DÍAS',
                     'COBRO PRE JURIDICO',
                     'ACUERDO DE PAGO',
@@ -1580,6 +1592,8 @@ public static class BitrixDataQueries
                 COALESCE(SUM(amount) FILTER (WHERE stage_name IN (
                     'GENERACIÓN DE PAZ Y SALVO',
                     'GENERACION DE PAZ Y SALVO',
+                    'PAZ Y SALVO GENERADO',
+                    'FACTURACION',
                     'GANADO',
                     'GENERACION PAZ Y SALVO',
                     'GENERACIÓN PAZ Y SALVO'
