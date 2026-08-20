@@ -1509,6 +1509,7 @@ public static class BitrixDataQueries
                 LEFT JOIN latest_users user_payload
                     ON user_payload.bitrix_id = source.payload ->> 'ASSIGNED_BY_ID'
                 WHERE pipelines.category_id IN (68, 12)
+                    AND EXTRACT(YEAR FROM (source.payload ->> 'DATE_CREATE')::timestamptz AT TIME ZONE 'America/Bogota') = @year
                     AND REGEXP_REPLACE(
                         TRIM(UPPER(TRANSLATE(
                             COALESCE(stages.name, source.payload ->> 'STAGE_ID', ''),
@@ -1607,6 +1608,7 @@ public static class BitrixDataQueries
         var portfolio = new List<object>();
         await using (var portfolioCommand = new NpgsqlCommand(portfolioSql, connection))
         {
+            portfolioCommand.Parameters.AddWithValue("year", year);
             await using var portfolioReader = await portfolioCommand.ExecuteReaderAsync(cancellationToken);
             while (await portfolioReader.ReadAsync(cancellationToken))
             {
