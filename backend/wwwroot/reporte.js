@@ -371,12 +371,19 @@ const loadDiegoRadicatedValues = async () => {
     const months = [...new Set(data.items.map((item) => item.month))]
       .sort((left, right) => Number.parseInt(left, 10) - Number.parseInt(right, 10));
     const advisorValues = new Map();
+    const advisorMeta = new Map();
     data.items.forEach((item) => {
       if (!advisorValues.has(item.advisor)) advisorValues.set(item.advisor, new Map());
       const monthlyValues = advisorValues.get(item.advisor);
       monthlyValues.set(item.month, (monthlyValues.get(item.month) ?? 0) + item.totalAchieved);
+      if (!advisorMeta.has(item.advisor)) advisorMeta.set(item.advisor, { coordinators: new Set(), leaders: new Set(), lines: new Set() });
+      const meta = advisorMeta.get(item.advisor);
+      if (item.coordinator) meta.coordinators.add(item.coordinator);
+      if (item.leader) meta.leaders.add(item.leader);
+      if (item.pipeline) meta.lines.add(normalizeFilterText(item.pipeline).includes("pnnc") ? "pnnc" : normalizeFilterText(item.pipeline));
     });
     const advisors = [...advisorValues.keys()].sort((left, right) => left.localeCompare(right, "es"));
+    const dataSet = (values) => encodeURIComponent([...values].join("\u0001"));
 
     container.innerHTML = `
       <div class="radicated-table-wrap radicated-matrix-wrap">
@@ -386,7 +393,7 @@ const loadDiegoRadicatedValues = async () => {
             <tr>${months.map((month) => `<th data-month="${month.slice(0, 2)}">${month}</th>`).join("")}</tr>
           </thead>
           <tbody>${advisors.map((advisor) => `
-          <tr data-advisor="${encodeURIComponent(advisor)}"><td>${advisor}</td>${months.map((month) => {
+          <tr data-advisor="${encodeURIComponent(advisor)}" data-coordinator="${dataSet(advisorMeta.get(advisor)?.coordinators ?? [])}" data-leader="${dataSet(advisorMeta.get(advisor)?.leaders ?? [])}" data-line="${dataSet(advisorMeta.get(advisor)?.lines ?? [])}"><td>${advisor}</td>${months.map((month) => {
               const value = advisorValues.get(advisor).get(month);
               return `<td data-month="${month.slice(0, 2)}">${value ? formatNumber.format(value) : ""}</td>`;
             }).join("")}</tr>
@@ -1048,7 +1055,11 @@ const loadDiegoFilterHierarchy = async () => {
   setupDiegoFilters();
 };
 
-const normalizeFilterText = (value) => value.trim().toLocaleLowerCase("es-CO");
+const normalizeFilterText = (value) => String(value ?? "").trim().toLocaleLowerCase("es-CO");
+const splitFilterValues = (value) => String(value ?? "")
+  .split("\u0001")
+  .map((item) => normalizeFilterText(item))
+  .filter(Boolean);
 
 const multiFilterSelectIds = new Set(["diegoMonth", "diegoCoordinator", "diegoLeader", "diegoAdvisor"]);
 
@@ -1283,18 +1294,27 @@ const applyDiegoFilters = () => {
   });
 
   const belongsToSelectedHierarchy = (advisorValue, leaderValue, coordinatorValue) => {
-    const advisor = normalizeFilterText(advisorValue ?? "");
-    const leader = normalizeFilterText(leaderValue ?? "");
-    const coordinator = normalizeFilterText(coordinatorValue ?? "");
-    if (!advisor && !leader && !coordinator) return true;
+    const advisors = splitFilterValues(advisorValue);
+    const leaders = splitFilterValues(leaderValue);
+    const coordinators = splitFilterValues(coordinatorValue);
+    if (!advisors.length && !leaders.length && !coordinators.length) return true;
     if (!commercialHierarchy.length) return true;
-    if (advisor && leader && coordinator) return hierarchyIndexes.complete.has(`${advisor}\u0001${leader}\u0001${coordinator}`);
-    if (advisor && leader) return hierarchyIndexes.advisorLeader.has(`${advisor}\u0001${leader}`);
-    if (advisor && coordinator) return hierarchyIndexes.advisorCoordinator.has(`${advisor}\u0001${coordinator}`);
-    if (leader && coordinator) return hierarchyIndexes.leaderCoordinator.has(`${leader}\u0001${coordinator}`);
-    if (advisor) return hierarchyIndexes.advisors.has(advisor);
-    if (leader) return hierarchyIndexes.leaders.has(leader);
-    return hierarchyIndexes.coordinators.has(coordinator);
+    if (advisors.length && leaders.length && coordinators.length) {
+      return advisors.some((advisor) => leaders.some((leader) => coordinators.some((coordinator) =>
+        hierarchyIndexes.complete.has(`${advisor}\u0001${leader}\u0001${coordinator}`))));
+    }
+    if (advisors.length && leaders.length) {
+      return advisors.some((advisor) => leaders.some((leader) => hierarchyIndexes.advisorLeader.has(`${advisor}\u0001${leader}`)));
+    }
+    if (advisors.length && coordinators.length) {
+      return advisors.some((advisor) => coordinators.some((coordinator) => hierarchyIndexes.advisorCoordinator.has(`${advisor}\u0001${coordinator}`)));
+    }
+    if (leaders.length && coordinators.length) {
+      return leaders.some((leader) => coordinators.some((coordinator) => hierarchyIndexes.leaderCoordinator.has(`${leader}\u0001${coordinator}`)));
+    }
+    if (advisors.length) return advisors.some((advisor) => hierarchyIndexes.advisors.has(advisor));
+    if (leaders.length) return leaders.some((leader) => hierarchyIndexes.leaders.has(leader));
+    return coordinators.some((coordinator) => hierarchyIndexes.coordinators.has(coordinator));
   };
 
   if (generalDashboardData?.possibleCloseCommercial) {
