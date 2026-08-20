@@ -235,17 +235,7 @@ public static class BitrixDataQueries
                             WHEN '2026' THEN '39138'
                         END
                     )
-                    AND (
-                        (
-                            p.category_id = 10
-                            AND NULLIF(s.custom_fields ->> 'UF_CRM_1628266963127', '') IS NOT NULL
-                        )
-                        OR
-                        (
-                            p.category_id = 28
-                            AND NULLIF(s.custom_fields ->> 'UF_CRM_1590601503', '') IS NOT NULL
-                        )
-                    )
+                    AND NULLIF(s.custom_fields ->> 'UF_CRM_1676419915', '') IS NOT NULL
             ), radicated AS (
                 SELECT month, pipeline, advisor, advisor_id, amount
                 FROM (
@@ -1840,17 +1830,7 @@ public static class BitrixDataQueries
                             WHEN '2026' THEN '39138'
                         END
                     )
-                    AND (
-                        (
-                            source.payload ->> 'CATEGORY_ID' = '10'
-                            AND NULLIF(source.payload ->> 'UF_CRM_1628266963127', '') IS NOT NULL
-                        )
-                        OR
-                        (
-                            source.payload ->> 'CATEGORY_ID' = '28'
-                            AND NULLIF(source.payload ->> 'UF_CRM_1590601503', '') IS NOT NULL
-                        )
-                    )
+                    AND NULLIF(source.payload ->> 'UF_CRM_1676419915', '') IS NOT NULL
                 GROUP BY 1, 2, 3
             )
             SELECT
@@ -1977,17 +1957,7 @@ public static class BitrixDataQueries
                             WHEN '2026' THEN '39138'
                         END
                     )
-                    AND (
-                        (
-                            pipeline.category_id = 10
-                            AND NULLIF(snapshot.custom_fields ->> 'UF_CRM_1628266963127', '') IS NOT NULL
-                        )
-                        OR
-                        (
-                            pipeline.category_id = 28
-                            AND NULLIF(snapshot.custom_fields ->> 'UF_CRM_1590601503', '') IS NOT NULL
-                        )
-                    )
+                    AND NULLIF(snapshot.custom_fields ->> 'UF_CRM_1676419915', '') IS NOT NULL
                 GROUP BY 1, 2, 3
             )
             SELECT
