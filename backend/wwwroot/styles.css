@@ -2052,6 +2052,19 @@ main.app .radicated-total {
   position: relative;
   display: block;
 }
+.filter-combobox.has-selection::after {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 7px;
+  height: 7px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #a91632;
+  box-shadow: 0 0 0 1px rgba(169, 22, 50, .24);
+  content: "";
+  pointer-events: none;
+}
 .filter-combobox-native {
   display: none;
 }
@@ -2061,6 +2074,13 @@ main.app .radicated-total {
   background-position: calc(100% - 18px) 18px, calc(100% - 13px) 18px;
   background-size: 5px 5px, 5px 5px;
   background-repeat: no-repeat;
+}
+.diego-filters .filter-combobox.has-selection .filter-combobox-input {
+  border-color: #c78392;
+  background-color: #fff7f8;
+  color: #7f1830;
+  font-weight: 850;
+  box-shadow: inset 3px 0 0 #a91632;
 }
 .filter-combobox-list {
   position: absolute;
@@ -2152,6 +2172,52 @@ main.app .radicated-total {
   .report-has-filter-drawer #standardVisuals,
   .report-has-filter-drawer #detalle { margin-right: 76px; }
   .report-has-filter-drawer .report-filter-drawer:not(.is-collapsed) { width: min(320px, calc(100vw - 32px)); }
+}
+
+@media (min-width: 701px) and (max-width: 1050px) {
+  .report-has-filter-drawer:not(.filter-panel-collapsed) .diego-overview,
+  .report-has-filter-drawer:not(.filter-panel-collapsed) #diegoSections,
+  .report-has-filter-drawer:not(.filter-panel-collapsed) .compact-hero,
+  .report-has-filter-drawer:not(.filter-panel-collapsed) #standardSummary,
+  .report-has-filter-drawer:not(.filter-panel-collapsed) #standardVisuals,
+  .report-has-filter-drawer:not(.filter-panel-collapsed) #detalle {
+    margin-right: 336px;
+  }
+}
+
+.report-has-filter-drawer #diegoSections,
+.report-has-filter-drawer #standardVisuals,
+.report-has-filter-drawer #detalle {
+  min-width: 0;
+}
+
+.report-has-filter-drawer .radicated-table-wrap,
+.report-has-filter-drawer .synced-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.report-has-filter-drawer .table-total-summary {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+
+.report-has-filter-drawer .table-total-summary span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.report-has-filter-drawer .table-total-summary strong {
+  flex: 0 0 auto;
+  max-width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-has-filter-drawer .radicated-table tfoot[data-auto-totals] th,
+.report-has-filter-drawer .radicated-table tfoot[data-auto-totals] td {
+  white-space: nowrap;
 }
 
 @media (max-width: 700px) {
@@ -2366,6 +2432,32 @@ main.app .radicated-total {
 .general-commercial-report .radicated-table th {
   background: #eef3f8;
   color: #24364f;
+}
+
+.general-commercial-report .radicated-table.has-filtered-columns {
+  width: 100%;
+}
+
+.general-commercial-report .radicated-table.has-filtered-columns th,
+.general-commercial-report .radicated-table.has-filtered-columns td {
+  min-width: 125px;
+}
+
+.general-commercial-report .radicated-table.has-filtered-columns th:first-child,
+.general-commercial-report .radicated-table.has-filtered-columns td:first-child {
+  min-width: 180px;
+}
+
+.general-commercial-report .radicated-table .filter-empty-row td {
+  position: static;
+  height: 110px;
+  background: #f8fafc;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.5;
+  text-align: center !important;
+  white-space: normal;
 }
 
 .radicated-matrix-wrap { max-height: 440px; border: 1px solid #dfe5ec; border-radius: 10px; }
@@ -5869,6 +5961,12 @@ td strong {
   border-color: #304663;
   background: #111e31;
   box-shadow: 0 16px 34px rgba(0, 0, 0, .38);
+}
+:root[data-theme="dark"] .diego-filters .filter-combobox.has-selection .filter-combobox-input {
+  border-color: #a95065;
+  background-color: #2a1c29;
+  color: #ffb0bf;
+  box-shadow: inset 3px 0 0 #d45a73;
 }
 :root[data-theme="dark"] .filter-combobox-list button {
   color: #dce6f4;

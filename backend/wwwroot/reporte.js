@@ -539,6 +539,8 @@ const decorateTableTotals = (root = document) => {
     if (columnCount < 2) return;
     enableTableSorting(table, columnCount);
     const headers = tableLeafHeaders(table, columnCount);
+    const visibleColumnIndexes = Array.from({ length: columnCount }, (_, index) => index)
+      .filter((index) => bodyRows.some((row) => row.cells[index] && !row.cells[index].hidden));
     const totals = Array(columnCount).fill(0);
     const numericCounts = Array(columnCount).fill(0);
     const percentColumns = Array(columnCount).fill(false);
@@ -553,7 +555,10 @@ const decorateTableTotals = (root = document) => {
     }));
 
     const numericIndexes = numericCounts.map((count, index) => count ? index : -1).filter((index) => index > 0);
-    if (!numericIndexes.length) return;
+    if (!numericIndexes.length) {
+      table.querySelector("tfoot[data-auto-totals]")?.remove();
+      return;
+    }
 
     let footer = table.querySelector("tfoot[data-auto-totals]");
     if (!table.tFoot) {
@@ -578,7 +583,7 @@ const decorateTableTotals = (root = document) => {
         </tr>`;
         return;
       }
-      footer.innerHTML = `<tr>${Array.from({ length: columnCount }, (_, index) => {
+      footer.innerHTML = `<tr>${visibleColumnIndexes.map((index) => {
         if (index === 0) return "<th>Total</th>";
         if (!numericCounts[index]) return "<td>—</td>";
         if (percentColumns[index]) {
@@ -1250,6 +1255,47 @@ const diegoMonthMatchesDateRange = (monthValue, range) => {
   return (!range.from || monthEnd >= range.from) && (!range.to || monthStart <= range.to);
 };
 
+const syncFilteredTableLayout = (table, visibleRows) => {
+  const wrap = table.closest(".radicated-table-wrap, .synced-table-wrap");
+  if (wrap) {
+    wrap.scrollLeft = 0;
+    wrap.scrollTop = 0;
+  }
+
+  const monthHeaders = [...table.querySelectorAll("thead tr:last-child th[data-month]")];
+  if (monthHeaders.length) {
+    const visibleMonthCount = monthHeaders.filter((header) => !header.hidden).length;
+    const groupHeader = [...(table.tHead?.rows[0]?.cells ?? [])].find((header) => header.colSpan > 1);
+    if (groupHeader) {
+      groupHeader.hidden = visibleMonthCount === 0;
+      groupHeader.colSpan = Math.max(1, visibleMonthCount);
+    }
+
+    const fixedColumnCount = [...(table.tHead?.rows[0]?.cells ?? [])]
+      .filter((header) => header.rowSpan > 1).length;
+    const hasFilteredColumns = visibleMonthCount < monthHeaders.length;
+    table.classList.toggle("has-filtered-columns", hasFilteredColumns);
+    if (hasFilteredColumns) {
+      table.style.minWidth = `${Math.max(360, (fixedColumnCount * 180) + (Math.max(1, visibleMonthCount) * 125))}px`;
+    } else {
+      table.style.removeProperty("min-width");
+    }
+  }
+
+  if (visibleRows > 0) return;
+  table.querySelector("tfoot[data-auto-totals]")?.remove();
+  const body = table.tBodies[0];
+  const referenceRow = [...(body?.rows ?? [])].find((row) => row.dataset.filterEmpty !== "true");
+  if (!body || !referenceRow) return;
+  const visibleColumnCount = Math.max(1, [...referenceRow.cells].filter((cell) => !cell.hidden).length);
+  const emptyRow = body.insertRow();
+  emptyRow.dataset.filterEmpty = "true";
+  emptyRow.className = "filter-empty-row";
+  const emptyCell = emptyRow.insertCell();
+  emptyCell.colSpan = visibleColumnCount;
+  emptyCell.textContent = "No hay registros que coincidan con los filtros seleccionados.";
+};
+
 const applyDiegoFilters = () => {
   const filters = {
     Mes: selectedFilterValues("diegoMonth"),
@@ -1339,6 +1385,7 @@ const applyDiegoFilters = () => {
     const table = block.querySelector("table");
     if (!table) return;
     if (block.dataset.blockCode?.startsWith("commercial_possible_close")) return;
+    table.tBodies[0]?.querySelector('tr[data-filter-empty="true"]')?.remove();
     const hasMonthlyCells = table.classList.contains("radicated-matrix") || table.classList.contains("monthly-matrix");
     if (hasMonthlyCells) {
       table.querySelectorAll("[data-month]").forEach((cell) => {
@@ -1391,6 +1438,8 @@ const applyDiegoFilters = () => {
       row.hidden = !isVisible;
       if (isVisible && row.dataset.summaryRow !== "true") visibleRows += 1;
     });
+
+    syncFilteredTableLayout(table, visibleRows);
 
     const badge = block.querySelector(".diego-block-title em");
     if (badge) badge.textContent = `${visibleRows} registros`;
@@ -4369,6 +4418,7 @@ const closeFilterComboboxes = (exceptRoot = null) => {
 const syncSearchableSelectInput = (select) => {
   const options = searchableSelectOptions(select);
   const input = getSearchableSelectInput(select);
+  const root = getSearchableSelectRoot(select);
   if (!input) return;
   if (isMultiFilterSelect(select)) {
     const values = selectedFilterValues(select);
@@ -4380,10 +4430,19 @@ const syncSearchableSelectInput = (select) => {
       : labels.length <= 2
         ? labels.join(", ")
         : `${labels.length} seleccionados`;
+    root?.classList.toggle("has-selection", values.length > 0);
+    input.setAttribute("aria-label", values.length > 0
+      ? `Filtro aplicado: ${input.value}`
+      : `Filtrar por ${getFilterSelectLabel(select)}`);
     return;
   }
   const selected = options.find((option) => option.value === select.value) ?? options[0];
   input.value = selected?.label ?? "";
+  const hasSelection = select.value !== "all";
+  root?.classList.toggle("has-selection", hasSelection);
+  input.setAttribute("aria-label", hasSelection
+    ? `Filtro aplicado: ${input.value}`
+    : `Filtrar por ${getFilterSelectLabel(select)}`);
 };
 
 const applySearchableSelectFilter = (select) => {
@@ -4452,6 +4511,7 @@ const enhanceSearchableFilterSelect = (select) => {
       if (event.key === "Escape") {
         combo.classList.remove("is-open");
         syncSearchableSelectInput(select);
+        input.blur();
       }
       if (event.key === "Enter") {
         event.preventDefault();
@@ -4478,13 +4538,15 @@ const enhanceSearchableFilterSelect = (select) => {
           if (allOption) allOption.selected = selectedSpecificOptions.length === 0;
         }
         select.dispatchEvent(new Event("change", { bubbles: true }));
-        input.value = "";
-        applySearchableSelectFilter(select);
+        syncSearchableSelectInput(select);
+        combo.classList.remove("is-open");
+        input.blur();
         return;
       }
       select.value = option.dataset.value;
       syncSearchableSelectInput(select);
       combo.classList.remove("is-open");
+      input.blur();
       select.dispatchEvent(new Event("change", { bubbles: true }));
     });
     select.addEventListener("change", () => {
