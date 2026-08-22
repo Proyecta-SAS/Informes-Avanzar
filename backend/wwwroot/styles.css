@@ -2122,6 +2122,34 @@ main.app .radicated-total {
   background: #f2f5f9;
   color: #8d2944;
 }
+.filter-combobox-list button.is-selected::after {
+  content: "\2713";
+  margin-left: auto;
+  font-weight: 900;
+}
+.filter-combobox-actions {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px;
+  border-top: 1px solid #dfe5ec;
+  background: #fff;
+  color: #7b8da5;
+  font-size: 12px;
+  font-weight: 800;
+}
+.filter-combobox-actions button[data-filter-combobox-done] {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 7px;
+  background: #8d2944;
+  color: #fff;
+  font-weight: 850;
+}
 .filter-combobox-empty {
   padding: 10px;
   color: #7b8da5;
@@ -2548,9 +2576,10 @@ main.app .radicated-total {
 .leadership-matrix thead th { position: sticky; z-index: 3; background: #f1f5f6; color: #34404d; font-weight: 700; text-align: left; }
 .leadership-matrix thead tr:first-child th { top: 0; }
 .leadership-matrix thead tr:nth-child(2) th { top: 36px; }
-.leadership-matrix th:first-child,
-.leadership-matrix td:first-child { position: sticky; left: 0; z-index: 2; min-width: 170px; max-width: 210px; background: #fff; text-align: left; }
-.leadership-matrix thead th:first-child { z-index: 5; background: #f1f5f6; }
+.leadership-matrix thead tr:first-child th:first-child,
+.leadership-matrix tbody td:first-child,
+.leadership-matrix tfoot th:first-child { position: sticky; left: 0; z-index: 2; min-width: 170px; max-width: 210px; background: #fff; text-align: left; }
+.leadership-matrix thead tr:first-child th:first-child { z-index: 5; background: #f1f5f6; }
 .leadership-matrix tbody td:not(:first-child) { min-width: 112px; color: #0878f9; font-variant-numeric: tabular-nums; text-align: right; }
 .leadership-matrix tbody tr:hover td { background: #f7fbff; }
 .performance-table-wrap { max-height: 420px; margin-top: 20px; border: 1px solid #dfe5ec; border-radius: 8px; }
@@ -2580,12 +2609,14 @@ main.app .radicated-total {
 .commission-matrix thead th { position: sticky; z-index: 3; background: #f1f5f6; color: #34404d; font-weight: 700; text-align: left; }
 .commission-matrix thead tr:first-child th { top: 0; }
 .commission-matrix thead tr:nth-child(2) th { top: 36px; }
-.commission-matrix th:first-child,
-.commission-matrix td:first-child { position: sticky; left: 0; z-index: 2; min-width: 280px; background: #fff; text-align: left; }
-.commission-matrix thead th:first-child { z-index: 5; background: #f1f5f6; }
-.commission-matrix th:last-child,
-.commission-matrix td:last-child { position: sticky; right: 0; z-index: 2; min-width: 145px; background: #f7fafc; }
-.commission-matrix thead th:last-child { z-index: 5; background: #f1f5f6; }
+.commission-matrix thead tr:first-child th:first-child,
+.commission-matrix tbody td:first-child,
+.commission-matrix tfoot th:first-child { position: sticky; left: 0; z-index: 2; min-width: 280px; background: #fff; text-align: left; }
+.commission-matrix thead tr:first-child th:first-child { z-index: 5; background: #f1f5f6; }
+.commission-matrix thead tr:first-child th:last-child,
+.commission-matrix tbody td:last-child,
+.commission-matrix tfoot td:last-child { position: sticky; right: 0; z-index: 2; min-width: 145px; background: #f7fafc; }
+.commission-matrix thead tr:first-child th:last-child { z-index: 5; background: #f1f5f6; }
 .commission-matrix tbody td:not(:first-child),
 .commission-matrix tfoot td { min-width: 128px; color: #0878f9; font-variant-numeric: tabular-nums; text-align: right; }
 .commission-matrix tbody tr:hover td { background: #f7fbff; }
@@ -2625,9 +2656,9 @@ main.app .radicated-total {
 }
 
 .general-commercial-report .radicated-matrix thead tr:first-child th:first-child,
-.general-commercial-report .leadership-matrix thead th:first-child,
-.general-commercial-report .commission-matrix thead th:first-child,
-.general-commercial-report .commission-matrix thead th:last-child {
+.general-commercial-report .leadership-matrix thead tr:first-child th:first-child,
+.general-commercial-report .commission-matrix thead tr:first-child th:first-child,
+.general-commercial-report .commission-matrix thead tr:first-child th:last-child {
   z-index: 9;
 }
 
@@ -5987,6 +6018,11 @@ td strong {
 :root[data-theme="dark"] .filter-combobox-list button.is-selected {
   background: #213550;
   color: #ff9aad;
+}
+:root[data-theme="dark"] .filter-combobox-actions {
+  border-color: #334155;
+  background: #152235;
+  color: #9eb0c8;
 }
 :root[data-theme="dark"] #diegoDashboard #clearDiegoFilters,
 :root[data-theme="dark"] .clear-report-filters {

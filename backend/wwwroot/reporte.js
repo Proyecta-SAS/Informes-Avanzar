@@ -533,8 +533,13 @@ const enableTableSorting = (table, columnCount) => {
 
 const decorateTableTotals = (root = document) => {
   root.querySelectorAll("table").forEach((table) => {
-    const bodyRows = [...table.tBodies].flatMap((body) => [...body.rows]).filter((row) => !row.hidden);
-    if (!bodyRows.length) return;
+    const bodyRows = [...table.tBodies]
+      .flatMap((body) => [...body.rows])
+      .filter((row) => !row.hidden && getComputedStyle(row).display !== "none");
+    if (!bodyRows.length) {
+      table.querySelector("tfoot[data-auto-totals]")?.remove();
+      return;
+    }
     const columnCount = Math.max(...bodyRows.map((row) => row.cells.length));
     if (columnCount < 2) return;
     enableTableSorting(table, columnCount);
@@ -560,7 +565,8 @@ const decorateTableTotals = (root = document) => {
       return;
     }
 
-    let footer = table.querySelector("tfoot[data-auto-totals]");
+    let footer = table.querySelector("tfoot[data-auto-totals]")
+      ?? (table.classList.contains("has-filtered-columns") ? table.tFoot : null);
     if (!table.tFoot) {
       footer = document.createElement("tfoot");
       footer.dataset.autoTotals = "true";
@@ -584,7 +590,7 @@ const decorateTableTotals = (root = document) => {
         return;
       }
       footer.innerHTML = `<tr>${visibleColumnIndexes.map((index) => {
-        if (index === 0) return "<th>Total</th>";
+        if (index === 0) return `<th>${table.classList.contains("commission-matrix") ? "Total (Sum)" : "Total"}</th>`;
         if (!numericCounts[index]) return "<td>—</td>";
         if (percentColumns[index]) {
           const average = totals[index] / numericCounts[index];
@@ -4474,12 +4480,23 @@ const applySearchableSelectFilter = (select) => {
     ? (option.value === "all" ? selectedValues.length === 0 : selectedValues.includes(option.value))
     : option.value === select.value;
 
-  dropdown.innerHTML = visibleOptions.length
-    ? visibleOptions.map((option) => `
-      <button type="button" data-value="${escapeHtml(option.value)}" class="${isOptionSelected(option) ? "is-selected" : ""}">
-        ${escapeHtml(option.label)}
-      </button>`).join("")
+  const optionMarkup = visibleOptions.length
+    ? visibleOptions.map((option) => {
+      const selected = isOptionSelected(option);
+      return `
+        <button type="button" data-value="${escapeHtml(option.value)}" class="${selected ? "is-selected" : ""}" aria-selected="${selected}">
+          ${escapeHtml(option.label)}
+        </button>`;
+    }).join("")
     : `<span class="filter-combobox-empty">Sin coincidencias</span>`;
+
+  dropdown.innerHTML = isMultiFilterSelect(select)
+    ? `${optionMarkup}
+      <span class="filter-combobox-actions">
+        <span>${selectedValues.length ? `${selectedValues.length} seleccionado${selectedValues.length === 1 ? "" : "s"}` : "Todos"}</span>
+        <button type="button" data-filter-combobox-done>Listo</button>
+      </span>`
+    : optionMarkup;
   root.classList.add("is-open");
 };
 
@@ -4522,6 +4539,14 @@ const enhanceSearchableFilterSelect = (select) => {
     dropdown.addEventListener("mousedown", (event) => event.preventDefault());
     dropdown.addEventListener("click", (event) => {
       event.stopPropagation();
+      const doneButton = event.target.closest("button[data-filter-combobox-done]");
+      if (doneButton) {
+        combo.classList.remove("is-open");
+        syncSearchableSelectInput(select);
+        input.blur();
+        return;
+      }
+
       const option = event.target.closest("button[data-value]");
       if (!option) return;
       if (isMultiFilterSelect(select)) {
@@ -4539,8 +4564,7 @@ const enhanceSearchableFilterSelect = (select) => {
         }
         select.dispatchEvent(new Event("change", { bubbles: true }));
         syncSearchableSelectInput(select);
-        combo.classList.remove("is-open");
-        input.blur();
+        applySearchableSelectFilter(select);
         return;
       }
       select.value = option.dataset.value;
