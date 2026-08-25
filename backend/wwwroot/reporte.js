@@ -5019,7 +5019,22 @@ const load = async () => {
 
 const updateReportView = async () => {
   setText("reportStatus", "Leyendo");
-  window.location.reload();
+  showReportLoader("Actualizando el informe");
+  window.setTimeout(() => window.location.reload(), 180);
+};
+
+const showReportLoader = (message = "Preparando tu informe") => {
+  document.querySelector("#reportLoader strong")?.replaceChildren(message);
+  document.body.classList.remove("report-ready");
+  document.body.classList.add("report-loading");
+};
+
+const hideReportLoader = () => {
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    document.body.classList.remove("report-loading");
+    document.body.classList.add("report-ready");
+    window.setTimeout(() => document.getElementById("reportLoader")?.setAttribute("hidden", ""), 650);
+  }));
 };
 
 const setupSidebarToggle = () => {
@@ -5060,4 +5075,9 @@ const reportTotalsObserver = new MutationObserver((mutations) => {
 });
 reportTotalsObserver.observe(document.querySelector("main") ?? document.body, { childList: true, subtree: true });
 
-load().finally(scheduleAllTableTotals);
+load()
+  .catch((error) => console.error("No fue posible cargar completamente el informe.", error))
+  .finally(() => {
+    scheduleAllTableTotals();
+    hideReportLoader();
+  });

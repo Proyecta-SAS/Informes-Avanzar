@@ -20,6 +20,14 @@ public static class OrganizationQueries {
  public static async Task SetSettingsAsync(string departmentId,string? email,string roleLabel,string[] visibleReports,string[] visibleBlocks,NpgsqlDataSource ds,CancellationToken ct){
   const string sql="""INSERT INTO reporting.organization_access(department_id,role_label,visible_reports,visible_blocks,updated_at) VALUES(@id,@role,@reports,@blocks,now()) ON CONFLICT(department_id) DO UPDATE SET role_label=EXCLUDED.role_label,visible_reports=EXCLUDED.visible_reports,visible_blocks=EXCLUDED.visible_blocks,updated_at=now();""";
   roleLabel=NormalizeCommercialRoleLabel(roleLabel);
+  await using var connection=await ds.OpenConnectionAsync(ct);
+  if(roleLabel.StartsWith("line_coordinator_",StringComparison.OrdinalIgnoreCase)){
+   await using var departmentCommand=new NpgsqlCommand("SELECT name FROM bitrix.departments WHERE id::text=@id;",connection);
+   departmentCommand.Parameters.AddWithValue("id",departmentId);
+   var departmentName=await departmentCommand.ExecuteScalarAsync(ct) as string;
+   if(!string.IsNullOrWhiteSpace(departmentName)&&departmentName.Contains("COOR",StringComparison.OrdinalIgnoreCase))
+    roleLabel=roleLabel.EndsWith("_pnnc",StringComparison.OrdinalIgnoreCase)?"coordinator_pnnc":"coordinator_rch";
+  }
   if(roleLabel=="custom"){
    visibleReports=visibleReports.Where(code=>CommercialReportCatalog.Contains(code,StringComparer.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
    visibleBlocks=visibleBlocks.Where(code=>CommercialBlockCatalog.Contains(code,StringComparer.OrdinalIgnoreCase)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
@@ -27,7 +35,6 @@ public static class OrganizationQueries {
    visibleReports=ManagedReports;
    visibleBlocks=BlocksForCommercialRole(roleLabel);
   }
-  await using var connection=await ds.OpenConnectionAsync(ct);
   await using var transaction=await connection.BeginTransactionAsync(ct);
   await using(var command=new NpgsqlCommand(sql,connection,transaction)){
    command.Parameters.AddWithValue("id",departmentId);

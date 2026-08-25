@@ -16,6 +16,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddProblemDetails();
+builder.Services.AddOutputCache(options =>
+    options.AddPolicy("commercial-report-data", policy => policy.Expire(TimeSpan.FromMinutes(5))));
 builder.Services.Configure<BitrixOptions>(builder.Configuration.GetSection("Bitrix"));
 builder.Services.PostConfigure<BitrixOptions>(options =>
 {
@@ -176,6 +178,8 @@ app.Use(async (context, next) =>
     }
     await next();
 });
+
+app.UseOutputCache();
 
 app.UseDefaultFiles();
 app.UseStaticFiles(new StaticFileOptions
@@ -506,7 +510,7 @@ app.MapGet("/api/reports/fuerza-comercial-diego/valores-radicados", async (
         month,
         dataSource,
         cancellationToken));
-});
+}).CacheOutput("commercial-report-data");
 
 app.MapGet("/api/reports/fuerza-comercial-diego/dashboard", async (
     int? year,
@@ -524,7 +528,7 @@ app.MapGet("/api/reports/fuerza-comercial-diego/dashboard", async (
         month,
         dataSource,
         cancellationToken));
-});
+}).CacheOutput("commercial-report-data");
 
 app.MapGet("/api/reports/fuerza-comercial-diego/cartera-recaudada", async (
     int? year,
@@ -542,7 +546,7 @@ app.MapGet("/api/reports/fuerza-comercial-diego/cartera-recaudada", async (
         month,
         dataSource,
         cancellationToken));
-});
+}).CacheOutput("commercial-report-data");
 
 app.MapGet("/api/reports/fuerza-comercial-diego/liderazgo-comisiones", async (
     int? year,
@@ -560,12 +564,13 @@ app.MapGet("/api/reports/fuerza-comercial-diego/liderazgo-comisiones", async (
         month,
         dataSource,
         cancellationToken));
-});
+}).CacheOutput("commercial-report-data");
 
 app.MapGet("/api/reports/fuerza-comercial-diego/jerarquia-filtros", async (
     NpgsqlDataSource dataSource,
     CancellationToken cancellationToken) =>
-    Results.Ok(await BitrixDataQueries.GetCommercialFilterHierarchyAsync(dataSource, cancellationToken)));
+    Results.Ok(await BitrixDataQueries.GetCommercialFilterHierarchyAsync(dataSource, cancellationToken)))
+    .CacheOutput("commercial-report-data");
 
 app.MapGet("/api/reports/gerencia/comercial-cumplimiento", async (
     int? year,

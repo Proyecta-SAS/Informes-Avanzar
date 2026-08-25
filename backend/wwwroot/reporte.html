@@ -5,9 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard</title>
   <link rel="icon" href="https://avanzarsoluciones.com/wp-content/uploads/2025/01/cropped-favico-Avanzar-180x180.jpg" sizes="180x180">
-  <link rel="stylesheet" href="/styles.css?v=20260818-penultimate-sync-v1">
+  <link rel="stylesheet" href="/styles.css?v=20260821-report-loader-v1">
 </head>
-<body>
+<body class="report-loading">
+  <div id="reportLoader" class="report-loader" role="status" aria-live="polite" aria-label="Cargando informe">
+    <div class="report-loader-glow" aria-hidden="true"></div>
+    <div class="report-loader-card">
+      <img src="/assets/avanzar-logo-color.svg" alt="Avanzar">
+      <div class="report-loader-orbit" aria-hidden="true"><i></i><i></i><i></i></div>
+      <strong>Preparando tu informe</strong>
+      <span>Estamos organizando todos los indicadores para mostrarlos juntos.</span>
+      <div class="report-loader-progress" aria-hidden="true"><i></i></div>
+    </div>
+  </div>
   <aside class="sidebar">
     <div class="brand">
       <img class="brand-logo" src="/assets/avanzar-logo-color.svg" alt="Avanzar">

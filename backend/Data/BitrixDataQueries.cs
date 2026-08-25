@@ -237,7 +237,7 @@ public static class BitrixDataQueries
                     )
                     AND NULLIF(s.custom_fields ->> 'UF_CRM_1676419915', '') IS NOT NULL
             ), radicated AS (
-                SELECT month, pipeline, advisor, advisor_id, amount
+                SELECT month, pipeline, advisor, advisor_id, amount, bitrix_id
                 FROM (
                     SELECT
                         eligible_deals.*,
@@ -248,6 +248,10 @@ public static class BitrixDataQueries
                     FROM eligible_deals
                 ) ranked
                 WHERE row_number = 1
+            ), known_deal_hierarchy_overrides(deal_id, coordinator, leader) AS (
+                -- Historical ownership confirmed against the commercial report.
+                -- The advisor later moved to Yamid, but this March deal belongs to Catalina.
+                VALUES ('991494', 'EQ. COOR CATALINA ESCOBAR', 'EQ. LIDER CATALINA ESCOBAR')
             ), user_departments AS (
                 SELECT
                     u.connection_id,
@@ -297,14 +301,19 @@ public static class BitrixDataQueries
                     OR UPPER(COALESCE(s6.name, '')) LIKE '%COMERCIAL%'
                 ORDER BY u.bitrix_id, u.department_id
             )
-            SELECT radicated.month, radicated.pipeline, radicated.advisor, COALESCE(SUM(radicated.amount), 0) AS total_achieved, hierarchy.coordinator, hierarchy.leader
+            SELECT radicated.month, radicated.pipeline, radicated.advisor, COALESCE(SUM(radicated.amount), 0) AS total_achieved,
+                   COALESCE(override.coordinator, hierarchy.coordinator) AS coordinator,
+                   COALESCE(override.leader, hierarchy.leader) AS leader
             FROM radicated
             LEFT JOIN hierarchy ON hierarchy.bitrix_id = radicated.advisor_id
+            LEFT JOIN known_deal_hierarchy_overrides override ON override.deal_id = radicated.bitrix_id
             WHERE month IS NOT NULL
               AND (@monthNumber IS NULL OR LEFT(month, 2)::int = @monthNumber)
               AND (@fromDate IS NULL OR (make_date(@yearNumber, LEFT(month, 2)::int, 1) + INTERVAL '1 month' - INTERVAL '1 day')::date >= @fromDate)
               AND (@toDate IS NULL OR make_date(@yearNumber, LEFT(month, 2)::int, 1) <= @toDate)
-            GROUP BY radicated.month, radicated.pipeline, radicated.advisor, hierarchy.coordinator, hierarchy.leader
+            GROUP BY radicated.month, radicated.pipeline, radicated.advisor,
+                     COALESCE(override.coordinator, hierarchy.coordinator),
+                     COALESCE(override.leader, hierarchy.leader)
             ORDER BY total_achieved DESC, month, pipeline, advisor;
             """;
 
@@ -1815,6 +1824,9 @@ public static class BitrixDataQueries
                         NULLIF(assigned_user.full_name, ''),
                         source.payload ->> 'ASSIGNED_BY_ID'
                     ) AS advisor,
+                    CASE WHEN source.bitrix_id = '991494' THEN 'EQ. COOR CATALINA ESCOBAR' END AS coordinator_override,
+                    CASE WHEN source.bitrix_id = '991494' THEN 'EQ. LIDER CATALINA ESCOBAR' END AS leader_override,
+                    CASE WHEN source.bitrix_id = '991494' THEN 1404::bigint END AS leader_id_override,
                     SUM(COALESCE(NULLIF(source.payload ->> 'OPPORTUNITY', '')::numeric, 0)) AS total_achieved
                 FROM source_deals source
                 LEFT JOIN latest_users assigned_payload
@@ -1831,15 +1843,15 @@ public static class BitrixDataQueries
                         END
                     )
                     AND NULLIF(source.payload ->> 'UF_CRM_1676419915', '') IS NOT NULL
-                GROUP BY 1, 2, 3
+                GROUP BY 1, 2, 3, 4, 5, 6
             )
             SELECT
                 radicated.month,
                 radicated.advisor,
                 radicated.total_achieved,
-                hierarchy.coordinator,
-                hierarchy.leader,
-                hierarchy.leader_id,
+                COALESCE(radicated.coordinator_override, hierarchy.coordinator),
+                COALESCE(radicated.leader_override, hierarchy.leader),
+                COALESCE(radicated.leader_id_override, hierarchy.leader_id),
                 hierarchy.pending_commercial_leader,
                 hierarchy.commercial_line
             FROM radicated
@@ -1848,8 +1860,8 @@ public static class BitrixDataQueries
               AND (@monthNumber IS NULL OR LEFT(radicated.month, 2)::int = @monthNumber)
               AND (@fromDate IS NULL OR (make_date(@yearNumber, LEFT(radicated.month, 2)::int, 1) + INTERVAL '1 month' - INTERVAL '1 day')::date >= @fromDate)
               AND (@toDate IS NULL OR make_date(@yearNumber, LEFT(radicated.month, 2)::int, 1) <= @toDate)
-              AND hierarchy.coordinator IS NOT NULL
-            ORDER BY hierarchy.coordinator, radicated.advisor, radicated.month;
+              AND COALESCE(radicated.coordinator_override, hierarchy.coordinator) IS NOT NULL
+            ORDER BY COALESCE(radicated.coordinator_override, hierarchy.coordinator), radicated.advisor, radicated.month;
             """;
 
         const string leadershipSql = """
@@ -2093,10 +2105,11 @@ public static class BitrixDataQueries
         var leadership = new List<object>();
         var commissions = new List<object>();
         var relationships = new List<object>();
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
 
-        await using (var command = new NpgsqlCommand(coordinatorValuesSql, connection))
+        async Task LoadCoordinatorValuesAsync()
         {
+            await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+            await using var command = new NpgsqlCommand(coordinatorValuesSql, connection);
             if (coordinatorAsOf.HasValue)
             {
                 command.CommandTimeout = 180;
@@ -2125,8 +2138,10 @@ public static class BitrixDataQueries
             }
         }
 
-        await using (var command = new NpgsqlCommand(leadershipSql, connection))
+        async Task LoadLeadershipAsync()
         {
+            await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+            await using var command = new NpgsqlCommand(leadershipSql, connection);
             command.Parameters.AddWithValue("yearText", year.ToString(CultureInfo.InvariantCulture));
             command.Parameters.AddWithValue("yearNumber", year);
             AddDiegoDateFilterParameters(command, from, to, month);
@@ -2145,8 +2160,10 @@ public static class BitrixDataQueries
             }
         }
 
-        await using (var command = new NpgsqlCommand(commissionsSql, connection))
+        async Task LoadCommissionsAsync()
         {
+            await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+            await using var command = new NpgsqlCommand(commissionsSql, connection);
             command.Parameters.AddWithValue("year", year);
             AddDiegoDateFilterParameters(command, from, to, month);
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
@@ -2161,9 +2178,11 @@ public static class BitrixDataQueries
             }
         }
 
-        await using (var command = new NpgsqlCommand(relationshipsSql, connection))
-        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        async Task LoadRelationshipsAsync()
         {
+            await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+            await using var command = new NpgsqlCommand(relationshipsSql, connection);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
             {
                 relationships.Add(new
@@ -2175,6 +2194,12 @@ public static class BitrixDataQueries
                 });
             }
         }
+
+        await Task.WhenAll(
+            LoadCoordinatorValuesAsync(),
+            LoadLeadershipAsync(),
+            LoadCommissionsAsync(),
+            LoadRelationshipsAsync());
 
         return new { year, coordinatorValues, leadership, commissions, relationships };
     }
