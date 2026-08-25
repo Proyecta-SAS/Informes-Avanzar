@@ -530,6 +530,35 @@ app.MapGet("/api/reports/fuerza-comercial-diego/dashboard", async (
         cancellationToken));
 }).CacheOutput("commercial-report-data");
 
+app.MapGet("/api/reports/fuerza-comercial-diego/pnnc-clientes", async (
+    int? year,
+    DateTime? from,
+    DateTime? to,
+    string? month,
+    HttpContext context,
+    NpgsqlDataSource dataSource,
+    CancellationToken cancellationToken) =>
+{
+    var selectedYear = year is >= 2000 and <= 2100 ? year.Value : DateTime.UtcNow.Year;
+    var panelUser = (PanelUser)context.Items["PanelUser"]!;
+    var includeAll = panelUser.RoleCode == "admin";
+    var teamScope = includeAll
+        ? null
+        : await OrganizationQueries.GetUserTeamScopeAsync(panelUser.Id, dataSource, cancellationToken);
+    var roleLabel = includeAll ? "admin" : teamScope?.RoleLabel ?? "none";
+    var allowedAdvisorNames = includeAll ? null : teamScope?.MemberNames ?? Array.Empty<string>();
+
+    return Results.Ok(await BitrixDataQueries.GetPnncAdvisorClientsAsync(
+        selectedYear,
+        from,
+        to,
+        month,
+        roleLabel,
+        allowedAdvisorNames,
+        dataSource,
+        cancellationToken));
+});
+
 app.MapGet("/api/reports/fuerza-comercial-diego/cartera-recaudada", async (
     int? year,
     DateTime? from,

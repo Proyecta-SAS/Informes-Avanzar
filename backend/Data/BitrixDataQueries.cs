@@ -166,6 +166,15 @@ public static class BitrixDataQueries
                 FROM bitrix.entity_snapshots
                 WHERE entity_type = 'deal'
                   AND is_deleted = false
+                  AND (
+                      custom_fields ->> 'UF_CRM_1737653376' = @year
+                      OR custom_fields ->> 'UF_CRM_1737653376' = CASE @year
+                          WHEN '2024' THEN '37206'
+                          WHEN '2025' THEN '37036'
+                          WHEN '2026' THEN '39138'
+                      END
+                  )
+                  AND NULLIF(custom_fields ->> 'UF_CRM_1676419915', '') IS NOT NULL
                 ORDER BY connection_id, bitrix_id, updated_at DESC
             ), eligible_deals AS (
                 SELECT
@@ -1226,6 +1235,184 @@ public static class BitrixDataQueries
         return new { year, advisors, stages, departments, possibleClosePnnc, possibleCloseGeneral, possibleCloseCommercial };
     }
 
+    public static async Task<object> GetPnncAdvisorClientsAsync(
+        int year,
+        DateTime? from,
+        DateTime? to,
+        string? month,
+        string roleLabel,
+        string[]? allowedAdvisorNames,
+        NpgsqlDataSource dataSource,
+        CancellationToken cancellationToken)
+    {
+        const string sql = """
+            WITH RECURSIVE user_departments AS (
+                SELECT DISTINCT ON (bitrix_user.connection_id, bitrix_user.bitrix_id)
+                    bitrix_user.connection_id,
+                    bitrix_user.bitrix_id,
+                    COALESCE(
+                        NULLIF(TRIM(CONCAT_WS(' ', NULLIF(user_payload.payload ->> 'NAME', ''), NULLIF(user_payload.payload ->> 'LAST_NAME', ''))), ''),
+                        NULLIF(bitrix_user.full_name, ''),
+                        bitrix_user.bitrix_id
+                    ) AS full_name,
+                    assigned_department.value::bigint AS department_id
+                FROM bitrix.users bitrix_user
+                LEFT JOIN bitrix.raw_payloads user_payload ON user_payload.id = bitrix_user.raw_payload_id
+                CROSS JOIN LATERAL jsonb_array_elements_text(
+                    CASE
+                        WHEN jsonb_typeof(user_payload.payload -> 'UF_DEPARTMENT') = 'array'
+                        THEN user_payload.payload -> 'UF_DEPARTMENT'
+                        ELSE '[]'::jsonb
+                    END
+                ) assigned_department(value)
+                WHERE bitrix_user.active = true
+                ORDER BY bitrix_user.connection_id, bitrix_user.bitrix_id, assigned_department.value::bigint
+            ), hierarchy AS (
+                SELECT
+                    source.connection_id,
+                    source.bitrix_id,
+                    source.full_name,
+                    department.id,
+                    department.name,
+                    department.parent_id,
+                    1 AS depth
+                FROM user_departments source
+                JOIN bitrix.departments department ON department.id = source.department_id
+
+                UNION ALL
+
+                SELECT
+                    hierarchy.connection_id,
+                    hierarchy.bitrix_id,
+                    hierarchy.full_name,
+                    parent.id,
+                    parent.name,
+                    parent.parent_id,
+                    hierarchy.depth + 1
+                FROM hierarchy
+                JOIN bitrix.departments parent ON parent.id = hierarchy.parent_id
+                WHERE hierarchy.depth < 8
+            ), commercial_hierarchy AS (
+                SELECT
+                    connection_id,
+                    bitrix_id,
+                    full_name,
+                    (ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%EQ. LIDER%'))[1] AS leader,
+                    (ARRAY_AGG(TRIM(name) ORDER BY depth) FILTER (WHERE UPPER(TRIM(name)) LIKE '%EQ. COOR%'))[1] AS coordinator,
+                    CASE
+                        WHEN BOOL_OR(UPPER(TRIM(name)) LIKE '%PNNC%' OR UPPER(TRIM(name)) LIKE '%INSOLV%') THEN 'PNNC'
+                        WHEN BOOL_OR(UPPER(TRIM(name)) LIKE '%RCH%') THEN 'RCH'
+                        ELSE 'COMERCIAL'
+                    END AS commercial_line
+                FROM hierarchy
+                GROUP BY connection_id, bitrix_id, full_name
+            ), base AS (
+                SELECT
+                    deal.connection_id,
+                    deal.assigned_by_bitrix_id,
+                    COALESCE(
+                        NULLIF(TRIM(CONCAT_WS(' ', NULLIF(user_payload.payload ->> 'NAME', ''), NULLIF(user_payload.payload ->> 'LAST_NAME', ''))), ''),
+                        NULLIF(assigned_user.full_name, ''),
+                        deal.assigned_by_bitrix_id,
+                        'Sin asesor'
+                    ) AS advisor,
+                    pipeline.category_id,
+                    CASE
+                        WHEN pipeline.category_id = 28
+                          AND (
+                              snapshot.custom_fields ->> 'UF_CRM_1737653376' = @yearText
+                              OR snapshot.custom_fields ->> 'UF_CRM_1737653376' = CASE @yearText
+                                  WHEN '2024' THEN '37206'
+                                  WHEN '2025' THEN '37036'
+                                  WHEN '2026' THEN '39138'
+                              END
+                          )
+                          AND (
+                              snapshot.custom_fields ->> 'UF_CRM_1676419915' IN (
+                                  '22560', '22562', '39144', '39146', '39148', '39150',
+                                  '39152', '39154', '39156', '39158', '39160', '39162'
+                              )
+                              OR UPPER(COALESCE(snapshot.custom_fields ->> 'UF_CRM_1676419915', ''))
+                                  ~ '(ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|SEPTIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)'
+                          )
+                        THEN 1 ELSE 0
+                    END AS radicated
+                FROM bitrix.deals deal
+                JOIN bitrix.pipelines pipeline ON pipeline.id = deal.pipeline_id
+                JOIN bitrix.entity_snapshots snapshot
+                    ON snapshot.connection_id = deal.connection_id
+                    AND snapshot.entity_type = 'deal'
+                    AND snapshot.bitrix_id = deal.bitrix_id
+                    AND snapshot.is_deleted = false
+                LEFT JOIN bitrix.users assigned_user
+                    ON assigned_user.connection_id = deal.connection_id
+                    AND assigned_user.bitrix_id = deal.assigned_by_bitrix_id
+                LEFT JOIN bitrix.raw_payloads user_payload ON user_payload.id = assigned_user.raw_payload_id
+                WHERE pipeline.category_id IN (26, 28)
+                  AND EXTRACT(YEAR FROM deal.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @yearNumber
+                  AND (@fromDate IS NULL OR (deal.bitrix_created_at AT TIME ZONE 'America/Bogota')::date >= @fromDate)
+                  AND (@toDate IS NULL OR (deal.bitrix_created_at AT TIME ZONE 'America/Bogota')::date <= @toDate)
+                  AND (@monthNumber IS NULL OR EXTRACT(MONTH FROM deal.bitrix_created_at AT TIME ZONE 'America/Bogota')::int = @monthNumber)
+            ), metrics AS (
+                SELECT
+                    connection_id,
+                    assigned_by_bitrix_id,
+                    advisor,
+                    COUNT(*) FILTER (WHERE category_id = 26)::bigint AS commercial_clients,
+                    COUNT(*) FILTER (WHERE category_id = 28)::bigint AS operational_clients,
+                    COUNT(*)::bigint AS negotiations,
+                    SUM(radicated)::bigint AS radicated
+                FROM base
+                GROUP BY connection_id, assigned_by_bitrix_id, advisor
+            )
+            SELECT
+                metrics.advisor,
+                COALESCE(hierarchy.leader, 'Sin lider') AS leader,
+                COALESCE(hierarchy.coordinator, 'Sin coordinador') AS coordinator,
+                'PNNC' AS pnnc_client,
+                metrics.commercial_clients,
+                metrics.operational_clients,
+                metrics.negotiations,
+                metrics.radicated,
+                metrics.commercial_clients::numeric / NULLIF(metrics.operational_clients + metrics.commercial_clients, 0) AS total_clients,
+                metrics.radicated::numeric / NULLIF(metrics.negotiations, 0) AS closing_rate
+            FROM metrics
+            LEFT JOIN commercial_hierarchy hierarchy
+                ON hierarchy.connection_id = metrics.connection_id
+                AND hierarchy.bitrix_id = metrics.assigned_by_bitrix_id
+            WHERE @includeAll OR metrics.advisor = ANY(@allowedAdvisorNames)
+            ORDER BY coordinator, leader, metrics.advisor;
+            """;
+
+        var items = new List<object>();
+        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken);
+        await using var command = new NpgsqlCommand(sql, connection);
+        command.Parameters.AddWithValue("yearNumber", year);
+        command.Parameters.AddWithValue("yearText", year.ToString(CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("includeAll", allowedAdvisorNames is null);
+        command.Parameters.Add("allowedAdvisorNames", NpgsqlDbType.Array | NpgsqlDbType.Text).Value = allowedAdvisorNames ?? Array.Empty<string>();
+        AddDiegoDateFilterParameters(command, from, to, month);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            items.Add(new
+            {
+                advisor = reader.GetString(0),
+                leader = reader.GetString(1),
+                coordinator = reader.GetString(2),
+                pnncClient = reader.GetString(3),
+                commercialClients = reader.GetInt64(4),
+                operationalClients = reader.GetInt64(5),
+                negotiations = reader.GetInt64(6),
+                radicated = reader.GetInt64(7),
+                totalClients = reader.IsDBNull(8) ? 0m : reader.GetDecimal(8),
+                closingRate = reader.IsDBNull(9) ? 0m : reader.GetDecimal(9)
+            });
+        }
+
+        return new { year, roleLabel, items };
+    }
+
     public static async Task<object> GetDiegoPortfolioCollectionsAsync(
         int year,
         DateTime? from,
@@ -1653,6 +1840,15 @@ public static class BitrixDataQueries
                 FROM bitrix.entity_snapshots
                 WHERE entity_type = 'deal'
                   AND is_deleted = false
+                  AND (
+                      custom_fields ->> 'UF_CRM_1737653376' = @yearText
+                      OR custom_fields ->> 'UF_CRM_1737653376' = CASE @yearText
+                          WHEN '2024' THEN '37206'
+                          WHEN '2025' THEN '37036'
+                          WHEN '2026' THEN '39138'
+                      END
+                  )
+                  AND NULLIF(custom_fields ->> 'UF_CRM_1676419915', '') IS NOT NULL
                 ORDER BY connection_id, bitrix_id, updated_at DESC
             ), current_deals AS (
                 SELECT
@@ -1669,6 +1865,7 @@ public static class BitrixDataQueries
                 JOIN latest_deal_snapshots snapshot
                     ON snapshot.connection_id = d.connection_id
                     AND snapshot.bitrix_id = d.bitrix_id
+                WHERE pipeline.category_id IN (10, 28)
             ), source_deals AS (
                 SELECT
                     baseline.bitrix_id,

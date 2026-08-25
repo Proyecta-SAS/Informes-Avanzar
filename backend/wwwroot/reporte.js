@@ -118,6 +118,7 @@ let teamScope = null;
 let commercialDateRangeTouched = false;
 let generalRadicatedData = null;
 let generalDashboardData = null;
+let pnncAdvisorClientsData = null;
 let commercialHierarchy = [];
 let coordinatorRadicatedData = [];
 const normalizeTeamValue = (value = "") => String(value ?? "")
@@ -129,6 +130,9 @@ const normalizeTeamValue = (value = "") => String(value ?? "")
   .toLocaleLowerCase("es-CO");
 const isAdvisorTeamScope = () => normalizeTeamValue(teamScope?.roleLabel ?? "") === "advisor";
 const isLeaderTeamScope = () => normalizeTeamValue(teamScope?.departmentName ?? "").includes("lider");
+const commercialScopeRole = () => String(teamScope?.roleLabel ?? "").trim().toLowerCase();
+const isPnncScopeRole = () => commercialScopeRole().endsWith("_pnnc");
+const isPnncCoordinatorScope = () => ["line_coordinator_pnnc", "coordinator_pnnc"].includes(commercialScopeRole());
 const scopedMemberNames = () => teamScope ? (teamScope.memberNames ?? []) : null;
 const isTeamMember = (name) => {
   const members = scopedMemberNames();
@@ -429,6 +433,7 @@ const applyGeneralCommercialLabels = () => {
     const heading = findDiegoBlock(source)?.querySelector("h3");
     if (heading) heading.textContent = label;
   });
+  updateAdvisorNegotiationsTitle();
 };
 
 const renderDataTable = (headers, rows, className = "") => `
@@ -438,6 +443,84 @@ const renderDataTable = (headers, rows, className = "") => `
       <tbody>${rows.join("")}</tbody>
     </table>
   </div>`;
+
+const isPnncAdvisorScope = () => isAdvisorTeamScope() && (
+  (pnncAdvisorClientsData?.items?.length ?? 0) > 0
+  || commercialHierarchy.some((item) => isTeamMember(item.advisor) && normalizeHierarchyLine(item.commercialLine) === "pnnc")
+);
+
+const isPnncAdvisorNegotiationsView = () => reportId === "informe_general_comercial"
+  && (isPnncScopeRole()
+    || isPnncAdvisorScope()
+    || document.getElementById("diegoLine")?.value === "pnnc");
+
+const updateAdvisorNegotiationsTitle = () => {
+  const block = findDiegoBlock("Total de negociaciones por asesor");
+  const heading = block?.querySelector("h3");
+  if (!heading || reportId !== "informe_general_comercial") return;
+  const pnncView = isPnncAdvisorNegotiationsView();
+  heading.textContent = pnncView
+    ? "(COM) Total Negociaciones por Asesor (PNNC)"
+    : "(COM) Total Negociaciones por Asesor";
+  const description = block.querySelector(".diego-block-title p");
+  if (description) description.textContent = pnncView
+    ? "Negociaciones PNNC, radicaciones y tasa de cierre."
+    : "Negociaciones, estudios, radicados y tasa de cierre.";
+};
+
+const renderAdvisorNegotiationsTable = () => {
+  if (!generalDashboardData) return;
+
+  if (!isPnncAdvisorNegotiationsView()) {
+    const advisors = generalDashboardData.advisors ?? [];
+    replaceBlockPreview("Total de negociaciones por asesor", renderDataTable(
+      ["Asesor", "Total de negociaciones", "Estudios", "Estudios sobre total", "Radicados", "Tasa de cierre"],
+      [...advisors]
+        .sort((left, right) => left.advisor.localeCompare(right.advisor, "es", { sensitivity: "base" }))
+        .map((item) => {
+          const studiesRateValue = item.negotiations ? item.commercialCases / item.negotiations : 0;
+          const closingRateValue = item.negotiations ? item.radicatedCases / item.negotiations : null;
+          const studiesRate = `${(studiesRateValue * 100).toFixed(1)}%`;
+          const closingRate = closingRateValue === null ? "N/A" : `${(closingRateValue * 100).toFixed(1)}%`;
+          return `<tr data-advisor="${encodeURIComponent(item.advisor)}"><td>${item.advisor}</td><td>${formatNumber.format(item.negotiations)}</td><td>${formatNumber.format(item.commercialCases)}</td><td>${studiesRate}</td><td>${formatNumber.format(item.radicatedCases)}</td><td>${closingRate}</td></tr>`;
+        }),
+      "advisor-negotiations-table"
+    ), advisors.length);
+    updateAdvisorNegotiationsTitle();
+    return;
+  }
+
+  const items = pnncAdvisorClientsData?.items ?? [];
+  const role = commercialScopeRole() || String(pnncAdvisorClientsData?.roleLabel ?? "").toLowerCase();
+  const showCoordinator = role === "admin";
+  const showLeader = showCoordinator || isPnncCoordinatorScope();
+  const headers = [
+    ...(showCoordinator ? ["Coordinador"] : []),
+    ...(showLeader ? ["L\u00edder"] : []),
+    "Asesor",
+    "Total de negociaciones",
+    "Radicar",
+    "Tasa de cierre"
+  ];
+  const rows = [...items]
+    .sort((left, right) => `${left.coordinator}|${left.leader}|${left.advisor}`.localeCompare(`${right.coordinator}|${right.leader}|${right.advisor}`, "es", { sensitivity: "base" }))
+    .map((item) => {
+      const values = [
+        ...(showCoordinator ? [item.coordinator] : []),
+        ...(showLeader ? [item.leader] : []),
+        item.advisor,
+        formatNumber.format(item.negotiations),
+        formatNumber.format(item.radicated),
+        `${(Number(item.closingRate ?? 0) * 100).toFixed(1)}%`
+      ];
+      return `<tr data-line="pnnc" data-advisor="${encodeURIComponent(item.advisor)}" data-leader="${encodeURIComponent(item.leader)}" data-coordinator="${encodeURIComponent(item.coordinator)}" data-commercial-clients="${item.commercialClients}" data-operational-clients="${item.operationalClients}">${values.map((value) => `<td>${value ?? ""}</td>`).join("")}</tr>`;
+    });
+
+  replaceBlockPreview("Total de negociaciones por asesor", items.length
+    ? renderDataTable(headers, rows, "advisor-negotiations-table pnnc-advisor-negotiations-table")
+    : `<div class="empty-block"><strong>Sin clientes PNNC para el periodo seleccionado</strong><span>No hay registros autorizados para este usuario.</span></div>`, items.length);
+  updateAdvisorNegotiationsTitle();
+};
 
 const parseTableNumber = (text = "") => {
   const raw = text.trim();
@@ -573,6 +656,20 @@ const decorateTableTotals = (root = document) => {
       table.appendChild(footer);
     }
     if (footer) {
+      if (table.classList.contains("pnnc-advisor-negotiations-table")) {
+        const negotiationsIndex = columnCount - 3;
+        const radicatedIndex = columnCount - 2;
+        const negotiations = totals[negotiationsIndex] ?? 0;
+        const radicated = totals[radicatedIndex] ?? 0;
+        const closingRate = negotiations ? (radicated / negotiations) * 100 : 0;
+        footer.innerHTML = `<tr aria-label="Totales">
+          <th colspan="${negotiationsIndex}">Total</th>
+          <td>${formatNumber.format(negotiations)}</td>
+          <td>${formatNumber.format(radicated)}</td>
+          <td>${closingRate.toLocaleString("es-CO", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%</td>
+        </tr>`;
+        return;
+      }
       if (table.classList.contains("advisor-negotiations-table")) {
         const negotiations = totals[1] ?? 0;
         const studies = totals[2] ?? 0;
@@ -931,29 +1028,21 @@ const renderGeneralManagement = () => {
 
 const loadDiegoDashboardData = async () => {
   const queryString = getDiegoCommercialQueryString();
-  const response = await fetch(`/api/reports/fuerza-comercial-diego/dashboard?${queryString}`, { cache: "no-store" });
+  const [response, pnncResponse] = await Promise.all([
+    fetch(`/api/reports/fuerza-comercial-diego/dashboard?${queryString}`, { cache: "no-store" }),
+    fetch(`/api/reports/fuerza-comercial-diego/pnnc-clientes?${queryString}`, { cache: "no-store" })
+  ]);
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  if (!pnncResponse.ok) throw new Error(`HTTP ${pnncResponse.status}`);
   const data = await response.json();
+  pnncAdvisorClientsData = await pnncResponse.json();
   if (teamScope) {
     data.advisors = (data.advisors ?? []).filter((item) => isScopedTeamMember(item.advisor));
     data.departments = (data.departments ?? []).filter((item) => isTeamDepartment(item.department));
     data.possibleCloseCommercial = (data.possibleCloseCommercial ?? []).filter((item) => isScopedTeamMember(item.advisor));
   }
   generalDashboardData = data;
-
-  replaceBlockPreview("Total de negociaciones por asesor", renderDataTable(
-    ["Asesor", "Total de negociaciones", "Estudios", "Estudios sobre total", "Radicados", "Tasa de cierre"],
-    [...data.advisors]
-      .sort((left, right) => left.advisor.localeCompare(right.advisor, "es", { sensitivity: "base" }))
-      .map((item) => {
-        const studiesRateValue = item.negotiations ? item.commercialCases / item.negotiations : 0;
-        const closingRateValue = item.negotiations ? item.radicatedCases / item.negotiations : null;
-        const studiesRate = `${(studiesRateValue * 100).toFixed(1)}%`;
-        const closingRate = closingRateValue === null ? "N/A" : `${(closingRateValue * 100).toFixed(1)}%`;
-        return `<tr data-advisor="${encodeURIComponent(item.advisor)}"><td>${item.advisor}</td><td>${formatNumber.format(item.negotiations)}</td><td>${formatNumber.format(item.commercialCases)}</td><td>${studiesRate}</td><td>${formatNumber.format(item.radicatedCases)}</td><td>${closingRate}</td></tr>`;
-      }),
-    "advisor-negotiations-table"
-  ), data.advisors.length);
+  renderAdvisorNegotiationsTable();
 
 
   const pipelineBlocks = {
@@ -1311,6 +1400,7 @@ const applyDiegoFilters = () => {
     Coordinador: selectedFilterValues("diegoCoordinator")
   };
   const selectedLine = document.getElementById("diegoLine").value;
+  renderAdvisorNegotiationsTable();
   const selectedMonths = selectedFilterValues("diegoMonth");
   const selectedDateRange = getDiegoDateRange();
   const monthMatchesDateRange = (monthValue) => diegoMonthMatchesDateRange(monthValue, selectedDateRange);

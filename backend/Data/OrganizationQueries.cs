@@ -4,6 +4,7 @@ using Npgsql;
 namespace InformesAvanzar.Api.Data;
 public static class OrganizationQueries {
  private sealed record DepartmentItem(string Id,string Name,string? ParentId,string? HeadId);
+ public sealed record CommercialTeamScope(string RoleLabel,string DepartmentName,string[] DepartmentNames,string[] MemberNames);
  private static readonly string[] CommercialRoleLabels = ["line_coordinator_rch","line_coordinator_pnnc","coordinator_rch","coordinator_pnnc","leader_rch","leader_pnnc","custom"];
  private static readonly string[] ManagedReports = ["informe_general_comercial"];
  private static readonly string[] CommercialReportCatalog = ["informe_general_comercial","fuerza_comercial_diego","rch_comercial","rch_operativa","pnnc_comercial","pnnc_operativa","informe_gerencia_2026_2027"];
@@ -75,7 +76,7 @@ public static class OrganizationQueries {
   await transaction.CommitAsync(ct);
  }
  public static async Task<(bool Configured,string[] Blocks)> GetUserBlockAccessAsync(Guid userId,string reportCode,NpgsqlDataSource ds,CancellationToken ct){await using var connection=await ds.OpenConnectionAsync(ct);await using(var command=new NpgsqlCommand("SELECT visible_blocks FROM reporting.user_report_block_settings WHERE user_id=@userId AND report_code=@reportCode;",connection)){command.Parameters.AddWithValue("userId",userId);command.Parameters.AddWithValue("reportCode",reportCode);var value=await command.ExecuteScalarAsync(ct);if(value is string[] blocks)return(true,blocks);}if(reportCode=="informe_general_comercial"){await using var orgCommand=new NpgsqlCommand("""SELECT oa.visible_blocks FROM reporting.organization_access oa JOIN bitrix.departments d ON d.id=oa.department_id::bigint LEFT JOIN bitrix.users head ON head.bitrix_id=d.head_bitrix_id LEFT JOIN auth.users panel_user ON lower(panel_user.email)=lower(head.email) WHERE oa.user_id=@userId OR panel_user.id=@userId ORDER BY CASE WHEN oa.user_id=@userId THEN 0 ELSE 1 END LIMIT 1;""",connection);orgCommand.Parameters.AddWithValue("userId",userId);var orgValue=await orgCommand.ExecuteScalarAsync(ct);if(orgValue is string[] orgBlocks)return(true,orgBlocks);}return(false,Array.Empty<string>());}
- public static async Task<object?> GetUserTeamScopeAsync(Guid userId,NpgsqlDataSource ds,CancellationToken ct){const string sql="""
+ public static async Task<CommercialTeamScope?> GetUserTeamScopeAsync(Guid userId,NpgsqlDataSource ds,CancellationToken ct){const string sql="""
 WITH RECURSIVE department_ancestry AS (
     SELECT d.id AS root_id,d.id,d.name,d.parent_id
     FROM bitrix.departments d
@@ -130,7 +131,27 @@ SELECT
     (SELECT string_agg(DISTINCT name,' / ' ORDER BY name) FROM root_named),
     COALESCE((SELECT array_agg(DISTINCT name ORDER BY name) FROM subtree),ARRAY[]::text[]),
     COALESCE((SELECT array_agg(DISTINCT name ORDER BY name) FROM members),ARRAY[]::text[]);
-""";await using var connection=await ds.OpenConnectionAsync(ct);await using var command=new NpgsqlCommand(sql,connection);command.Parameters.AddWithValue("userId",userId);await using var reader=await command.ExecuteReaderAsync(ct);if(!await reader.ReadAsync(ct)||reader.IsDBNull(0))return null;return new{roleLabel=reader.GetString(0),departmentName=reader.GetString(1),departmentNames=reader.GetFieldValue<string[]>(2),memberNames=reader.GetFieldValue<string[]>(3)};}
+""";await using var connection=await ds.OpenConnectionAsync(ct);await using var command=new NpgsqlCommand(sql,connection);command.Parameters.AddWithValue("userId",userId);await using var reader=await command.ExecuteReaderAsync(ct);if(await reader.ReadAsync(ct)&&!reader.IsDBNull(0))return new CommercialTeamScope(reader.GetString(0),reader.GetString(1),reader.GetFieldValue<string[]>(2),reader.GetFieldValue<string[]>(3));await reader.DisposeAsync();return await GetAdvisorTeamScopeAsync(userId,connection,ct);}
+ private static async Task<CommercialTeamScope?> GetAdvisorTeamScopeAsync(Guid userId,NpgsqlConnection connection,CancellationToken ct){const string sql="""
+SELECT
+    COALESCE(
+        NULLIF(TRIM(CONCAT_WS(' ',NULLIF(payload.payload->>'NAME',''),NULLIF(payload.payload->>'LAST_NAME',''))),''),
+        NULLIF(bitrix_user.full_name,''),
+        bitrix_user.bitrix_id
+    ) AS advisor,
+    COALESCE(array_agg(DISTINCT department.name ORDER BY department.name) FILTER (WHERE department.name IS NOT NULL),ARRAY[]::text[]) AS departments
+FROM auth.users panel_user
+JOIN bitrix.users bitrix_user ON lower(bitrix_user.email)=lower(panel_user.email) AND bitrix_user.active=true
+LEFT JOIN bitrix.raw_payloads payload ON payload.id=bitrix_user.raw_payload_id
+LEFT JOIN LATERAL jsonb_array_elements_text(
+    CASE WHEN jsonb_typeof(payload.payload->'UF_DEPARTMENT')='array' THEN payload.payload->'UF_DEPARTMENT' ELSE '[]'::jsonb END
+) assigned_department(value) ON true
+LEFT JOIN bitrix.departments department ON department.id=assigned_department.value::bigint
+WHERE panel_user.id=@userId AND panel_user.deleted_at IS NULL AND panel_user.status='active'
+GROUP BY bitrix_user.bitrix_id,bitrix_user.full_name,payload.payload
+ORDER BY bitrix_user.bitrix_id
+LIMIT 1;
+""";await using var command=new NpgsqlCommand(sql,connection);command.Parameters.AddWithValue("userId",userId);await using var reader=await command.ExecuteReaderAsync(ct);if(!await reader.ReadAsync(ct))return null;var advisor=reader.GetString(0);return new CommercialTeamScope("advisor","Asesor",reader.GetFieldValue<string[]>(1),[advisor]);}
  public static async Task<object> GetCommercialStructureAsync(NpgsqlDataSource ds,CancellationToken ct){
   var source=new List<DepartmentItem>();await using var connection=await ds.OpenConnectionAsync(ct);await using(var departmentCommand=new NpgsqlCommand("SELECT id::text,name,parent_id::text,head_bitrix_id FROM bitrix.departments ORDER BY sort_order,name;",connection)){await using var reader=await departmentCommand.ExecuteReaderAsync(ct);while(await reader.ReadAsync(ct))source.Add(new DepartmentItem(reader.GetString(0),reader.GetString(1),reader.IsDBNull(2)?null:reader.GetString(2),reader.IsDBNull(3)?null:reader.GetString(3)));}
   var ids=new HashSet<string>{"646"};var added=true;while(added){added=false;foreach(var x in source.Where(x=>x.ParentId is not null&&ids.Contains(x.ParentId)))added|=ids.Add(x.Id);}var commercial=source.Where(x=>ids.Contains(x.Id)).ToArray();
